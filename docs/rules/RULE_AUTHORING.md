@@ -20,6 +20,16 @@ fix:
   replace: console.info($A)
 ```
 
+可选支持约束（constraints），用于对捕获变量做二次过滤（常用于缩小匹配范围）：
+
+```yaml
+rule:
+  pattern: console.$M($A)
+constraints:
+  - name: M
+    regex: "^log$"
+```
+
 ## 字段说明
 
 - id：全局唯一，建议使用 `scope.lang.category.intent`。
@@ -27,6 +37,7 @@ fix:
 - severity：`info|warning|error`（用于报告分级）。
 - message：人类/AI 可读说明。
 - rule：ast-grep rule object（pattern/kind/inside/has/...）。
+- constraints：可选，捕获变量正则约束数组；`name` 为捕获名（不带 `$`），`.` 代表整个匹配节点文本。
 - fix：可选，定义如何生成 replacement。
 ## 幂等性与可测试性
 

@@ -1,0 +1,12 @@
+id: lang.javascript.console-method-constraint
+language: JavaScript
+severity: warning
+message: 仅对 console.log 进行结构化替换（演示 constraints）
+rule:
+  pattern: console.$M($A)
+constraints:
+  - name: M
+    regex: "^log$"
+fix:
+  replace: console.info($A)
+

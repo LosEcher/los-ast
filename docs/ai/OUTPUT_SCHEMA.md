@@ -8,9 +8,11 @@ los-ast 的 `--format jsonl` 输出为 JSON Lines：每行一个 JSON 对象，�
 - `version`: 工具版本（当前为 `0`，后续会语义化版本化）
 - `timestamp`: ISO8601 时间
 - `project`: `cantool|lsclaw|fullstackframe|custom`
+- `ruleFile`: 规则来源 YAML 文件（绝对路径，可能为 null）
 - `ruleId`: 规则 id
 - `severity`: `info|warning|error`
 - `message`: 规则提示
+- `fingerprint`: 稳定去重指纹（sha256 hex）
 ## 定位字段
 
 - `file`: 绝对路径

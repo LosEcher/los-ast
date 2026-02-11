@@ -16,11 +16,28 @@ function assertRuleShape(rule) {
   if (!rule.language || typeof rule.language !== 'string') throw new Error('rule.language must be a string')
   if (!rule.message || typeof rule.message !== 'string') throw new Error('rule.message must be a string')
   if (!rule.rule || typeof rule.rule !== 'object') throw new Error('rule.rule must be an object')
+  if (rule.constraints != null) {
+    if (!Array.isArray(rule.constraints)) throw new Error('rule.constraints must be an array')
+    for (const c of rule.constraints) {
+      if (!c || typeof c !== 'object') throw new Error('rule.constraints item must be an object')
+      if (!c.name || typeof c.name !== 'string') throw new Error('rule.constraints.name must be a string')
+      if (!c.regex || typeof c.regex !== 'string') throw new Error('rule.constraints.regex must be a string')
+      if (c.flags != null && typeof c.flags !== 'string') throw new Error('rule.constraints.flags must be a string')
+      if (c.mode != null && c.mode !== 'any' && c.mode !== 'all') throw new Error('rule.constraints.mode must be any|all')
+    }
+  }
   if (rule.fix != null) {
     if (typeof rule.fix !== 'object') throw new Error('rule.fix must be an object')
     if (typeof rule.fix.replace !== 'string') throw new Error('rule.fix.replace must be a string')
     if (rule.fix.joinBy != null && typeof rule.fix.joinBy !== 'string') throw new Error('rule.fix.joinBy must be a string')
   }
+}
+
+function normalizeConstraints(constraints) {
+  if (constraints == null) return null
+  if (Array.isArray(constraints)) return constraints
+  if (typeof constraints === 'object') return [constraints]
+  return null
 }
 
 export async function loadRuleFiles(rulePaths) {
@@ -44,6 +61,8 @@ export async function loadRuleFiles(rulePaths) {
   const normalized = rules.map((r) => {
     const rule = { ...r }
     rule.severity = normalizeSeverity(rule.severity)
+    rule.constraints = normalizeConstraints(rule.constraints)
+    rule.ruleFile = rule.__file
     return rule
   })
 
@@ -64,4 +83,3 @@ export async function loadRuleFiles(rulePaths) {
 
   return normalized
 }
-

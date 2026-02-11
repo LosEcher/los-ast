@@ -3,12 +3,13 @@
   "title": "los-ast JSONL output record",
   "type": "object",
   "additionalProperties": true,
-  "required": ["tool", "version", "timestamp", "project", "ruleId", "severity", "message", "file", "language", "range", "excerpt", "hasFix"],
+  "required": ["tool", "version", "timestamp", "project", "ruleId", "severity", "message", "file", "language", "range", "excerpt", "hasFix", "fingerprint"],
   "properties": {
     "tool": { "const": "los-ast" },
     "version": { "type": ["number", "string"] },
     "timestamp": { "type": "string" },
     "project": { "type": "string" },
+    "ruleFile": { "type": ["string", "null"] },
     "ruleId": { "type": "string" },
     "severity": { "enum": ["info", "warning", "error"] },
     "message": { "type": "string" },
@@ -42,7 +43,7 @@
     "hasFix": { "type": "boolean" },
     "proposedReplacement": { "type": ["string", "null"] },
     "diff": { "type": ["string", "null"] },
-    "applied": { "type": "boolean" }
+    "applied": { "type": "boolean" },
+    "fingerprint": { "type": "string" }
   }
 }
-

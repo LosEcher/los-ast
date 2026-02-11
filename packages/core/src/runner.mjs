@@ -1,11 +1,12 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import crypto from 'node:crypto'
 
 import fg from 'fast-glob'
-import { parse } from '@ast-grep/napi'
 import { createTwoFilesPatch } from 'diff'
 
 import { languageFromFilePath, registerLanguages } from './languages.mjs'
+import { defaultParseCache } from './parse-cache.mjs'
 
 function toIsoNow() {
   return new Date().toISOString()
@@ -28,6 +29,44 @@ function renderReplacement(template, node, joinBy = ', ') {
     }
     return m
   })
+}
+
+function passesConstraints(node, constraints) {
+  if (!constraints || constraints.length === 0) return true
+  for (const c of constraints) {
+    const re = new RegExp(c.regex, c.flags || '')
+    const mode = c.mode || 'any'
+    if (c.name === '.') {
+      if (!re.test(node.text())) return false
+      continue
+    }
+
+    const single = node.getMatch(c.name)
+    if (single) {
+      if (!re.test(single.text())) return false
+      continue
+    }
+
+    const many = node.getMultipleMatches(c.name) || []
+    if (many.length === 0) return false
+    const texts = many.map((n) => n.text())
+    if (mode === 'all') {
+      if (!texts.every((t) => re.test(t))) return false
+    } else {
+      if (!texts.some((t) => re.test(t))) return false
+    }
+  }
+  return true
+}
+
+function fingerprintFor({ ruleId, file, range, proposedReplacement }) {
+  const base = [
+    String(ruleId),
+    String(file),
+    `${range.start.index}-${range.end.index}`,
+    proposedReplacement == null ? '' : String(proposedReplacement),
+  ].join('\n')
+  return crypto.createHash('sha256').update(base).digest('hex')
 }
 
 function validateNoOverlap(edits) {
@@ -61,6 +100,8 @@ export async function scan({
   include,
   ignore,
   rules,
+  parseCache = defaultParseCache,
+  includeStats = false,
 }) {
   registerLanguages()
 
@@ -71,16 +112,10 @@ export async function scan({
     const language = languageFromFilePath(file)
     if (!language) continue
 
-    let source
-    try {
-      source = await fs.readFile(file, 'utf8')
-    } catch {
-      continue
-    }
-
     let root
     try {
-      root = parse(language, source).root()
+      const parsed = await parseCache.parseFile(file, language, { cacheAst: true })
+      root = parsed.root
     } catch {
       continue
     }
@@ -89,6 +124,7 @@ export async function scan({
       if (rule.language !== String(language)) continue
       const nodes = root.findAll({ rule: rule.rule })
       for (const node of nodes) {
+        if (!passesConstraints(node, rule.constraints)) continue
         const range = node.range()
         const excerpt = clampExcerpt(node.text())
         const hasFix = Boolean(rule.fix?.replace)
@@ -96,11 +132,13 @@ export async function scan({
           ? renderReplacement(rule.fix.replace, node, rule.fix.joinBy)
           : null
 
+        const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement })
         findings.push({
           tool: 'los-ast',
           version: 0,
           timestamp: toIsoNow(),
           project,
+          ruleFile: rule.ruleFile || rule.__file || null,
           ruleId: rule.id,
           severity: rule.severity,
           message: rule.message,
@@ -110,12 +148,15 @@ export async function scan({
           excerpt,
           hasFix,
           proposedReplacement,
+          fingerprint,
         })
       }
     }
   }
 
-  return { filesScanned: files.length, findings }
+  const res = { filesScanned: files.length, findings }
+  if (includeStats) res.parseCache = parseCache.snapshotStats()
+  return res
 }
 
 export async function fix({
@@ -127,6 +168,8 @@ export async function fix({
   dryRun = true,
   apply = false,
   maxChanges = 20,
+  parseCache = defaultParseCache,
+  includeStats = false,
 }) {
   if (apply && dryRun) throw new Error('invalid options: --apply cannot be combined with --dry-run')
   if (!apply && !dryRun) dryRun = true
@@ -154,19 +197,13 @@ export async function fix({
     const langRules = perFileRules.get(langKey)
     if (!langRules || langRules.length === 0) continue
 
-    let source
+    let parsed
     try {
-      source = await fs.readFile(file, 'utf8')
+      parsed = await parseCache.parseFile(file, language, { cacheAst: false })
     } catch {
       continue
     }
-
-    let root
-    try {
-      root = parse(language, source).root()
-    } catch {
-      continue
-    }
+    const { source, root } = parsed
 
     const edits = []
     const editMeta = []
@@ -176,11 +213,14 @@ export async function fix({
       const nodes = root.findAll({ rule: rule.rule })
       for (const node of nodes) {
         if (changesApplied >= maxChanges) break
+        if (!passesConstraints(node, rule.constraints)) continue
+        const range = node.range()
+        const excerpt = clampExcerpt(node.text())
         const replacement = renderReplacement(rule.fix.replace, node, rule.fix.joinBy)
         if (replacement === node.text()) continue
         const edit = node.replace(replacement)
         edits.push(edit)
-        editMeta.push({ rule, node })
+        editMeta.push({ rule, range, excerpt, proposedReplacement: replacement })
         changesApplied += 1
       }
     }
@@ -200,30 +240,36 @@ export async function fix({
     )
 
     if (apply) await fs.writeFile(file, newSource, 'utf8')
+    if (apply) parseCache.invalidateFile(file)
 
     for (let i = 0; i < editMeta.length; i++) {
-      const { rule, node } = editMeta[i]
+      const { rule, range, excerpt, proposedReplacement } = editMeta[i]
+      const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement })
       results.push({
         tool: 'los-ast',
         version: 0,
         timestamp: toIsoNow(),
         project,
+        ruleFile: rule.ruleFile || rule.__file || null,
         ruleId: rule.id,
         severity: rule.severity,
         message: rule.message,
         file,
         language: langKey,
-        range: node.range(),
-        excerpt: clampExcerpt(node.text()),
+        range,
+        excerpt,
         hasFix: true,
-        proposedReplacement: renderReplacement(rule.fix.replace, node, rule.fix.joinBy),
+        proposedReplacement,
         diff,
         applied: apply,
+        fingerprint,
       })
     }
   }
 
-  return { filesScanned: files.length, changesApplied: results.length, results }
+  const res = { filesScanned: files.length, changesApplied: results.length, results }
+  if (includeStats) res.parseCache = parseCache.snapshotStats()
+  return res
 }
 
 export async function explainAtPosition({
@@ -232,40 +278,47 @@ export async function explainAtPosition({
   rules,
   line,
   column,
+  parseCache = defaultParseCache,
+  includeStats = false,
 }) {
   registerLanguages()
 
   const language = languageFromFilePath(file)
   if (!language) return { file, language: null, matches: [] }
-  const source = await fs.readFile(file, 'utf8')
-  const root = parse(language, source).root()
+  const parsed = await parseCache.parseFile(file, language, { cacheAst: true })
+  const root = parsed.root
 
   const matches = []
   for (const rule of rules) {
     if (rule.language !== String(language)) continue
     const nodes = root.findAll({ rule: rule.rule })
     for (const node of nodes) {
+      if (!passesConstraints(node, rule.constraints)) continue
       const r = node.range()
       const inLine =
         (line > r.start.line || (line === r.start.line && column >= r.start.column)) &&
         (line < r.end.line || (line === r.end.line && column <= r.end.column))
       if (!inLine) continue
+      const fingerprint = fingerprintFor({ ruleId: rule.id, file, range: r, proposedReplacement: null })
       matches.push({
+        ruleFile: rule.ruleFile || rule.__file || null,
         ruleId: rule.id,
         severity: rule.severity,
         message: rule.message,
         range: r,
         excerpt: clampExcerpt(node.text(), 400),
+        fingerprint,
       })
     }
   }
 
-  return {
+  const res = {
     rootDir,
     file,
     language: String(language),
     position: { line, column },
     matches,
   }
+  if (includeStats) res.parseCache = parseCache.snapshotStats()
+  return res
 }
-

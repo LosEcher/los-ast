@@ -31,6 +31,7 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 ## 文档
 
 - 架构说明：[architecture.md](docs/architecture.md)
+- 生态调研：[tooling-landscape.md](docs/research/tooling-landscape.md)
 - AI 使用手册：[AI_USAGE_GUIDE.md](docs/ai/AI_USAGE_GUIDE.md)
 - 输出格式（JSONL）：[OUTPUT_SCHEMA.md](docs/ai/OUTPUT_SCHEMA.md)
 - 规则编写规范：[RULE_AUTHORING.md](docs/rules/RULE_AUTHORING.md)
