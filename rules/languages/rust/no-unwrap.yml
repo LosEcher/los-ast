@@ -1,0 +1,7 @@
+id: lang.rust.no-unwrap
+language: rust
+severity: warning
+message: 避免使用 unwrap，优先使用 ? 或显式错误处理
+rule:
+  pattern: $X.unwrap()
+

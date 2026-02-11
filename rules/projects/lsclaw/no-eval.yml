@@ -1,0 +1,7 @@
+id: lsclaw.js.no-eval
+language: JavaScript
+severity: error
+message: 禁止使用 eval（安全风险）
+rule:
+  pattern: eval($A)
+

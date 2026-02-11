@@ -1,0 +1,13 @@
+{
+  "name": "@los-ast/cli",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "los-ast": "./src/index.mjs"
+  },
+  "dependencies": {
+    "@los-ast/core": "file:../core",
+    "@los-ast/adapters": "file:../adapters",
+    "commander": "^13.1.0"
+  }
+}

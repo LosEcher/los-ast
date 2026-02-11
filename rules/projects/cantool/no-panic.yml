@@ -1,0 +1,7 @@
+id: cantool.rust.no-panic
+language: rust
+severity: error
+message: 避免在应用代码中直接 panic
+rule:
+  pattern: panic!($A)
+

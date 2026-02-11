@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "los-ast JSONL output record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["tool", "version", "timestamp", "project", "ruleId", "severity", "message", "file", "language", "range", "excerpt", "hasFix"],
+  "properties": {
+    "tool": { "const": "los-ast" },
+    "version": { "type": ["number", "string"] },
+    "timestamp": { "type": "string" },
+    "project": { "type": "string" },
+    "ruleId": { "type": "string" },
+    "severity": { "enum": ["info", "warning", "error"] },
+    "message": { "type": "string" },
+    "file": { "type": "string" },
+    "language": { "type": "string" },
+    "range": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {
+          "type": "object",
+          "required": ["line", "column", "index"],
+          "properties": {
+            "line": { "type": "integer" },
+            "column": { "type": "integer" },
+            "index": { "type": "integer" }
+          }
+        },
+        "end": {
+          "type": "object",
+          "required": ["line", "column", "index"],
+          "properties": {
+            "line": { "type": "integer" },
+            "column": { "type": "integer" },
+            "index": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "excerpt": { "type": "string" },
+    "hasFix": { "type": "boolean" },
+    "proposedReplacement": { "type": ["string", "null"] },
+    "diff": { "type": ["string", "null"] },
+    "applied": { "type": "boolean" }
+  }
+}
+

@@ -1,0 +1,14 @@
+{
+  "name": "los-ast",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "los-ast": "node ./packages/cli/src/index.mjs",
+    "test": "node --test",
+    "lint": "node ./packages/cli/src/index.mjs doctor --quiet"
+  }
+}
+

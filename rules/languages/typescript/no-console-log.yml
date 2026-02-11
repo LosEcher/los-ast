@@ -1,0 +1,9 @@
+id: lang.typescript.no-console-log
+language: TypeScript
+severity: warning
+message: 避免在提交代码中使用 console.log
+rule:
+  pattern: console.log($A)
+fix:
+  replace: console.info($A)
+
