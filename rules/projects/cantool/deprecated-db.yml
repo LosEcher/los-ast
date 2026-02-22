@@ -1,0 +1,7 @@
+id: cantool.rust.deprecated-db
+language: rust
+severity: error
+message: db.rs 已弃用，请迁移到新的 database 模块
+rule:
+  pattern: crate::db
+

@@ -1,0 +1,17 @@
+id: cantool.rust.async-function
+language: rust
+severity: warning
+message: 核心功能应使用 async 函数以支持异步执行
+rule:
+  kind: function_definition
+  where:
+    - any:
+        - path: function_modifiers
+          any:
+            - kind: primitive_type
+              regex: ^(pub )$ 
+        - path: function_modifiers
+          any:
+            - kind: primitive_type
+              regex: ^pub$
+

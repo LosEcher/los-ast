@@ -1,0 +1,9 @@
+id: cantool.rust.database-usage
+language: rust
+severity: warning
+message: 推荐使用新的 database 模块 (src/database/) 进行数据库操作
+rule:
+  pattern: use crate::db
+fix:
+  replace: use crate::database
+

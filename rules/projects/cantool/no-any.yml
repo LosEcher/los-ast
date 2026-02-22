@@ -1,0 +1,8 @@
+id: cantool.typescript.no-any
+language: TypeScript
+severity: warning
+message: 禁止使用 any 类型，请使用具体的类型替代
+rule:
+  kind: type_annotation
+  pattern: any
+

@@ -1,0 +1,11 @@
+id: cantool.typescript.type-safety
+language: TypeScript
+severity: warning
+message: 建议为函数参数和返回值添加类型注解
+rule:
+  kind: function_declaration
+  where:
+    - not:
+        any:
+          - kind: type_annotation
+

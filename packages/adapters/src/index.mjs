@@ -4,9 +4,14 @@ const PROJECTS = {
   cantool: {
     project: 'cantool',
     rootDir: '/Users/echerlos/Downloads/projects/cantool',
-    include: ['src-tauri/src/**/*.rs', 'src-tauri/tests/**/*.rs', 'frontend/src/**/*.{js,jsx}'],
+    include: [
+      'src-tauri/src/**/*.rs',
+      'src-tauri/tests/**/*.rs',
+      'frontend/src/**/*.{ts,tsx,js,jsx}',
+      'scripts/**/*.rs',
+    ],
     ignore: ['**/node_modules/**', '**/target/**', '**/dist/**', '**/.git/**'],
-    ruleGlobs: ['rules/projects/cantool/**/*.{yml,yaml}', 'rules/languages/**/*.{yml,yaml}'],
+    ruleGlobs: ['rules/projects/cantool/**/*.{yml,yaml}', 'rules/languages/rust/**/*.{yml,yaml}', 'rules/languages/typescript/**/*.{yml,yaml}', 'rules/languages/tsx/**/*.{yml,yaml}'],
   },
   lsclaw: {
     project: 'lsclaw',

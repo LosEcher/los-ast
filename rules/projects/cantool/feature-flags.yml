@@ -1,0 +1,7 @@
+id: cantool.rust.feature-flags
+language: rust
+severity: info
+message: 使用 feature_flags 模块管理功能开关
+rule:
+  pattern: cfg!
+
