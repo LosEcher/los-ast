@@ -24,6 +24,8 @@ describe('SymbolService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // 重置 isReady 为 true（默认状态）
+    vi.mocked(core.isReady).mockReturnValue(true);
     symbolService = new SymbolService();
   });
 

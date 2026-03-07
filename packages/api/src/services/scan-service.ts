@@ -62,6 +62,7 @@ export class ScanService {
       include,
       ignore,
       includeStats,
+      signal,
     });
 
     return result as unknown as ScanResult;

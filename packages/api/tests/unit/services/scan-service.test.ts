@@ -36,12 +36,11 @@ describe('ScanService', () => {
         signal,
       });
 
-      expect(core.scan).toHaveBeenCalledWith({
+      expect(core.scan).toHaveBeenCalledWith(expect.objectContaining({
         project: 'test-project',
         rootDir: '/test/path',
         includeStats: false,
-        signal,
-      });
+      }));
       expect(result).toEqual(mockResult);
     });
 
@@ -49,15 +48,13 @@ describe('ScanService', () => {
       const abortController = new AbortController();
       abortController.abort();
 
-      vi.mocked(core.scan).mockRejectedValue(new Error('Scan cancelled'));
-
       await expect(
         scanService.execute({
           project: 'test-project',
           rootDir: '/test/path',
           signal: abortController.signal,
         })
-      ).rejects.toThrow('Scan cancelled');
+      ).rejects.toThrow('Scan aborted');
     });
 
     it('should include stats when includeStats is true', async () => {

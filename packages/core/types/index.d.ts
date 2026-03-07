@@ -38,6 +38,7 @@ export interface ScanOptions {
   include?: string[];
   ignore?: string[];
   includeStats?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface Finding {
