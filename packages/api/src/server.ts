@@ -1,9 +1,17 @@
 import Fastify from 'fastify';
 import { logStartupConfig, PORT } from './config/index.js';
+import errorHandlerPlugin from './plugins/error-handler.js';
+import requestIdPlugin from './plugins/request-id.js';
 
 const server = Fastify({
   logger: true,
 });
+
+// 注册插件（顺序很重要）
+// 1. 先注册 request-id，确保所有请求都有 ID
+await server.register(requestIdPlugin);
+// 2. 再注册 error-handler，确保错误处理使用 requestId
+await server.register(errorHandlerPlugin);
 
 server.get('/healthz/live', async () => {
   return { status: 'alive' };
