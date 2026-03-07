@@ -8,6 +8,7 @@ import cancellationPlugin from './plugins/cancellation.js';
 import scanRoutes from './routes/scan.js';
 import discoverRoutes from './routes/discover.js';
 import incidentRoutes from './routes/incident.js';
+import memoryRoutes from './routes/memory.js';
 
 const server = Fastify({
   logger: true,
@@ -29,6 +30,7 @@ await server.register(scopeValidatorPlugin);
 await server.register(scanRoutes, { prefix: '/scan' });
 await server.register(discoverRoutes, { prefix: '/discover' });
 await server.register(incidentRoutes, { prefix: '/incidents' });
+await server.register(memoryRoutes, { prefix: '/memory' });
 
 async function main() {
   logStartupConfig();
