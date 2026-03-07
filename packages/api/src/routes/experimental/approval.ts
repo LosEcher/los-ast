@@ -13,6 +13,7 @@ import {
   queryApprovals,
   getApprovalStats,
 } from '../../services/approval/store.js';
+import { NotFoundError, ValidationError } from '../../types/errors.js';
 import type {
   CreateApprovalRequest,
   ProcessApprovalRequest,
@@ -73,40 +74,37 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/approvals/:id - 获取审批项
-  fastify.get('/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const approval = await getApproval(id);
 
     if (!approval) {
-      reply.status(404);
-      return { error: { message: 'Approval not found' } };
+      throw new NotFoundError('Approval', id);
     }
 
     return { approval };
   });
 
   // POST /experimental/approvals/:id/process - 处理审批
-  fastify.post('/:id/process', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/:id/process', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
     const body = request.body as ProcessApprovalRequest;
 
+    // 先检查审批项是否存在
+    const existing = await getApproval(id);
+    if (!existing) {
+      throw new NotFoundError('Approval', id);
+    }
+
     try {
       const approval = await processApproval(id, body);
-
-      if (!approval) {
-        reply.status(404);
-        return { error: { message: 'Approval not found' } };
-      }
-
       return { approval };
     } catch (error) {
-      reply.status(400);
-      return {
-        error: {
-          message: error instanceof Error ? error.message : 'Failed to process approval',
-        },
-      };
+      throw new ValidationError(
+        'APPROVAL_PROCESS_FAILED',
+        error instanceof Error ? error.message : 'Failed to process approval'
+      );
     }
   });
 

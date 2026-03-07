@@ -19,6 +19,7 @@ import {
   evaluateTriggers,
   getCollectionStats,
 } from '../../services/incident/collection.js';
+import { NotFoundError } from '../../types/errors.js';
 import type {
   CreateIncidentRequest,
   UpdateIncidentStatusRequest,
@@ -90,23 +91,28 @@ export default async function incidentRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/incidents/:id - 获取单个 Incident
-  fastify.get('/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const incident = await getIncident(id);
 
     if (!incident) {
-      reply.status(404);
-      return { error: { message: 'Incident not found' } };
+      throw new NotFoundError('Incident', id);
     }
 
     return { incident };
   });
 
   // PATCH /experimental/incidents/:id/status - 更新 Incident 状态
-  fastify.patch('/:id/status', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.patch('/:id/status', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
     const body = request.body as UpdateIncidentStatusRequest;
+
+    // 先检查是否存在
+    const existing = await getIncident(id);
+    if (!existing) {
+      throw new NotFoundError('Incident', id);
+    }
 
     const incident = await updateIncidentStatus(
       id,
@@ -114,11 +120,6 @@ export default async function incidentRoutes(fastify: FastifyInstance) {
       body.comment,
       body.actor_id
     );
-
-    if (!incident) {
-      reply.status(404);
-      return { error: { message: 'Incident not found' } };
-    }
 
     return { incident };
   });

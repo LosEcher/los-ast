@@ -17,6 +17,7 @@ import {
   getIncidentLesson,
   getMemoryStats,
 } from '../../services/memory/store.js';
+import { NotFoundError } from '../../types/errors.js';
 import type {
   CreateProposalRequest,
   ValidateProposalRequest,
@@ -52,30 +53,30 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/memory-proposals/proposals/:id - 获取提案
-  fastify.get('/proposals/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/proposals/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const proposal = await getProposal(id);
 
     if (!proposal) {
-      reply.status(404);
-      return { error: { message: 'Proposal not found' } };
+      throw new NotFoundError('Proposal', id);
     }
 
     return { proposal };
   });
 
   // POST /experimental/memory-proposals/proposals/:id/validate - 验证提案
-  fastify.post('/proposals/:id/validate', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/proposals/:id/validate', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
     const body = request.body as ValidateProposalRequest;
 
-    const proposal = await validateProposal(id, body.validator_id, body.approve, body.rejection_reason);
-
-    if (!proposal) {
-      reply.status(404);
-      return { error: { message: 'Proposal not found' } };
+    // 先检查是否存在
+    const existing = await getProposal(id);
+    if (!existing) {
+      throw new NotFoundError('Proposal', id);
     }
+
+    const proposal = await validateProposal(id, body.validator_id, body.approve, body.rejection_reason);
 
     return { proposal };
   });
@@ -100,14 +101,13 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/memory-proposals/recipes/:id - 获取恢复方案
-  fastify.get('/recipes/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/recipes/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const recipe = await getRecoveryRecipe(id);
 
     if (!recipe) {
-      reply.status(404);
-      return { error: { message: 'Recipe not found' } };
+      throw new NotFoundError('Recipe', id);
     }
 
     return { recipe };
@@ -126,14 +126,13 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/memory-proposals/lessons/:id - 获取事件教训
-  fastify.get('/lessons/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/lessons/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const lesson = await getIncidentLesson(id);
 
     if (!lesson) {
-      reply.status(404);
-      return { error: { message: 'Lesson not found' } };
+      throw new NotFoundError('Lesson', id);
     }
 
     return { lesson };

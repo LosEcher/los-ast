@@ -78,3 +78,18 @@ export class ScanTooLargeError extends AppError {
     );
   }
 }
+
+/**
+ * 资源未找到错误
+ */
+export class NotFoundError extends AppError {
+  constructor(resource: string, id?: string) {
+    super(
+      'NOT_FOUND',
+      'RESOURCE_NOT_FOUND',
+      id ? `${resource} with id '${id}' not found` : `${resource} not found`,
+      false,
+      id ? { resource, id } : { resource }
+    );
+  }
+}

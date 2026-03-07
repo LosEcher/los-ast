@@ -16,11 +16,26 @@ import {
   getEvidenceBundle,
   getAttributionStats,
 } from '../../services/attribution/store.js';
+import { NotFoundError } from '../../types/errors.js';
 import type {
   CreateHypothesisRequest,
   UpdateHypothesisStatusRequest,
   CollectEvidenceRequest,
+  HypothesisStatus,
 } from '@los-ast/shared/types';
+
+// 查询参数验证函数
+function parseHypothesisStatus(value: string | undefined): HypothesisStatus | undefined {
+  if (!value) return undefined;
+  const valid: HypothesisStatus[] = ['proposed', 'validating', 'confirmed', 'rejected', 'superseded'];
+  return valid.includes(value as HypothesisStatus) ? (value as HypothesisStatus) : undefined;
+}
+
+function parseQueryInt(value: string | undefined, defaultValue?: number): number | undefined {
+  if (!value) return defaultValue;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
 
 /**
  * 注册 Attribution 路由 (实验性)
@@ -37,23 +52,28 @@ export default async function attributionRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/attribution/hypotheses/:id - 获取假设
-  fastify.get('/hypotheses/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/hypotheses/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const hypothesis = await getHypothesis(id);
 
     if (!hypothesis) {
-      reply.status(404);
-      return { error: { message: 'Hypothesis not found' } };
+      throw new NotFoundError('Hypothesis', id);
     }
 
     return { hypothesis };
   });
 
   // PATCH /experimental/attribution/hypotheses/:id/status - 更新假设状态
-  fastify.patch('/hypotheses/:id/status', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.patch('/hypotheses/:id/status', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
     const body = request.body as UpdateHypothesisStatusRequest;
+
+    // 先检查是否存在
+    const existing = await getHypothesis(id);
+    if (!existing) {
+      throw new NotFoundError('Hypothesis', id);
+    }
 
     const hypothesis = await updateHypothesisStatus(
       id,
@@ -62,11 +82,6 @@ export default async function attributionRoutes(fastify: FastifyInstance) {
       body.actor_id,
       body.reason
     );
-
-    if (!hypothesis) {
-      reply.status(404);
-      return { error: { message: 'Hypothesis not found' } };
-    }
 
     return { hypothesis };
   });
@@ -77,10 +92,10 @@ export default async function attributionRoutes(fastify: FastifyInstance) {
 
     const result = await queryHypotheses({
       incident_id: query.incident_id,
-      status: query.status as any,
+      status: parseHypothesisStatus(query.status),
       category: query.category,
-      limit: query.limit ? parseInt(query.limit, 10) : undefined,
-      offset: query.offset ? parseInt(query.offset, 10) : undefined,
+      limit: parseQueryInt(query.limit),
+      offset: parseQueryInt(query.offset),
     });
 
     return result;
@@ -110,14 +125,13 @@ export default async function attributionRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/attribution/evidence/:id - 获取证据包
-  fastify.get('/evidence/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/evidence/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const bundle = await getEvidenceBundle(id);
 
     if (!bundle) {
-      reply.status(404);
-      return { error: { message: 'Evidence bundle not found' } };
+      throw new NotFoundError('Evidence bundle', id);
     }
 
     return { bundle };

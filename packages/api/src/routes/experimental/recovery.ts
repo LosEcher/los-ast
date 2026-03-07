@@ -19,6 +19,7 @@ import {
   listRecoveryPolicies,
   getRecoveryStats,
 } from '../../services/recovery/store.js';
+import { NotFoundError, ValidationError } from '../../types/errors.js';
 import type {
   ExecuteRecoveryActionRequest,
   RecoveryActionStatus,
@@ -84,33 +85,30 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/recovery/actions/:id - 获取恢复动作
-  fastify.get('/actions/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/actions/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const action = await getRecoveryAction(id);
 
     if (!action) {
-      reply.status(404);
-      return { error: { message: 'Recovery action not found' } };
+      throw new NotFoundError('Recovery action', id);
     }
 
     return { action };
   });
 
   // POST /experimental/recovery/actions/:id/approve - 审批恢复动作
-  fastify.post('/actions/:id/approve', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/actions/:id/approve', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const action = await getRecoveryAction(id);
 
     if (!action) {
-      reply.status(404);
-      return { error: { message: 'Recovery action not found' } };
+      throw new NotFoundError('Recovery action', id);
     }
 
     if (action.status !== 'pending_approval') {
-      reply.status(400);
-      return { error: { message: 'Action is not pending approval' } };
+      throw new ValidationError('INVALID_STATUS', 'Action is not pending approval');
     }
 
     // 更新状态为已审批
@@ -133,15 +131,14 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/recovery/actions/:id/rollback - 回滚恢复动作
-  fastify.post('/actions/:id/rollback', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/actions/:id/rollback', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
     const { actor_id, reason } = request.body as { actor_id: string; reason: string };
 
     const action = await getRecoveryAction(id);
 
     if (!action) {
-      reply.status(404);
-      return { error: { message: 'Recovery action not found' } };
+      throw new NotFoundError('Recovery action', id);
     }
 
     // 更新状态为已回滚
@@ -184,14 +181,13 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/recovery/policies/:id - 获取恢复策略
-  fastify.get('/policies/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/policies/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     const policy = await getRecoveryPolicy(id);
 
     if (!policy) {
-      reply.status(404);
-      return { error: { message: 'Recovery policy not found' } };
+      throw new NotFoundError('Recovery policy', id);
     }
 
     return { policy };
