@@ -25,7 +25,35 @@ import type {
   IncidentQueryParams,
   CollectMetricsRequest,
   CollectLogsRequest,
+  IncidentStatus,
+  IncidentSeverity,
+  IncidentSourceType,
 } from '@los-ast/shared/types';
+
+// 查询参数验证函数
+function parseIncidentStatus(value: string | undefined): IncidentStatus | undefined {
+  if (!value) return undefined;
+  const valid: IncidentStatus[] = ['detected', 'triaging', 'attributed', 'recovering', 'resolved', 'closed'];
+  return valid.includes(value as IncidentStatus) ? (value as IncidentStatus) : undefined;
+}
+
+function parseIncidentSeverity(value: string | undefined): IncidentSeverity | undefined {
+  if (!value) return undefined;
+  const valid: IncidentSeverity[] = ['critical', 'high', 'medium', 'low', 'info'];
+  return valid.includes(value as IncidentSeverity) ? (value as IncidentSeverity) : undefined;
+}
+
+function parseIncidentSourceType(value: string | undefined): IncidentSourceType | undefined {
+  if (!value) return undefined;
+  const valid: IncidentSourceType[] = ['metric_alert', 'log_pattern', 'user_report'];
+  return valid.includes(value as IncidentSourceType) ? (value as IncidentSourceType) : undefined;
+}
+
+function parseQueryInt(value: string | undefined, defaultValue?: number): number | undefined {
+  if (!value) return defaultValue;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
 
 /**
  * 注册 Incident 路由 (实验性)
@@ -38,13 +66,13 @@ export default async function incidentRoutes(fastify: FastifyInstance) {
     const params: IncidentQueryParams = {
       tenant_id: query.tenant_id,
       project_id: query.project_id,
-      status: query.status as any,
-      severity: query.severity as any,
-      source_type: query.source_type as any,
+      status: parseIncidentStatus(query.status),
+      severity: parseIncidentSeverity(query.severity),
+      source_type: parseIncidentSourceType(query.source_type),
       from: query.from,
       to: query.to,
-      limit: query.limit ? parseInt(query.limit, 10) : undefined,
-      offset: query.offset ? parseInt(query.offset, 10) : undefined,
+      limit: parseQueryInt(query.limit),
+      offset: parseQueryInt(query.offset),
     };
 
     const result = await queryIncidents(params);

@@ -24,6 +24,10 @@ services:
       # Scope 验证 (硬约束 #3)
       - REQUIRE_FULL_SCOPE=false
 
+      # 路由层级配置 (默认关闭实验性和内部路由)
+      - ENABLE_EXPERIMENTAL_ROUTES=${ENABLE_EXPERIMENTAL_ROUTES:-false}
+      - ENABLE_INTERNAL_ROUTES=${ENABLE_INTERNAL_ROUTES:-false}
+
       # 日志
       - LOG_LEVEL=info
     volumes:

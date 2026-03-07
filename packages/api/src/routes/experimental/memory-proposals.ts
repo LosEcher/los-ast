@@ -21,7 +21,21 @@ import type {
   CreateProposalRequest,
   ValidateProposalRequest,
   KnowledgeQuery,
+  ProposalType,
 } from '@los-ast/shared/types';
+
+// 查询参数验证函数
+function parseProposalType(value: string | undefined): ProposalType | undefined {
+  if (!value) return undefined;
+  const valid: ProposalType[] = ['corrected_fact', 'rejected_hypothesis', 'incident_lesson', 'recovery_recipe'];
+  return valid.includes(value as ProposalType) ? (value as ProposalType) : undefined;
+}
+
+function parseQueryInt(value: string | undefined, defaultValue?: number): number | undefined {
+  if (!value) return defaultValue;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
 
 /**
  * 注册 Memory Proposals 路由 (实验性)
@@ -71,14 +85,14 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
     const query = request.query as Record<string, string | undefined>;
 
     const params: KnowledgeQuery = {
-      type: query.type as any,
+      type: parseProposalType(query.type),
       scope: {
         tenant_id: query.tenant_id,
         project_id: query.project_id,
       },
       tags: query.tags?.split(','),
-      limit: query.limit ? parseInt(query.limit, 10) : undefined,
-      offset: query.offset ? parseInt(query.offset, 10) : undefined,
+      limit: parseQueryInt(query.limit),
+      offset: parseQueryInt(query.offset),
     };
 
     const result = await queryKnowledge(params);

@@ -17,7 +17,28 @@ import type {
   CreateApprovalRequest,
   ProcessApprovalRequest,
   ApprovalQueryParams,
+  ApprovalStatus,
+  ApprovalItemType,
 } from '@los-ast/shared/types';
+
+// 查询参数验证函数
+function parseApprovalStatus(value: string | undefined): ApprovalStatus | undefined {
+  if (!value) return undefined;
+  const valid: ApprovalStatus[] = ['pending', 'approved', 'rejected', 'expired'];
+  return valid.includes(value as ApprovalStatus) ? (value as ApprovalStatus) : undefined;
+}
+
+function parseApprovalItemType(value: string | undefined): ApprovalItemType | undefined {
+  if (!value) return undefined;
+  const valid: ApprovalItemType[] = ['recovery_action', 'code_patch', 'config_change', 'recipe_activation'];
+  return valid.includes(value as ApprovalItemType) ? (value as ApprovalItemType) : undefined;
+}
+
+function parseQueryInt(value: string | undefined, defaultValue?: number): number | undefined {
+  if (!value) return defaultValue;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
 
 /**
  * 注册 Approval 路由 (实验性)
@@ -30,11 +51,11 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
     const params: ApprovalQueryParams = {
       tenant_id: query.tenant_id,
       project_id: query.project_id,
-      status: query.status as any,
+      status: parseApprovalStatus(query.status),
       risk_level: query.risk_level,
-      item_type: query.item_type as any,
-      limit: query.limit ? parseInt(query.limit, 10) : undefined,
-      offset: query.offset ? parseInt(query.offset, 10) : undefined,
+      item_type: parseApprovalItemType(query.item_type),
+      limit: parseQueryInt(query.limit),
+      offset: parseQueryInt(query.offset),
     };
 
     const result = await queryApprovals(params);
