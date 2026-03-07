@@ -1,5 +1,11 @@
 import { registerLanguages } from './languages.mjs'
 
+/**
+ * Core Façade 版本
+ * @version 1.0.0
+ */
+export const CORE_FACADE_VERSION = '1.0.0';
+
 // 追踪 Core 加载状态
 let coreReady = false;
 

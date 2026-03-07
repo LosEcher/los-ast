@@ -102,13 +102,29 @@ export async function scan({
   rules,
   parseCache = defaultParseCache,
   includeStats = false,
+  signal,
 }) {
   registerLanguages()
+
+  // 检查取消信号
+  if (signal?.aborted) {
+    const error = new Error('Scan cancelled by client')
+    error.name = 'AbortError'
+    error.code = 'ABORTED'
+    throw error
+  }
 
   const files = await discoverFiles({ rootDir, include, ignore })
   const findings = []
 
   for (const file of files) {
+    // 检查取消信号
+    if (signal?.aborted) {
+      const error = new Error('Scan cancelled by client')
+      error.name = 'AbortError'
+      error.code = 'ABORTED'
+      throw error
+    }
     const language = languageFromFilePath(file)
     if (!language) continue
 
