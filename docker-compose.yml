@@ -1,0 +1,67 @@
+# los-ast 服务 Docker Compose 配置
+# 快速启动本地开发环境
+
+version: '3.8'
+
+services:
+  los-ast-api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    container_name: los-ast-api
+    ports:
+      - "3000:3000"
+    environment:
+      # 服务器配置
+      - PORT=3000
+      - NODE_ENV=production
+
+      # 扫描限制 (硬约束 #4)
+      - MAX_FILES_PER_SYNC_SCAN=1000
+      - MAX_RESPONSE_BYTES=10485760
+      - MAX_SCAN_DURATION_MS=30000
+
+      # Scope 验证 (硬约束 #3)
+      - REQUIRE_FULL_SCOPE=false
+
+      # 日志
+      - LOG_LEVEL=info
+    volumes:
+      # 挂载代码目录供扫描
+      - type: bind
+        source: ./fixtures
+        target: /app/fixtures
+        read_only: true
+      # 可选：挂载本地项目目录
+      # - type: bind
+      #   source: /path/to/your/project
+      #   target: /projects/your-project
+      #   read_only: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - los-ast-network
+
+  # 可选：Redis 缓存 (未来扩展)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: los-ast-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - los-ast-network
+
+networks:
+  los-ast-network:
+    driver: bridge
+
+# volumes:
+#   redis-data:
