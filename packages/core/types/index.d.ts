@@ -39,6 +39,7 @@ export interface ScanOptions {
   ignore?: string[];
   includeStats?: boolean;
   signal?: AbortSignal;
+  rules?: Rule[];
 }
 
 export interface Finding {
@@ -51,10 +52,12 @@ export interface Finding {
 }
 
 export interface ScanResult {
+  filesScanned: number;
   findings: Finding[];
-  stats: {
-    filesScanned: number;
-    durationMs: number;
+  parseCache?: {
+    hits: number;
+    misses: number;
+    size: number;
   };
 }
 
