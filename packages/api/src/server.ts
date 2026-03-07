@@ -13,6 +13,7 @@ import attributionRoutes from './routes/attribution.js';
 import recoveryRoutes from './routes/recovery.js';
 import approvalRoutes from './routes/approval.js';
 import hotReloadRoutes from './routes/hotreload.js';
+import evidenceRoutes from './routes/evidence.js';
 
 const server = Fastify({
   logger: true,
@@ -39,6 +40,7 @@ await server.register(attributionRoutes, { prefix: '/attribution' });
 await server.register(recoveryRoutes, { prefix: '/recovery' });
 await server.register(approvalRoutes, { prefix: '/approvals' });
 await server.register(hotReloadRoutes, { prefix: '/hotreload' });
+await server.register(evidenceRoutes, { prefix: '/evidence' });
 
 async function main() {
   logStartupConfig();
