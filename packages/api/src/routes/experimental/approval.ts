@@ -14,6 +14,10 @@ import {
   getApprovalStats,
 } from '../../services/approval/store.js';
 import { NotFoundError, ValidationError } from '../../types/errors.js';
+import { MemoryCache } from '../../utils/cache.js';
+
+// 创建路由缓存实例 (30秒 TTL)
+const statsCache = new MemoryCache({ defaultTtl: 30000, maxSize: 10 });
 import type {
   CreateApprovalRequest,
   ProcessApprovalRequest,
@@ -108,9 +112,19 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // GET /experimental/approvals/stats - 获取统计信息
+  // GET /experimental/approvals/stats - 获取统计信息 (带缓存)
   fastify.get('/stats', async () => {
+    const cacheKey = 'approval:stats';
+
+    // 尝试从缓存获取
+    const cached = statsCache.get(cacheKey);
+    if (cached !== undefined) {
+      return { stats: cached };
+    }
+
+    // 获取新数据并缓存
     const stats = getApprovalStats();
+    statsCache.set(cacheKey, stats, 30000);
     return { stats };
   });
 }
