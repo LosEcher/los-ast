@@ -7,6 +7,7 @@ import healthCheckPlugin from './plugins/health-check.js';
 import cancellationPlugin from './plugins/cancellation.js';
 import scanRoutes from './routes/scan.js';
 import discoverRoutes from './routes/discover.js';
+import incidentRoutes from './routes/incident.js';
 
 const server = Fastify({
   logger: true,
@@ -27,6 +28,7 @@ await server.register(scopeValidatorPlugin);
 // 6. 注册路由
 await server.register(scanRoutes, { prefix: '/scan' });
 await server.register(discoverRoutes, { prefix: '/discover' });
+await server.register(incidentRoutes, { prefix: '/incidents' });
 
 async function main() {
   logStartupConfig();
