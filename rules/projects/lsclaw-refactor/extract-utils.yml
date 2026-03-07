@@ -1,0 +1,13 @@
+id: lsclaw-refactor.extract-utils
+language: JavaScript
+severity: info
+message: "纯工具函数，可提取到 utils/dom.mjs"
+rule:
+  any:
+    - pattern: function escapeHtml($S) { $$$BODY }
+    - pattern: function toText($S) { $$$BODY }
+    - pattern: function byId($ID) { $$$BODY }
+    - pattern: function clampExcerpt($T, $M) { $$$BODY }
+    - pattern: function formatNumber($N) { $$$BODY }
+    - pattern: function setRaw($K, $V, $P) { $$$BODY }
+    - pattern: function sendJson($R, $C, $D) { $$$BODY }

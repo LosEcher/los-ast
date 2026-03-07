@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { logStartupConfig, PORT } from './config/index.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import requestIdPlugin from './plugins/request-id.js';
+import scopeValidatorPlugin from './plugins/scope-validator.js';
 
 const server = Fastify({
   logger: true,
@@ -10,8 +11,10 @@ const server = Fastify({
 // 注册插件（顺序很重要）
 // 1. 先注册 request-id，确保所有请求都有 ID
 await server.register(requestIdPlugin);
-// 2. 再注册 error-handler，确保错误处理使用 requestId
+// 2. 注册 error-handler，确保错误处理使用 requestId
 await server.register(errorHandlerPlugin);
+// 3. 注册 scope-validator，验证 scope（在路由之前）
+await server.register(scopeValidatorPlugin);
 
 server.get('/healthz/live', async () => {
   return { status: 'alive' };

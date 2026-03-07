@@ -1,0 +1,15 @@
+id: lsclaw-refactor.html-string-escape
+language: JavaScript
+severity: error
+message: "HTML onclick 属性中的变量未转义，可能导致 XSS"
+rule:
+  any:
+    - pattern: |
+        $VAR + "'" + $ID + "'"
+    - pattern: |
+        $VAR + '"' + $ID + '"'
+constraints:
+  - name: VAR
+    regex: "onclick"
+fix:
+  replace: $VAR + "\" + escapeHtml($ID) + "\"

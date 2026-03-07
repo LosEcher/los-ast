@@ -1,0 +1,13 @@
+id: lsclaw-refactor.extract-views
+language: JavaScript
+severity: info
+message: "视图渲染函数，可提取到 views/"
+rule:
+  any:
+    - pattern: function renderSessionHistory() { $$$BODY }
+    - pattern: function renderSessionDetail() { $$$BODY }
+    - pattern: function renderJobQueue() { $$$BODY }
+    - pattern: function renderWorkerPool() { $$$BODY }
+    - pattern: function renderAnalyzerResults() { $$$BODY }
+    - pattern: function renderSecurityResults() { $$$BODY }
+    - pattern: function renderSchedulerTasks() { $$$BODY }

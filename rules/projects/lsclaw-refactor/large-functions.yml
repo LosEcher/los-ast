@@ -1,0 +1,13 @@
+id: lsclaw-refactor.large-functions
+language: JavaScript
+severity: warning
+message: "函数体超过50行，建议拆分"
+rule:
+  pattern: |
+    function $NAME($$$PARAMS) {
+      $$$BODY
+    }
+constraints:
+  - name: BODY
+    regex: "\n.{50,}"
+    mode: any

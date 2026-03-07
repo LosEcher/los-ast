@@ -1,0 +1,12 @@
+id: lsclaw-refactor.extract-api
+language: JavaScript
+severity: info
+message: "API 调用函数，可提取到 utils/api.mjs"
+rule:
+  any:
+    - pattern: async function apiGet($$$ARGS) { $$$BODY }
+    - pattern: async function apiPost($$$ARGS) { $$$BODY }
+    - pattern: async function apiDelete($$$ARGS) { $$$BODY }
+    - pattern: async function apiPut($$$ARGS) { $$$BODY }
+    - pattern: async function apiPatch($$$ARGS) { $$$BODY }
+    - pattern: function headers($$$ARGS) { $$$BODY }
