@@ -1,6 +1,6 @@
 import { scan, discoverFiles, isReady } from '@los-ast/core';
 import { SCAN_LIMITS } from '../config/index.js';
-import { ScanTooLargeError, TimeoutError } from '../types/errors.js';
+import { ScanTooLargeError } from '../types/errors.js';
 import type { ScanResult } from '@los-ast/shared/types';
 
 export interface ScanServiceOptions {
@@ -64,7 +64,7 @@ export class ScanService {
       includeStats,
     });
 
-    return result as ScanResult;
+    return result as unknown as ScanResult;
   }
 }
 

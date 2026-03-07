@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.mjs"
+    ".": {
+      "import": "./src/index.mjs",
+      "types": "./types/index.d.ts"
+    }
   },
   "dependencies": {
     "@ast-grep/lang-rust": "^0.0.3",
