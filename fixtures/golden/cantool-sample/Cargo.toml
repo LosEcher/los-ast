@@ -1,0 +1,9 @@
+[package]
+name = "cantool-sample"
+version = "0.1.0"
+edition = "2021"
+description = "Small Rust project for los-ast validation"
+
+[dependencies]
+
+[dev-dependencies]
