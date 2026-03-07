@@ -94,66 +94,13 @@ export interface IncidentLesson {
   updated_at: string;
 }
 
-/**
- * 恢复方案
- */
-export interface RecoveryRecipe {
-  recipe_id: string;
-  name: string;
-  description: string;
-  triggers: {
-    metric_patterns: MetricPattern[];
-    log_patterns: LogPattern[];
-    symptom_keywords: string[];
-  };
-  actions: RecoveryActionTemplate[];
-  prerequisites: string[];
-  estimated_duration_seconds: number;
-  rollback_strategy: string;
-  stats: {
-    times_used: number;
-    success_rate: number;
-    avg_duration_seconds: number;
-  };
-  source: {
-    type: 'manual' | 'learned';
-    created_from_incident?: string;
-    created_by: string;
-  };
-  scope: {
-    tenant_id?: string;
-    project_id?: string;
-    is_global: boolean;
-  };
-  created_at: string;
-  updated_at: string;
-  version: number;
-}
-
-export interface MetricPattern {
-  metric_name: string;
-  operator: 'gt' | 'lt' | 'eq';
-  threshold: number;
-  duration_ms: number;
-}
-
-export interface LogPattern {
-  level: string;
-  contains: string;
-  service?: string;
-}
-
-export interface RecoveryActionTemplate {
-  step_number: number;
-  name: string;
-  description: string;
-  action_type: 'command' | 'api_call' | 'config_change' | 'notification';
-  command_template?: string;
-  api_endpoint?: string;
-  parameters: Record<string, unknown>;
-  timeout_seconds: number;
-  rollback_command?: string;
-}
+// Import from recovery.ts to avoid duplication
+export type {
+  RecoveryRecipe,
+  MetricPattern,
+  LogPattern,
+  RecoveryActionTemplate,
+} from './recovery.js';
 
 /**
  * 知识检索请求
