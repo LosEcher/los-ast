@@ -11,8 +11,7 @@ import requestIdPlugin from '../../src/plugins/request-id';
 import scopeValidatorPlugin from '../../src/plugins/scope-validator';
 import cancellationPlugin from '../../src/plugins/cancellation';
 import healthCheckPlugin from '../../src/plugins/health-check';
-import scanRoutes from '../../src/routes/scan';
-import discoverRoutes from '../../src/routes/discover';
+import { scanRoutes, discoverRoutes } from '../../src/routes/core';
 
 describe('API Integration Tests', () => {
   let app: FastifyInstance;

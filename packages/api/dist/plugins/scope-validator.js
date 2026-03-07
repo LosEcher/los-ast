@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { ScopeError } from '../types/errors.js';
+import { ScopeError, ValidationError } from '../types/errors.js';
 import { SCOPE_CONFIG } from '../config/index.js';
 /**
  * Scope 验证插件
@@ -16,7 +16,7 @@ export default fp(async function scopeValidatorPlugin(fastify) {
         const scope = extractScope(request);
         // 如果没有 scope，返回 400
         if (!scope) {
-            throw new ScopeError('MISSING_SCOPE', 'Scope is required in request body or query parameters');
+            throw new ValidationError('MISSING_SCOPE', 'Scope is required in request body or query parameters');
         }
         // 生产环境强制完整 scope
         if (SCOPE_CONFIG.requireFullScope) {

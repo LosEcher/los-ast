@@ -55,7 +55,7 @@ export class TimeoutError extends AppError {
  */
 export class ScanTooLargeError extends AppError {
     constructor(limit, estimated) {
-        super('SCAN_TOO_LARGE', 'SCAN_TOO_LARGE', `Estimated ${estimated} files exceeds limit ${limit}. Use smaller include patterns or async job mode.`, false, { limit, estimated });
+        super('SCAN_TOO_LARGE', 'SCAN_TOO_LARGE', `Estimated ${estimated} files exceeds limit ${limit}. Use smaller include patterns or async task mode.`, false, { limit, estimated });
     }
 }
 //# sourceMappingURL=errors.js.map

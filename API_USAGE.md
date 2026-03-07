@@ -6,6 +6,32 @@
 
 ---
 
+## 路由层级说明
+
+los-ast API 采用三层路由架构，区分不同稳定性的端点：
+
+| 层级 | 路由前缀 | 默认状态 | 稳定性 | 说明 |
+|------|----------|----------|--------|------|
+| **Core** | `/` | 始终启用 | 稳定 | P0 核心功能，保证向后兼容 |
+| **Experimental** | `/experimental` | 默认关闭 | 不稳定 | Phase 1.x 功能，可能变更 |
+| **Internal** | `/internal` | 默认关闭 | 内部使用 | 开发/调试用途 |
+
+### 启用实验性路由
+
+实验性路由默认关闭，需通过环境变量启用：
+
+```bash
+# 方式1: 命令行
+ENABLE_EXPERIMENTAL_ROUTES=true npm run dev
+
+# 方式2: .env 文件
+echo "ENABLE_EXPERIMENTAL_ROUTES=true" >> .env
+```
+
+> **警告**: 实验性路由的 API 契约可能变更，不建议生产环境依赖。
+
+---
+
 ## 快速开始
 
 ### 1. 启动服务
@@ -29,9 +55,11 @@ curl http://localhost:3000/healthz/ready
 
 ## API 端点
 
-### 核心端点 (Milestone A - P0)
+### 核心端点 (Core Layer)
 
-#### `GET /healthz/live`
+P0 核心功能，始终启用，保证向后兼容。
+
+#### `GET /healthz/live` [稳定]
 
 存活检查，返回服务是否运行。
 
@@ -46,7 +74,7 @@ curl http://localhost:3000/healthz/ready
 }
 ```
 
-#### `GET /healthz/ready`
+#### `GET /healthz/ready` [稳定]
 
 就绪检查，返回服务及依赖状态。
 
@@ -61,7 +89,7 @@ curl http://localhost:3000/healthz/ready
 }
 ```
 
-#### `POST /scan`
+#### `POST /scan` [稳定]
 
 扫描代码项目并返回发现的问题。
 
@@ -148,7 +176,7 @@ X-Request-ID: <可选，自动生成为UUID>
 | 408 | CANCELLATION_ERROR | 扫描超时或被取消 |
 | 413 | PAYLOAD_TOO_LARGE | 扫描结果超过大小限制 |
 
-#### `POST /discover/symbols`
+#### `POST /discover/symbols` [稳定]
 
 发现代码中的符号（函数、类、接口等）。
 
@@ -191,17 +219,23 @@ X-Request-ID: <可选，自动生成为UUID>
 
 ### 实验性端点 (Phase 1.x)
 
-> 以下端点处于实验阶段，API 可能变化。建议仅在开发环境使用。
+> **警告**: 以下端点挂载在 `/experimental/*` 前缀下，默认关闭。
+> API 可能变更，不保证向后兼容。建议仅在开发环境使用。
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/incidents` | POST/GET | 事件追踪 |
-| `/memory` | POST/GET | 知识写入 los-memory |
-| `/attribution` | POST | 归因分析 |
-| `/recovery` | POST | 故障恢复 |
-| `/approvals` | POST/GET | 高风险操作审批 |
-| `/hotreload` | POST/GET | 规则热重载 |
-| `/evidence` | POST/GET | 证据生成 |
+| 端点 | 方法 | 说明 | 迁移计划 |
+|------|------|------|----------|
+| `/experimental/incidents` | POST/GET | 事件追踪 | Milestone B+ → VPS Agent Web |
+| `/experimental/memory-proposals` | POST/GET | 向 los-memory 提议候选 | Milestone B → los-memory |
+| `/experimental/attribution` | POST | 归因分析 | Milestone B+ → VPS Agent Web |
+| `/experimental/recovery` | POST | 故障恢复 | Milestone B+ → VPS Agent Web |
+| `/experimental/approvals` | POST/GET | 高风险操作审批 | Milestone B+ → VPS Agent Web |
+| `/experimental/hotreload` | POST/GET | 规则热重载 | 保留在 los-ast |
+| `/experimental/evidence` | POST/GET | 证据生成 | 保留在 los-ast |
+
+**启用方法**:
+```bash
+ENABLE_EXPERIMENTAL_ROUTES=true npm run dev
+```
 
 ---
 
@@ -414,6 +448,7 @@ async function analyzeCode(rootDir: string) {
 
 ## 更多信息
 
+- [路由分层策略](docs/ROUTE_TIERING.md) - 详细的三层路由架构设计
 - [架构设计文档](docs/implementation-roadmap-v1.1.md)
 - [实现审查报告](docs/IMPLEMENTATION_REVIEW.md)
 - [代码审查报告](docs/CODE_REVIEW.md)
