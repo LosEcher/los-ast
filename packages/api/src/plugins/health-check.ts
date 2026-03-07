@@ -9,17 +9,18 @@ import { isReady } from '@los-ast/core';
 export default fp(async function healthCheckPlugin(fastify: FastifyInstance) {
   // Liveness probe - 服务是否存活
   fastify.get('/healthz/live', async () => {
-    return { status: 'alive' };
+    return { status: 'alive', timestamp: new Date().toISOString() };
   });
 
   // Readiness probe - 服务是否准备好接收流量
   fastify.get('/healthz/ready', async (_, reply) => {
     const ready = isReady();
+    const timestamp = new Date().toISOString();
     if (ready) {
-      return { status: 'ready' };
+      return { status: 'ready', timestamp };
     } else {
       reply.status(503);
-      return { status: 'not_ready' };
+      return { status: 'unavailable', timestamp };
     }
   });
 }, {

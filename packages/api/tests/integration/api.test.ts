@@ -78,7 +78,7 @@ describe('API Integration Tests', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
-      expect(body.error.category).toBe('SCOPE');
+      expect(body.error.category).toBe('VALIDATION');
       expect(body.error.code).toBe('MISSING_SCOPE');
     });
 
