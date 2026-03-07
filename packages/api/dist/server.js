@@ -3,32 +3,29 @@ import { logStartupConfig, PORT } from './config/index.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import requestIdPlugin from './plugins/request-id.js';
 import scopeValidatorPlugin from './plugins/scope-validator.js';
-import healthCheckPlugin from './plugins/health-check.js';
-
 const server = Fastify({
-  logger: true,
+    logger: true,
 });
-
 // 注册插件（顺序很重要）
 // 1. 先注册 request-id，确保所有请求都有 ID
 await server.register(requestIdPlugin);
 // 2. 注册 error-handler，确保错误处理使用 requestId
 await server.register(errorHandlerPlugin);
-// 3. 注册 health-check（在 scope-validator 之前，避免 scope 验证）
-await server.register(healthCheckPlugin);
-// 4. 注册 scope-validator，验证 scope（在路由之前）
+// 3. 注册 scope-validator，验证 scope（在路由之前）
 await server.register(scopeValidatorPlugin);
-
+server.get('/healthz/live', async () => {
+    return { status: 'alive' };
+});
 async function main() {
-  logStartupConfig();
-
-  try {
-    await server.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`[STARTUP] API server listening on port ${PORT}`);
-  } catch (err) {
-    server.log.error(err);
-    process.exit(1);
-  }
+    logStartupConfig();
+    try {
+        await server.listen({ port: PORT, host: '0.0.0.0' });
+        console.log(`[STARTUP] API server listening on port ${PORT}`);
+    }
+    catch (err) {
+        server.log.error(err);
+        process.exit(1);
+    }
 }
-
 main();
+//# sourceMappingURL=server.js.map
