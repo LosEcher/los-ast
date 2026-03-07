@@ -12,6 +12,7 @@ import {
   explainCode,
   getCodeStats,
 } from '../services/evidence/service.js';
+import { notFound, created, ok } from '../utils/http-helpers.js';
 import type {
   GenerateEvidenceRequest,
   ValidatePatchSafetyRequest,
@@ -24,46 +25,34 @@ export default async function evidenceRoutes(fastify: FastifyInstance) {
   fastify.post('/generate', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as GenerateEvidenceRequest;
     const bundle = await generateEvidence(body);
-    reply.status(201);
-    return { bundle };
+    return created(reply, bundle);
   });
 
   // GET /evidence/:id - 获取证据包
   fastify.get('/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const bundle = await getEvidenceBundle(id);
-    if (!bundle) {
-      reply.status(404);
-      return { error: { message: 'Evidence bundle not found' } };
-    }
-    return { bundle };
+    if (!bundle) return notFound(reply, 'Evidence bundle');
+    return ok(bundle);
   });
 
   // POST /evidence/validate-patch - 验证 Patch 安全性
-  fastify.post('/validate-patch', async (request: FastifyRequest) => {
-    const body = request.body as ValidatePatchSafetyRequest;
-    const result = await validatePatchSafety(body);
-    return { result };
-  });
+  fastify.post('/validate-patch', async (request: FastifyRequest) =>
+    ok(await validatePatchSafety(request.body as ValidatePatchSafetyRequest))
+  );
 
   // POST /evidence/rewrite - 生成改写候选
-  fastify.post('/rewrite', async (request: FastifyRequest) => {
-    const body = request.body as GenerateRewriteRequest;
-    const result = await generateRewrite(body);
-    return { result };
-  });
+  fastify.post('/rewrite', async (request: FastifyRequest) =>
+    ok(await generateRewrite(request.body as GenerateRewriteRequest))
+  );
 
   // POST /evidence/explain - 解释代码
-  fastify.post('/explain', async (request: FastifyRequest) => {
-    const body = request.body as ExplainCodeRequest;
-    const result = await explainCode(body);
-    return { result };
-  });
+  fastify.post('/explain', async (request: FastifyRequest) =>
+    ok(await explainCode(request.body as ExplainCodeRequest))
+  );
 
   // GET /evidence/stats/:project - 获取代码统计
-  fastify.get('/stats/:project', async (request: FastifyRequest) => {
-    const { project } = request.params as { project: string };
-    const stats = await getCodeStats(project);
-    return { stats };
-  });
+  fastify.get('/stats/:project', async (request: FastifyRequest) =>
+    ok(await getCodeStats((request.params as { project: string }).project))
+  );
 }
