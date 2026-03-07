@@ -5,6 +5,7 @@ import requestIdPlugin from './plugins/request-id.js';
 import scopeValidatorPlugin from './plugins/scope-validator.js';
 import healthCheckPlugin from './plugins/health-check.js';
 import cancellationPlugin from './plugins/cancellation.js';
+import scanRoutes from './routes/scan.js';
 
 const server = Fastify({
   logger: true,
@@ -21,6 +22,9 @@ await server.register(healthCheckPlugin);
 await server.register(cancellationPlugin);
 // 5. 注册 scope-validator，验证 scope（在路由之前）
 await server.register(scopeValidatorPlugin);
+
+// 6. 注册路由
+await server.register(scanRoutes, { prefix: '/scan' });
 
 async function main() {
   logStartupConfig();
