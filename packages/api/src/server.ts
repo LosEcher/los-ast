@@ -4,6 +4,7 @@ import errorHandlerPlugin from './plugins/error-handler.js';
 import requestIdPlugin from './plugins/request-id.js';
 import scopeValidatorPlugin from './plugins/scope-validator.js';
 import healthCheckPlugin from './plugins/health-check.js';
+import cancellationPlugin from './plugins/cancellation.js';
 
 const server = Fastify({
   logger: true,
@@ -16,7 +17,9 @@ await server.register(requestIdPlugin);
 await server.register(errorHandlerPlugin);
 // 3. 注册 health-check（在 scope-validator 之前，避免 scope 验证）
 await server.register(healthCheckPlugin);
-// 4. 注册 scope-validator，验证 scope（在路由之前）
+// 4. 注册 cancellation，为所有请求添加取消支持（硬约束 #5）
+await server.register(cancellationPlugin);
+// 5. 注册 scope-validator，验证 scope（在路由之前）
 await server.register(scopeValidatorPlugin);
 
 async function main() {
