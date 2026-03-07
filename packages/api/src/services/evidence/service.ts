@@ -179,7 +179,7 @@ export async function generateRewrite(request: GenerateRewriteRequest): Promise<
       finding_id: finding.finding_id,
       file_path: 'src/index.ts', // 应该从 finding 获取
       original_code: 'console.log("debug")',
-      proposed_code: finding.proposed_fix || '// Removed debug code',
+      proposed_code: finding.suggested_fix || '// Removed debug code',
       explanation: `Fix for ${finding.finding_id}`,
       safety_score: request.options.safety_level === 'strict' ? 0.95 : 0.8,
       ready_to_apply: request.options.safety_level !== 'strict',

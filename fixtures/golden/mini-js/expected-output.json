@@ -1,0 +1,29 @@
+{
+  "description": "Expected scan output for mini-js sample",
+  "project": "mini-js",
+  "filesScanned": 2,
+  "expectedFindings": {
+    "patterns": [
+      {
+        "ruleId": "no-console",
+        "messagePattern": "console",
+        "minimumOccurrences": 3
+      },
+      {
+        "ruleId": "unused-variable",
+        "messagePattern": "result",
+        "minimumOccurrences": 1
+      },
+      {
+        "ruleId": "unused-function",
+        "messagePattern": "unusedFunction",
+        "minimumOccurrences": 1
+      }
+    ],
+    "filesAffected": ["src/index.js", "src/utils.js"]
+  },
+  "invariants": {
+    "tool": "los-ast",
+    "language": "javascript"
+  }
+}

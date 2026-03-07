@@ -72,7 +72,7 @@ export class ScanTooLargeError extends AppError {
     super(
       'SCAN_TOO_LARGE',
       'SCAN_TOO_LARGE',
-      `Estimated ${estimated} files exceeds limit ${limit}. Use smaller include patterns or async job mode.`,
+      `Estimated ${estimated} files exceeds limit ${limit}. Use smaller include patterns or async task mode.`,
       false,
       { limit, estimated }
     );

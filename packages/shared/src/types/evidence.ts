@@ -134,7 +134,7 @@ export interface GenerateRewriteRequest {
 export interface FindingApproval {
   finding_id: string;
   approved: boolean;
-  proposed_fix?: string;
+  suggested_fix?: string;
 }
 
 export interface GenerateRewriteResponse {
