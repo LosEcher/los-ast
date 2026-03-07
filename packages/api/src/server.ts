@@ -9,6 +9,7 @@ import scanRoutes from './routes/scan.js';
 import discoverRoutes from './routes/discover.js';
 import incidentRoutes from './routes/incident.js';
 import memoryRoutes from './routes/memory.js';
+import attributionRoutes from './routes/attribution.js';
 
 const server = Fastify({
   logger: true,
@@ -31,6 +32,7 @@ await server.register(scanRoutes, { prefix: '/scan' });
 await server.register(discoverRoutes, { prefix: '/discover' });
 await server.register(incidentRoutes, { prefix: '/incidents' });
 await server.register(memoryRoutes, { prefix: '/memory' });
+await server.register(attributionRoutes, { prefix: '/attribution' });
 
 async function main() {
   logStartupConfig();
