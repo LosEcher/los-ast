@@ -11,6 +11,7 @@ import incidentRoutes from './routes/incident.js';
 import memoryRoutes from './routes/memory.js';
 import attributionRoutes from './routes/attribution.js';
 import recoveryRoutes from './routes/recovery.js';
+import approvalRoutes from './routes/approval.js';
 
 const server = Fastify({
   logger: true,
@@ -35,6 +36,7 @@ await server.register(incidentRoutes, { prefix: '/incidents' });
 await server.register(memoryRoutes, { prefix: '/memory' });
 await server.register(attributionRoutes, { prefix: '/attribution' });
 await server.register(recoveryRoutes, { prefix: '/recovery' });
+await server.register(approvalRoutes, { prefix: '/approvals' });
 
 async function main() {
   logStartupConfig();
