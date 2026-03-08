@@ -8,13 +8,14 @@
 
 ## 路由层级说明
 
-los-ast API 采用三层路由架构，区分不同稳定性的端点：
+los-ast API 采用四层路由架构，区分不同稳定性的端点：
 
 | 层级 | 路由前缀 | 默认状态 | 稳定性 | 说明 |
 |------|----------|----------|--------|------|
 | **Core** | `/` | 始终启用 | 稳定 | P0 核心功能，保证向后兼容 |
 | **Experimental** | `/experimental` | 默认关闭 | 不稳定 | Phase 1.x 功能，可能变更 |
 | **Internal** | `/internal` | 默认关闭 | 内部使用 | 开发/调试用途 |
+| **VPS Agent Web** | `/vps-agent-web` | 默认关闭 | beta/preview | 外部联调稳定前缀封装 |
 
 ### 启用实验性路由
 
@@ -29,6 +30,12 @@ echo "ENABLE_EXPERIMENTAL_ROUTES=true" >> .env
 ```
 
 > **警告**: 实验性路由的 API 契约可能变更，不建议生产环境依赖。
+
+### 启用 VPS Agent Web 路由
+
+```bash
+ENABLE_VPS_AGENT_WEB_ROUTES=true npm run dev
+```
 
 ---
 
@@ -166,10 +173,10 @@ X-Request-ID: <可选，自动生成为UUID>
 
 | 状态码 | 错误类型 | 说明 |
 |--------|----------|------|
-| 400 | VALIDATION_ERROR | 请求参数验证失败 |
-| 403 | SCOPE_ERROR | Scope 验证失败 |
-| 408 | CANCELLATION_ERROR | 扫描超时或被取消 |
-| 413 | PAYLOAD_TOO_LARGE | 扫描结果超过大小限制 |
+| 400 | VALIDATION | 请求参数验证失败 |
+| 403 | SCOPE | Scope 验证失败 |
+| 408 | TIMEOUT | 扫描超时或被取消 |
+| 413 | SCAN_TOO_LARGE | 扫描结果超过大小限制 |
 
 #### `POST /discover/symbols` [稳定]
 
@@ -221,8 +228,8 @@ X-Request-ID: <可选，自动生成为UUID>
 |------|------|------|----------|
 | `/experimental/incidents` | POST/GET | 事件追踪 | Milestone B+ → VPS Agent Web |
 | `/experimental/memory-proposals` | POST/GET | 向 los-memory 提议候选 | Milestone B → los-memory |
-| `/experimental/attribution` | POST | 归因分析 | Milestone B+ → VPS Agent Web |
-| `/experimental/recovery` | POST | 故障恢复 | Milestone B+ → VPS Agent Web |
+| `/experimental/attribution` | POST/GET/PATCH | 归因分析与假设管理 | Milestone B+ → VPS Agent Web |
+| `/experimental/recovery` | POST/GET | 故障恢复与策略查询 | Milestone B+ → VPS Agent Web |
 | `/experimental/approvals` | POST/GET | 高风险操作审批 | Milestone B+ → VPS Agent Web |
 | `/experimental/hotreload` | POST/GET | 规则热重载 | 保留在 los-ast |
 | `/experimental/evidence` | POST/GET | 证据生成 | 保留在 los-ast |
@@ -243,7 +250,7 @@ ENABLE_EXPERIMENTAL_ROUTES=true npm run dev
 ```json
 {
   "error": {
-    "category": "VALIDATION_ERROR",
+    "category": "VALIDATION",
     "code": "MISSING_SCOPE_TENANT",
     "message": "Scope validation failed: tenant_id is required",
     "requestId": "550e8400-e29b-41d4-a716-446655440000",
@@ -260,12 +267,12 @@ ENABLE_EXPERIMENTAL_ROUTES=true npm run dev
 
 | 类别 | HTTP状态码 | 说明 | 可重试 |
 |------|------------|------|--------|
-| `VALIDATION_ERROR` | 400 | 请求参数验证失败 | 否 |
-| `SCOPE_ERROR` | 403 | Scope 验证失败 | 否 |
+| `VALIDATION` | 400 | 请求参数验证失败 | 否 |
+| `SCOPE` | 403 | Scope 验证失败 | 否 |
 | `TIMEOUT` | 408 | 请求超时 | 是 |
 | `SCAN_TOO_LARGE` | 413 | 扫描结果过大 | 否 |
 | `NOT_FOUND` | 404 | 资源不存在 | 否 |
-| `INTERNAL_ERROR` | 500 | 内部错误 | 是 |
+| `INTERNAL` | 500 | 内部错误 | 是 |
 
 ---
 
