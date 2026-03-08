@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "los-ast": "node ./packages/cli/src/index.mjs",
+    "build:api": "cd packages/api && npm run build",
     "test": "npm run test:core && npm run test:api",
     "test:core": "node --test test/rules.test.mjs",
     "test:api": "cd packages/api && npm run test -- --run",
@@ -16,6 +17,7 @@
     "test:api:smoke": "cd packages/api && npm run test -- --run tests/smoke",
     "test:api:unit": "cd packages/api && npm run test:unit",
     "test:golden": "npm run test:api:golden",
-    "lint": "node ./packages/cli/src/index.mjs doctor --quiet"
+    "lint": "node ./packages/cli/src/index.mjs doctor --quiet",
+    "quality-gate": "npm run lint && npm run build:api && npm run test && cd packages/api && npm run typecheck"
   }
 }

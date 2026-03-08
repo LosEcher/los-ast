@@ -11,13 +11,13 @@ import {
   getIncident,
   updateIncidentStatus,
   queryIncidents,
-  getStoreStats,
+  getStoreStatsByScope,
 } from '../../services/incident/store.js';
 import {
   collectMetrics,
   collectLogs,
   evaluateTriggers,
-  getCollectionStats,
+  getCollectionStatsByScope,
 } from '../../services/incident/collection.js';
 import { NotFoundError } from '../../types/errors.js';
 import type {
@@ -152,12 +152,18 @@ export default async function incidentRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/incidents/stats/store - 获取存储统计
-  fastify.get('/stats/store', async () => {
-    return getStoreStats();
+  fastify.get('/stats/store', async (request: FastifyRequest) => {
+    return getStoreStatsByScope({
+      tenant_id: request.scope?.tenant_id,
+      project_id: request.scope?.project_id,
+    });
   });
 
   // GET /experimental/incidents/stats/collection - 获取采集统计
-  fastify.get('/stats/collection', async () => {
-    return getCollectionStats();
+  fastify.get('/stats/collection', async (request: FastifyRequest) => {
+    return getCollectionStatsByScope({
+      tenant_id: request.scope?.tenant_id,
+      project_id: request.scope?.project_id,
+    });
   });
 }

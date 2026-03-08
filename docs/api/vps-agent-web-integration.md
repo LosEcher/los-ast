@@ -6,6 +6,7 @@
 
 ```bash
 export ENABLE_VPS_AGENT_WEB_ROUTES=true
+export ATTRIBUTION_PROVIDER=lsclaw
 ```
 
 启用后会注册统一前缀：
@@ -21,7 +22,7 @@ export ENABLE_VPS_AGENT_WEB_ROUTES=true
 |---|---|---|
 | approvals | beta | 已有 scope 隔离与审批状态流，适合作为首批集成端点 |
 | incidents | preview | 具备查询与采集能力，建议作为受控灰度能力 |
-| attribution | preview | `analyze` 当前为模拟分析结果，建议灰度使用 |
+| attribution | preview | `analyze` 使用可插拔 provider（默认 lsclaw），分析结果会持久化到归因存储 |
 | recovery | preview | 执行动作仍偏实验性质，建议内部或灰度使用 |
 
 ## 与 experimental 路由关系

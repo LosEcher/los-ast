@@ -2,7 +2,7 @@
 
 ## 1. 开关与入口
 
-- 环境变量：`ENABLE_VPS_AGENT_WEB_ROUTES=true`
+- 环境变量：`ENABLE_VPS_AGENT_WEB_ROUTES=true`，`ATTRIBUTION_PROVIDER=lsclaw`
 - 路由前缀：`/vps-agent-web`
 - 兼容策略：`/experimental/*` 与 `/vps-agent-web/*` 并行
 
@@ -17,7 +17,7 @@
 | approvals | GET | `/vps-agent-web/approvals/stats` | beta | 审批统计 |
 | incidents | GET | `/vps-agent-web/incidents/stats/store` | preview | 存储统计 |
 | incidents | GET | `/vps-agent-web/incidents/stats/collection` | preview | 采集统计 |
-| attribution | POST | `/vps-agent-web/attribution/analyze` | preview | 归因分析（当前为模拟结果） |
+| attribution | POST | `/vps-agent-web/attribution/analyze` | preview | 归因分析（可插拔 provider，结果持久化） |
 | recovery | GET | `/vps-agent-web/recovery/stats` | preview | 恢复统计 |
 
 ## 3. Scope 约束
@@ -25,6 +25,7 @@
 - 所有端点都需要 scope。
 - GET 端点通过 query `scope` 传 URL 编码 JSON 字符串。
 - 写接口建议 body 中提供完整 scope（tenant_id/project_id/actor_id）。
+- incidents/recovery/attribution 的 stats 返回按 scope 隔离后的统计结果。
 
 ## 4. 迁移步骤
 

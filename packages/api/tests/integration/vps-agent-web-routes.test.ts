@@ -74,5 +74,138 @@ describe('VPS Agent Web Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.error.code).toBe('MISSING_SCOPE');
     });
+
+    it('should isolate preview stats by scope across incidents recovery attribution', async () => {
+      const scopeA = {
+        tenant_id: 'tenant-vps-a',
+        project_id: 'project-vps-a',
+        actor_id: 'actor-a',
+      };
+      const scopeB = {
+        tenant_id: 'tenant-vps-b',
+        project_id: 'project-vps-b',
+        actor_id: 'actor-b',
+      };
+
+      const beforeAResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/incidents/stats/store?scope=${encodeURIComponent(JSON.stringify(scopeA))}`,
+      });
+      const beforeBResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/incidents/stats/store?scope=${encodeURIComponent(JSON.stringify(scopeB))}`,
+      });
+      const beforeA = JSON.parse(beforeAResp.body).count;
+      const beforeB = JSON.parse(beforeBResp.body).count;
+
+      const createIncidentA = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/incidents',
+        payload: {
+          scope: scopeA,
+          title: 'A incident',
+          description: 'Scope A incident',
+          severity: 'high',
+          source: { type: 'metric_alert', detector_id: 'detector-a', raw_payload: { rule_id: 'rule-a' } },
+        },
+      });
+      const createIncidentB = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/incidents',
+        payload: {
+          scope: scopeB,
+          title: 'B incident',
+          description: 'Scope B incident',
+          severity: 'high',
+          source: { type: 'metric_alert', detector_id: 'detector-b', raw_payload: { rule_id: 'rule-b' } },
+        },
+      });
+
+      expect(createIncidentA.statusCode).toBe(201);
+      expect(createIncidentB.statusCode).toBe(201);
+      const incidentAId = JSON.parse(createIncidentA.body).incident.incident_id;
+      const incidentBId = JSON.parse(createIncidentB.body).incident.incident_id;
+
+      await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/recovery/actions',
+        payload: {
+          scope: scopeA,
+          incident_id: incidentAId,
+          hypothesis_id: 'hyp-a',
+          level: 'L1_harmless',
+          type: 'restart',
+          parameters: {},
+          actor_id: 'actor-a',
+        },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/recovery/actions',
+        payload: {
+          scope: scopeB,
+          incident_id: incidentBId,
+          hypothesis_id: 'hyp-b',
+          level: 'L1_harmless',
+          type: 'restart',
+          parameters: {},
+          actor_id: 'actor-b',
+        },
+      });
+
+      await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/attribution/analyze',
+        payload: {
+          scope: scopeA,
+          incident_id: incidentAId,
+          evidence_bundle_id: 'evd-a',
+        },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/attribution/analyze',
+        payload: {
+          scope: scopeB,
+          incident_id: incidentBId,
+          evidence_bundle_id: 'evd-b',
+        },
+      });
+
+      const afterAResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/incidents/stats/store?scope=${encodeURIComponent(JSON.stringify(scopeA))}`,
+      });
+      const afterBResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/incidents/stats/store?scope=${encodeURIComponent(JSON.stringify(scopeB))}`,
+      });
+      const afterA = JSON.parse(afterAResp.body).count;
+      const afterB = JSON.parse(afterBResp.body).count;
+      expect(afterA).toBe(beforeA + 1);
+      expect(afterB).toBe(beforeB + 1);
+
+      const recoveryAResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/recovery/stats?scope=${encodeURIComponent(JSON.stringify(scopeA))}`,
+      });
+      const recoveryBResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/recovery/stats?scope=${encodeURIComponent(JSON.stringify(scopeB))}`,
+      });
+      expect(JSON.parse(recoveryAResp.body).stats.totalActions).toBeGreaterThanOrEqual(1);
+      expect(JSON.parse(recoveryBResp.body).stats.totalActions).toBeGreaterThanOrEqual(1);
+
+      const attributionAResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/attribution/stats?scope=${encodeURIComponent(JSON.stringify(scopeA))}`,
+      });
+      const attributionBResp = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/attribution/stats?scope=${encodeURIComponent(JSON.stringify(scopeB))}`,
+      });
+      expect(JSON.parse(attributionAResp.body).stats.analysesCount).toBeGreaterThanOrEqual(1);
+      expect(JSON.parse(attributionBResp.body).stats.analysesCount).toBeGreaterThanOrEqual(1);
+    });
   });
 });

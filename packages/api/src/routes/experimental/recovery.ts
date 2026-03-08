@@ -194,8 +194,11 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/recovery/stats - 获取统计信息
-  fastify.get('/stats', async () => {
-    const stats = getRecoveryStats();
+  fastify.get('/stats', async (request: FastifyRequest) => {
+    const stats = getRecoveryStats({
+      tenant_id: request.scope?.tenant_id,
+      project_id: request.scope?.project_id,
+    });
     return { stats };
   });
 }

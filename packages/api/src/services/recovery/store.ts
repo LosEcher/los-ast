@@ -11,6 +11,7 @@ import type {
   RecoveryPolicy,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
+import { getAllIncidents } from '../incident/store.js';
 
 // 内存存储
 const actionStore: Map<string, RecoveryAction> = new Map();
@@ -313,13 +314,31 @@ export async function listRecoveryPolicies(): Promise<RecoveryPolicy[]> {
 /**
  * 获取统计信息
  */
-export function getRecoveryStats(): {
+export function getRecoveryStats(scope?: {
+  tenant_id?: string;
+  project_id?: string;
+}): {
   totalActions: number;
   byLevel: Record<string, number>;
   byStatus: Record<string, number>;
   byType: Record<string, number>;
 } {
-  const actions = Array.from(actionStore.values());
+  const scopedIncidentIds = new Set(
+    getAllIncidents()
+      .filter((incident) => {
+        if (scope?.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
+          return false;
+        }
+        if (scope?.project_id && incident.scope.project_id !== scope.project_id) {
+          return false;
+        }
+        return true;
+      })
+      .map((incident) => incident.incident_id)
+  );
+  const actions = Array.from(actionStore.values()).filter((action) =>
+    scopedIncidentIds.has(action.incident_id)
+  );
 
   const byLevel: Record<string, number> = {};
   const byStatus: Record<string, number> = {};

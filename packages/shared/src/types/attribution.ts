@@ -184,6 +184,12 @@ export interface CollectEvidenceRequest {
 export interface AttributionAnalysis {
   analysis_id: string;
   incident_id: string;
+  scope?: {
+    tenant_id?: string;
+    project_id?: string;
+    actor_id?: string;
+    mode?: 'local' | 'service';
+  };
   hypotheses: HypothesisDraft[];
   recommended_action?: string;
   confidence_summary: {

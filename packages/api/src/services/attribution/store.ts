@@ -12,6 +12,7 @@ import type {
   AttributionAnalysis,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
+import { getAllIncidents } from '../incident/store.js';
 
 // 内存存储
 const hypothesisStore: Map<string, Hypothesis> = new Map();
@@ -197,17 +198,61 @@ export async function getAttributionAnalysis(analysisId: string): Promise<Attrib
   return attributionAnalysisStore.get(analysisId) || null;
 }
 
+function buildScopedIncidentIds(scope?: {
+  tenant_id?: string;
+  project_id?: string;
+}): Set<string> {
+  if (!scope?.tenant_id && !scope?.project_id) {
+    return new Set(getAllIncidents().map((incident) => incident.incident_id));
+  }
+
+  return new Set(
+    getAllIncidents()
+      .filter((incident) => {
+        if (scope.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
+          return false;
+        }
+        if (scope.project_id && incident.scope.project_id !== scope.project_id) {
+          return false;
+        }
+        return true;
+      })
+      .map((incident) => incident.incident_id)
+  );
+}
+
 /**
  * 获取统计信息
  */
-export function getAttributionStats(): {
+export function getAttributionStats(scope?: {
+  tenant_id?: string;
+  project_id?: string;
+}): {
   hypothesesCount: number;
   evidenceBundlesCount: number;
   analysesCount: number;
   byCategory: Record<string, number>;
   byStatus: Record<string, number>;
 } {
-  const hypotheses = Array.from(hypothesisStore.values());
+  const scopedIncidentIds = buildScopedIncidentIds(scope);
+  const hypotheses = Array.from(hypothesisStore.values()).filter((hypothesis) =>
+    scopedIncidentIds.has(hypothesis.incident_id)
+  );
+  const evidenceBundles = Array.from(evidenceBundleStore.values()).filter((bundle) =>
+    scopedIncidentIds.has(bundle.incident_id)
+  );
+  const analyses = Array.from(attributionAnalysisStore.values()).filter((analysis) => {
+    if (analysis.scope?.tenant_id || analysis.scope?.project_id) {
+      if (scope?.tenant_id && analysis.scope?.tenant_id !== scope.tenant_id) {
+        return false;
+      }
+      if (scope?.project_id && analysis.scope?.project_id !== scope.project_id) {
+        return false;
+      }
+      return true;
+    }
+    return scopedIncidentIds.has(analysis.incident_id);
+  });
 
   const byCategory: Record<string, number> = {};
   const byStatus: Record<string, number> = {};
@@ -218,9 +263,9 @@ export function getAttributionStats(): {
   }
 
   return {
-    hypothesesCount: hypothesisStore.size,
-    evidenceBundlesCount: evidenceBundleStore.size,
-    analysesCount: attributionAnalysisStore.size,
+    hypothesesCount: hypotheses.length,
+    evidenceBundlesCount: evidenceBundles.length,
+    analysesCount: analyses.length,
     byCategory,
     byStatus,
   };
