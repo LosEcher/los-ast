@@ -435,6 +435,12 @@ async function analyzeCode(rootDir: string) {
 }
 ```
 
+建议在集成流水线增加 smoke 校验：
+
+```bash
+npm run test:api:smoke
+```
+
 ---
 
 ## 限流与配额
@@ -450,7 +456,7 @@ async function analyzeCode(rootDir: string) {
 
 ## 更多信息
 
-- [路由分层策略](docs/ROUTE_TIERING.md) - 详细的三层路由架构设计
+- [路由分层策略](docs/ROUTE_TIERING.md) - 详细的四层路由架构设计
 - [架构设计文档](docs/implementation-roadmap-v1.1.md)
 - [实现审查报告](docs/IMPLEMENTATION_REVIEW.md)
 - [代码审查报告](docs/CODE_REVIEW.md)
