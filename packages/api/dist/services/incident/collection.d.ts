@@ -61,4 +61,12 @@ export declare function getCollectionStats(): {
     logsCount: number;
     triggersCount: number;
 };
+export declare function getCollectionStatsByScope(scope: {
+    tenant_id?: string;
+    project_id?: string;
+}): {
+    metricsCount: number;
+    logsCount: number;
+    triggersCount: number;
+};
 //# sourceMappingURL=collection.d.ts.map

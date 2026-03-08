@@ -3,18 +3,27 @@
  * Phase 1.7: los-ast 证据生成
  */
 import { generateId } from '../../utils/id-generator.js';
-import { scan, explainAtPosition } from '@los-ast/core';
+import { scan, explainAtPosition, loadRuleFiles } from '@los-ast/core';
 // 内存存储
 const evidenceStore = new Map();
+const EVIDENCE_SCHEMA_VERSION = '1.0.0';
+const EVIDENCE_GENERATOR_VERSION = '1.0.0';
 /**
  * 生成证据包
  */
 export async function generateEvidence(request) {
     const bundleId = generateId('evd');
+    const rules = request.rules && request.rules.length > 0
+        ? await loadRuleFiles(request.rules)
+        : [];
     // 执行扫描获取完整结果
     const scanResult = await scan({
         project: request.project,
         rootDir: request.root_dir,
+        include: request.include,
+        ignore: request.ignore,
+        rules,
+        deterministic: request.deterministic ?? false,
     });
     // 构建代码片段
     const codeSnippets = [];
@@ -57,6 +66,12 @@ export async function generateEvidence(request) {
         project: request.project,
         root_dir: request.root_dir,
         created_at: new Date().toISOString(),
+        schema_version: EVIDENCE_SCHEMA_VERSION,
+        generator: {
+            tool: 'los-ast',
+            version: EVIDENCE_GENERATOR_VERSION,
+        },
+        deterministic: request.deterministic ?? false,
         findings: scanResult.findings.map((f) => ({
             ...f,
             evidence_type: 'finding',

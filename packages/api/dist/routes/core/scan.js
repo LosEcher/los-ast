@@ -23,6 +23,7 @@ export default async function scanRoutes(fastify) {
                     rootDir: { type: 'string', minLength: 1 },
                     include: { type: 'array', items: { type: 'string' } },
                     ignore: { type: 'array', items: { type: 'string' } },
+                    rules: { type: 'array', items: { type: 'string' } },
                     includeStats: { type: 'boolean' },
                     deterministic: { type: 'boolean' },
                 },
@@ -44,7 +45,7 @@ export default async function scanRoutes(fastify) {
             },
         },
     }, async (request, reply) => {
-        const { project, rootDir, include, ignore, includeStats, deterministic } = request.body;
+        const { project, rootDir, include, ignore, rules, includeStats, deterministic } = request.body;
         // 验证必填字段
         if (!project || typeof project !== 'string') {
             throw new ValidationError('INVALID_PROJECT', 'project must be a non-empty string');
@@ -61,6 +62,7 @@ export default async function scanRoutes(fastify) {
             rootDir,
             include,
             ignore,
+            rules,
             includeStats: includeStats ?? false,
             deterministic,
             signal,

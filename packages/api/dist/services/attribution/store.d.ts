@@ -51,7 +51,10 @@ export declare function getAttributionAnalysis(analysisId: string): Promise<Attr
 /**
  * 获取统计信息
  */
-export declare function getAttributionStats(): {
+export declare function getAttributionStats(scope?: {
+    tenant_id?: string;
+    project_id?: string;
+}): {
     hypothesesCount: number;
     evidenceBundlesCount: number;
     analysesCount: number;

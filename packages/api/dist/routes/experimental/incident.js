@@ -4,8 +4,8 @@
  *
  * 注意: 事故治理属于平台控制面职责，此路由将在 Milestone B 迁出至 VPS Agent Web
  */
-import { createIncident, getIncident, updateIncidentStatus, queryIncidents, getStoreStats, } from '../../services/incident/store.js';
-import { collectMetrics, collectLogs, evaluateTriggers, getCollectionStats, } from '../../services/incident/collection.js';
+import { createIncident, getIncident, updateIncidentStatus, queryIncidents, getStoreStatsByScope, } from '../../services/incident/store.js';
+import { collectMetrics, collectLogs, evaluateTriggers, getCollectionStatsByScope, } from '../../services/incident/collection.js';
 import { NotFoundError } from '../../types/errors.js';
 // 查询参数验证函数
 function parseIncidentStatus(value) {
@@ -102,12 +102,18 @@ export default async function incidentRoutes(fastify) {
         };
     });
     // GET /experimental/incidents/stats/store - 获取存储统计
-    fastify.get('/stats/store', async () => {
-        return getStoreStats();
+    fastify.get('/stats/store', async (request) => {
+        return getStoreStatsByScope({
+            tenant_id: request.scope?.tenant_id,
+            project_id: request.scope?.project_id,
+        });
     });
     // GET /experimental/incidents/stats/collection - 获取采集统计
-    fastify.get('/stats/collection', async () => {
-        return getCollectionStats();
+    fastify.get('/stats/collection', async (request) => {
+        return getCollectionStatsByScope({
+            tenant_id: request.scope?.tenant_id,
+            project_id: request.scope?.project_id,
+        });
     });
 }
 //# sourceMappingURL=incident.js.map

@@ -38,6 +38,7 @@ export const ROUTE_CONFIG = {
      * 内部路由挂载在 /internal/* 下
      */
     enableInternal: process.env.ENABLE_INTERNAL_ROUTES === 'true',
+    enableVpsAgentWeb: process.env.ENABLE_VPS_AGENT_WEB_ROUTES === 'true',
     /**
      * 路由前缀配置
      */
@@ -45,6 +46,7 @@ export const ROUTE_CONFIG = {
         core: '',
         experimental: '/experimental',
         internal: '/internal',
+        vpsAgentWeb: '/vps-agent-web',
     },
 };
 /**
@@ -146,6 +148,7 @@ export function validateConfig() {
     // 3. 验证路由前缀格式
     validateRoutePrefix(ROUTE_CONFIG.prefixes.experimental, 'Experimental route', errors);
     validateRoutePrefix(ROUTE_CONFIG.prefixes.internal, 'Internal route', errors);
+    validateRoutePrefix(ROUTE_CONFIG.prefixes.vpsAgentWeb, 'VPS Agent Web route', errors);
     // 4. 验证 NODE_ENV 枚举值
     validateEnum(NODE_ENV, VALID_NODE_ENVS, 'NODE_ENV', errors);
     // 5. 验证内部访问控制配置
@@ -158,6 +161,9 @@ export function validateConfig() {
     }
     if (IS_PRODUCTION && ROUTE_CONFIG.enableInternal) {
         console.warn('[WARNING] Internal routes are enabled in production environment. Ensure proper access control is in place.');
+    }
+    if (IS_PRODUCTION && ROUTE_CONFIG.enableVpsAgentWeb) {
+        console.warn('[WARNING] VPS Agent Web routes are enabled in production environment. Verify API gateway policies are in place.');
     }
     return {
         valid: errors.length === 0,
@@ -178,11 +184,15 @@ export function logStartupConfig() {
     console.log('[STARTUP] Route configuration:');
     console.log(`[STARTUP]   - Experimental routes: ${ROUTE_CONFIG.enableExperimental ? 'ENABLED' : 'DISABLED'}`);
     console.log(`[STARTUP]   - Internal routes: ${ROUTE_CONFIG.enableInternal ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`[STARTUP]   - VPS Agent Web routes: ${ROUTE_CONFIG.enableVpsAgentWeb ? 'ENABLED' : 'DISABLED'}`);
     if (ROUTE_CONFIG.enableExperimental) {
         console.log(`[STARTUP]   - Experimental prefix: ${ROUTE_CONFIG.prefixes.experimental}`);
     }
     if (ROUTE_CONFIG.enableInternal) {
         console.log(`[STARTUP]   - Internal prefix: ${ROUTE_CONFIG.prefixes.internal}`);
+    }
+    if (ROUTE_CONFIG.enableVpsAgentWeb) {
+        console.log(`[STARTUP]   - VPS Agent Web prefix: ${ROUTE_CONFIG.prefixes.vpsAgentWeb}`);
     }
     console.log('[STARTUP] ============================================');
 }

@@ -55,7 +55,10 @@ export declare function listRecoveryPolicies(): Promise<RecoveryPolicy[]>;
 /**
  * 获取统计信息
  */
-export declare function getRecoveryStats(): {
+export declare function getRecoveryStats(scope?: {
+    tenant_id?: string;
+    project_id?: string;
+}): {
     totalActions: number;
     byLevel: Record<string, number>;
     byStatus: Record<string, number>;

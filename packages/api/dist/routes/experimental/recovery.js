@@ -129,8 +129,11 @@ export default async function recoveryRoutes(fastify) {
         return { policy };
     });
     // GET /experimental/recovery/stats - 获取统计信息
-    fastify.get('/stats', async () => {
-        const stats = getRecoveryStats();
+    fastify.get('/stats', async (request) => {
+        const stats = getRecoveryStats({
+            tenant_id: request.scope?.tenant_id,
+            project_id: request.scope?.project_id,
+        });
         return { stats };
     });
 }

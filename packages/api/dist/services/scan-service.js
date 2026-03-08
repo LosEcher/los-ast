@@ -1,4 +1,4 @@
-import { scan, discoverFiles, isReady } from '@los-ast/core';
+import { scan, discoverFiles, isReady, loadRuleFiles } from '@los-ast/core';
 import { SCAN_LIMITS } from '../config/index.js';
 import { ScanTooLargeError } from '../types/errors.js';
 export class ScanService {
@@ -24,7 +24,11 @@ export class ScanService {
      * 4. 执行扫描（带超时和取消支持）
      */
     async execute(options) {
-        const { project, rootDir, include, ignore, includeStats, deterministic, signal } = options;
+        const { project, rootDir, include, ignore, rules: rulePatterns, includeStats, deterministic, signal } = options;
+        // 加载规则
+        const rules = rulePatterns && rulePatterns.length > 0
+            ? await loadRuleFiles(rulePatterns)
+            : [];
         // 检查 Core 是否已初始化
         if (!isReady()) {
             throw new Error('Core is not ready');
@@ -45,6 +49,7 @@ export class ScanService {
             rootDir,
             include,
             ignore,
+            rules,
             includeStats,
             deterministic,
             signal,

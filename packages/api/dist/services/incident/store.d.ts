@@ -44,6 +44,13 @@ export declare function getStoreStats(): {
     count: number;
     byStatus: Record<string, number>;
 };
+export declare function getStoreStatsByScope(scope: {
+    tenant_id?: string;
+    project_id?: string;
+}): {
+    count: number;
+    byStatus: Record<string, number>;
+};
 /**
  * 添加时间线事件
  */

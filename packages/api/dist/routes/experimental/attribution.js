@@ -5,7 +5,8 @@
  * 注意: 此路由作为执行结果来源解释，仅服务于单次执行元数据
  * 不形成独立平台状态机，不承担跨项目治理职责
  */
-import { createHypothesis, getHypothesis, updateHypothesisStatus, queryHypotheses, createEvidenceBundle, getEvidenceBundle, getAttributionStats, } from '../../services/attribution/store.js';
+import { createHypothesis, getHypothesis, updateHypothesisStatus, queryHypotheses, createEvidenceBundle, getEvidenceBundle, getAttributionStats, saveAttributionAnalysis, } from '../../services/attribution/store.js';
+import { analyzeAttribution } from '../../services/attribution/provider.js';
 import { NotFoundError } from '../../types/errors.js';
 // 查询参数验证函数
 function parseHypothesisStatus(value) {
@@ -92,42 +93,23 @@ export default async function attributionRoutes(fastify) {
         }
         return { bundle };
     });
-    // POST /experimental/attribution/analyze - 执行归因分析 (模拟)
+    // POST /experimental/attribution/analyze - 执行归因分析
     fastify.post('/analyze', async (request) => {
         const body = request.body;
-        // 模拟归因分析结果
-        const analysis = {
-            analysis_id: `ana_${Date.now()}`,
-            incident_id: body.incident_id,
-            hypotheses: [
-                {
-                    title: 'Possible configuration error',
-                    description: 'Recent configuration change may have caused the issue',
-                    category: 'config_error',
-                    confidence: 0.75,
-                    root_cause: {
-                        component: 'config_service',
-                        description: 'Configuration mismatch detected',
-                    },
-                    evidence_summary: ['Config change at 10:00', 'Error started at 10:05'],
-                },
-            ],
-            recommended_action: 'Check recent configuration changes',
-            confidence_summary: {
-                highest: 0.75,
-                average: 0.75,
-                lowest: 0.75,
-            },
-            provider_used: 'lsclaw',
-            cost: 0.001,
-            latency_ms: 250,
-            created_at: new Date().toISOString(),
-        };
+        const analysis = await analyzeAttribution({
+            incidentId: body.incident_id,
+            evidenceBundleId: body.evidence_bundle_id,
+            scope: request.scope,
+        });
+        await saveAttributionAnalysis(analysis);
         return { analysis };
     });
     // GET /experimental/attribution/stats - 获取统计信息
-    fastify.get('/stats', async () => {
-        const stats = getAttributionStats();
+    fastify.get('/stats', async (request) => {
+        const stats = getAttributionStats({
+            tenant_id: request.scope?.tenant_id,
+            project_id: request.scope?.project_id,
+        });
         return { stats };
     });
 }

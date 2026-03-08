@@ -205,4 +205,14 @@ export function getCollectionStats() {
         triggersCount: triggersStore.size,
     };
 }
+export function getCollectionStatsByScope(scope) {
+    const key = `${scope.tenant_id || ''}:${scope.project_id || ''}`;
+    const metrics = metricsStore.get(key) || [];
+    const logs = logsStore.get(key) || [];
+    return {
+        metricsCount: metrics.length,
+        logsCount: logs.length,
+        triggersCount: triggersStore.size,
+    };
+}
 //# sourceMappingURL=collection.js.map

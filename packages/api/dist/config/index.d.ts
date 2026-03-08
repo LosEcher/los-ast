@@ -35,6 +35,7 @@ export declare const ROUTE_CONFIG: {
      * 内部路由挂载在 /internal/* 下
      */
     enableInternal: boolean;
+    enableVpsAgentWeb: boolean;
     /**
      * 路由前缀配置
      */
@@ -42,6 +43,7 @@ export declare const ROUTE_CONFIG: {
         core: string;
         experimental: string;
         internal: string;
+        vpsAgentWeb: string;
     };
 };
 /**

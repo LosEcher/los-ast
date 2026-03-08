@@ -180,6 +180,25 @@ export function getStoreStats() {
         byStatus,
     };
 }
+export function getStoreStatsByScope(scope) {
+    const items = Array.from(incidentStore.values()).filter((incident) => {
+        if (scope.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
+            return false;
+        }
+        if (scope.project_id && incident.scope.project_id !== scope.project_id) {
+            return false;
+        }
+        return true;
+    });
+    const byStatus = {};
+    for (const incident of items) {
+        byStatus[incident.status] = (byStatus[incident.status] || 0) + 1;
+    }
+    return {
+        count: items.length,
+        byStatus,
+    };
+}
 /**
  * 添加时间线事件
  */

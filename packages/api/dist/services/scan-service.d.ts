@@ -4,6 +4,7 @@ export interface ScanServiceOptions {
     rootDir: string;
     include?: string[];
     ignore?: string[];
+    rules?: string[];
     includeStats?: boolean;
     deterministic?: boolean;
     signal: AbortSignal;

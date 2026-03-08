@@ -3,6 +3,7 @@
  * Phase 1.3: 故障归因系统
  */
 import { generateId } from '../../utils/id-generator.js';
+import { getAllIncidents } from '../incident/store.js';
 // 内存存储
 const hypothesisStore = new Map();
 const evidenceBundleStore = new Map();
@@ -140,11 +141,41 @@ export async function saveAttributionAnalysis(analysis) {
 export async function getAttributionAnalysis(analysisId) {
     return attributionAnalysisStore.get(analysisId) || null;
 }
+function buildScopedIncidentIds(scope) {
+    if (!scope?.tenant_id && !scope?.project_id) {
+        return new Set(getAllIncidents().map((incident) => incident.incident_id));
+    }
+    return new Set(getAllIncidents()
+        .filter((incident) => {
+        if (scope.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
+            return false;
+        }
+        if (scope.project_id && incident.scope.project_id !== scope.project_id) {
+            return false;
+        }
+        return true;
+    })
+        .map((incident) => incident.incident_id));
+}
 /**
  * 获取统计信息
  */
-export function getAttributionStats() {
-    const hypotheses = Array.from(hypothesisStore.values());
+export function getAttributionStats(scope) {
+    const scopedIncidentIds = buildScopedIncidentIds(scope);
+    const hypotheses = Array.from(hypothesisStore.values()).filter((hypothesis) => scopedIncidentIds.has(hypothesis.incident_id));
+    const evidenceBundles = Array.from(evidenceBundleStore.values()).filter((bundle) => scopedIncidentIds.has(bundle.incident_id));
+    const analyses = Array.from(attributionAnalysisStore.values()).filter((analysis) => {
+        if (analysis.scope?.tenant_id || analysis.scope?.project_id) {
+            if (scope?.tenant_id && analysis.scope?.tenant_id !== scope.tenant_id) {
+                return false;
+            }
+            if (scope?.project_id && analysis.scope?.project_id !== scope.project_id) {
+                return false;
+            }
+            return true;
+        }
+        return scopedIncidentIds.has(analysis.incident_id);
+    });
     const byCategory = {};
     const byStatus = {};
     for (const h of hypotheses) {
@@ -152,9 +183,9 @@ export function getAttributionStats() {
         byStatus[h.status] = (byStatus[h.status] || 0) + 1;
     }
     return {
-        hypothesesCount: hypothesisStore.size,
-        evidenceBundlesCount: evidenceBundleStore.size,
-        analysesCount: attributionAnalysisStore.size,
+        hypothesesCount: hypotheses.length,
+        evidenceBundlesCount: evidenceBundles.length,
+        analysesCount: analyses.length,
         byCategory,
         byStatus,
     };
