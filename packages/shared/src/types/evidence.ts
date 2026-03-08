@@ -13,6 +13,12 @@ export interface CodeEvidenceBundle {
   project: string;
   root_dir: string;
   created_at: string;
+  schema_version: string;
+  generator: {
+    tool: 'los-ast';
+    version: string;
+  };
+  deterministic: boolean;
   findings: EvidenceFinding[];
   code_snippets: CodeSnippet[];
   symbol_index: CodeSymbolInfo[];
@@ -95,9 +101,19 @@ export interface CodeImpactReport {
  * 生成证据包请求
  */
 export interface GenerateEvidenceRequest {
+  scope?: {
+    tenant_id?: string;
+    project_id?: string;
+    actor_id?: string;
+    mode?: 'local' | 'service';
+  };
   project: string;
   root_dir: string;
   findings: string[]; // finding IDs
+  include?: string[];
+  ignore?: string[];
+  rules?: string[];
+  deterministic?: boolean;
   include_context?: boolean;
   include_ast?: boolean;
   include_symbols?: boolean;

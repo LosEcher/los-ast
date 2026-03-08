@@ -13,6 +13,7 @@
     "test:api:contract": "cd packages/api && npm run test -- --run tests/contract",
     "test:api:integration": "cd packages/api && npm run test -- --run tests/integration",
     "test:api:golden": "cd packages/api && npm run test -- --run tests/golden",
+    "test:api:smoke": "cd packages/api && npm run test -- --run tests/smoke",
     "test:api:unit": "cd packages/api && npm run test:unit",
     "test:golden": "npm run test:api:golden",
     "lint": "node ./packages/cli/src/index.mjs doctor --quiet"

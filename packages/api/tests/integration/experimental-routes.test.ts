@@ -8,6 +8,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import errorHandlerPlugin from '../../src/plugins/error-handler';
 import requestIdPlugin from '../../src/plugins/request-id';
 import scopeValidatorPlugin from '../../src/plugins/scope-validator';
@@ -23,6 +25,9 @@ import {
   hotReloadRoutes,
   evidenceRoutes,
 } from '../../src/routes/experimental/index';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const fixtureRoot = resolve(__dirname, '../../../../fixtures/golden/lsclaw-sample');
 
 describe('Experimental Routes Tests', () => {
   describe('Routes Toggle Behavior', () => {
@@ -190,6 +195,28 @@ describe('Experimental Routes Tests', () => {
         expect(response.statusCode).toBe(400);
         const body = JSON.parse(response.body);
         expect(body.error.code).toBe('MISSING_SCOPE');
+      });
+
+      it('POST /experimental/evidence/generate should return stable bundle metadata', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/experimental/evidence/generate',
+          payload: {
+            scope: baseScope,
+            project: 'lsclaw',
+            root_dir: fixtureRoot,
+            findings: [],
+            deterministic: true,
+            include: ['src/**/*.ts'],
+          },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = JSON.parse(response.body);
+        expect(body.data.schema_version).toBe('1.0.0');
+        expect(body.data.generator.tool).toBe('los-ast');
+        expect(body.data.generator.version).toBeDefined();
+        expect(body.data.deterministic).toBe(true);
       });
     });
 
