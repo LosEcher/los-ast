@@ -64,6 +64,7 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 - 生态调研：[tooling-landscape.md](docs/research/tooling-landscape.md)
 - AI 使用手册：[AI_USAGE_GUIDE.md](docs/ai/AI_USAGE_GUIDE.md)
 - API 使用示例：[API_USAGE.md](API_USAGE.md)
+- 两周优化计划：[optimization-plan-2weeks.md](docs/optimization-plan-2weeks.md)
 - VPS Agent Web 集成：[vps-agent-web-integration.md](docs/api/vps-agent-web-integration.md)
 - VPS Agent Web 对接清单：[vps-agent-web-contract-checklist.md](docs/api/vps-agent-web-contract-checklist.md)
 - VPS Agent Web 请求示例与错误映射：[vps-agent-web-examples-errors.md](docs/api/vps-agent-web-examples-errors.md)
