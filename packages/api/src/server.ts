@@ -21,6 +21,7 @@ import {
   hotReloadRoutes,
   evidenceRoutes,
 } from './routes/experimental/index.js';
+import vpsAgentWebRoutes from './routes/vps-agent-web/index.js';
 
 const server = Fastify({
   logger: true,
@@ -100,12 +101,24 @@ async function registerInternalRoutes(fastify: FastifyInstance): Promise<void> {
   // await fastify.register(internalRoutes, { prefix: internal });
 }
 
+async function registerVpsAgentWebRoutes(fastify: FastifyInstance): Promise<void> {
+  if (!ROUTE_CONFIG.enableVpsAgentWeb) {
+    console.log('[ROUTES] VPS Agent Web routes disabled (set ENABLE_VPS_AGENT_WEB_ROUTES=true to enable)');
+    return;
+  }
+
+  const vps = ROUTE_CONFIG.prefixes.vpsAgentWeb;
+  await fastify.register(vpsAgentWebRoutes, { prefix: vps });
+  console.log('[ROUTES] VPS Agent Web routes registered with prefix:', vps);
+}
+
 // ============================================
 // 3. 执行路由注册
 // ============================================
 await registerCoreRoutes(server);
 await registerExperimentalRoutes(server);
 await registerInternalRoutes(server);
+await registerVpsAgentWebRoutes(server);
 
 // ============================================
 // 4. 启动服务
@@ -115,7 +128,9 @@ async function main() {
   const validation = validateConfig();
   if (!validation.valid) {
     console.error('[STARTUP] Configuration validation failed:');
-    validation.errors.forEach((err: string) => console.error(`  - ${err}`));
+    validation.errors.forEach((err: string) => {
+      console.error(`  - ${err}`);
+    });
     process.exit(1);
   }
 

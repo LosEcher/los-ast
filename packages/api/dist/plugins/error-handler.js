@@ -1,5 +1,4 @@
 import fp from 'fastify-plugin';
-import { AppError } from '../types/errors.js';
 /**
  * 错误类别到 HTTP 状态码的映射
  */
@@ -13,9 +12,13 @@ const ERROR_STATUS_MAP = {
 };
 /**
  * 判断是否为 AppError 类型
+ * 使用 duck typing 避免跨模块 instanceof 问题
  */
 function isAppError(error) {
-    return error instanceof AppError;
+    return (error instanceof Error &&
+        'category' in error &&
+        'code' in error &&
+        'retryable' in error);
 }
 /**
  * 转换错误为统一 API 错误格式

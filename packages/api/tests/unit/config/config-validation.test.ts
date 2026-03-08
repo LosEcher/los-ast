@@ -141,8 +141,10 @@ describe('Config Validation', () => {
 
       expect(ROUTE_CONFIG.enableExperimental).toBe(false);
       expect(ROUTE_CONFIG.enableInternal).toBe(false);
+      expect(ROUTE_CONFIG.enableVpsAgentWeb).toBe(false);
       expect(ROUTE_CONFIG.prefixes.experimental).toBe('/experimental');
       expect(ROUTE_CONFIG.prefixes.internal).toBe('/internal');
+      expect(ROUTE_CONFIG.prefixes.vpsAgentWeb).toBe('/vps-agent-web');
 
       expect(SCAN_LIMITS.maxFilesPerSyncScan).toBe(1000);
       expect(SCAN_LIMITS.maxResponseBytes).toBe(10485760);
@@ -154,6 +156,13 @@ describe('Config Validation', () => {
       vi.resetModules();
       const { ROUTE_CONFIG } = await import('../../../src/config/index.js');
       expect(ROUTE_CONFIG.enableExperimental).toBe(true);
+    });
+
+    it('should enable VPS Agent Web routes when env is set', async () => {
+      process.env.ENABLE_VPS_AGENT_WEB_ROUTES = 'true';
+      vi.resetModules();
+      const { ROUTE_CONFIG } = await import('../../../src/config/index.js');
+      expect(ROUTE_CONFIG.enableVpsAgentWeb).toBe(true);
     });
   });
 });

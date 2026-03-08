@@ -6,8 +6,9 @@ import { SCOPE_CONFIG } from '../config/index.js';
  * 硬约束 #3: 验证 scope 的完整性和环境适配性
  */
 export default fp(async function scopeValidatorPlugin(fastify) {
-    // 注册 onRequest hook 进行 scope 验证
-    fastify.addHook('onRequest', async (request) => {
+    // 注册 preHandler hook 进行 scope 验证
+    // 注意：使用 preHandler 而不是 onRequest，因为 onRequest 在 body 解析之前运行
+    fastify.addHook('preHandler', async (request) => {
         // 只验证 API 路由，跳过健康检查
         if (request.url.startsWith('/healthz')) {
             return;

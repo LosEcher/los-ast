@@ -24,7 +24,7 @@ export class ScanService {
      * 4. 执行扫描（带超时和取消支持）
      */
     async execute(options) {
-        const { project, rootDir, include, ignore, includeStats, signal } = options;
+        const { project, rootDir, include, ignore, includeStats, deterministic, signal } = options;
         // 检查 Core 是否已初始化
         if (!isReady()) {
             throw new Error('Core is not ready');
@@ -46,6 +46,7 @@ export class ScanService {
             include,
             ignore,
             includeStats,
+            deterministic,
             signal,
         });
         return result;

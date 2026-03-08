@@ -1,8 +1,72 @@
-import { discoverFiles, isReady } from '@los-ast/core';
+import { discoverFiles, isReady, languageFromFilePath, defaultParseCache } from '@los-ast/core';
+// AST-grep 规则定义 - 符号发现模式
+const SYMBOL_RULES = [
+    {
+        kind: 'function',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        // 匹配函数声明: function foo() {}
+        pattern: '(function_declaration name: (identifier) @name)',
+    },
+    {
+        kind: 'function',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        // 匹配箭头函数变量: const foo = () => {}
+        pattern: '(lexical_declaration (variable_declarator name: (identifier) @name value: (arrow_function)))',
+    },
+    {
+        kind: 'class',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        // 匹配类声明: class Foo {}
+        pattern: '(class_declaration name: (type_identifier) @name)',
+    },
+    {
+        kind: 'interface',
+        languages: ['typescript', 'tsx'],
+        // 匹配接口声明: interface Foo {}
+        pattern: '(interface_declaration name: (type_identifier) @name)',
+    },
+    {
+        kind: 'type',
+        languages: ['typescript', 'tsx'],
+        // 匹配类型别名: type Foo = ...
+        pattern: '(type_alias_declaration name: (type_identifier) @name)',
+    },
+    {
+        kind: 'variable',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        // 匹配变量声明: const foo = ...
+        pattern: '(lexical_declaration (variable_declarator name: (identifier) @name))',
+    },
+    // Rust 支持
+    {
+        kind: 'function',
+        languages: ['rust'],
+        // 匹配 Rust 函数: fn foo() {}
+        pattern: '(function_item name: (identifier) @name)',
+    },
+    {
+        kind: 'class',
+        languages: ['rust'],
+        // 匹配 Rust struct: struct Foo {}
+        pattern: '(struct_item name: (type_identifier) @name)',
+    },
+    {
+        kind: 'interface',
+        languages: ['rust'],
+        // 匹配 Rust trait: trait Foo {}
+        pattern: '(trait_item name: (type_identifier) @name)',
+    },
+    {
+        kind: 'type',
+        languages: ['rust'],
+        // 匹配 Rust type alias: type Foo = ...
+        pattern: '(type_item name: (type_identifier) @name)',
+    },
+];
 export class SymbolService {
     /**
      * 发现代码库中的符号定义
-     * 解析文件提取 function, class, interface, variable, type 等符号
+     * 使用 AST-grep 进行结构化符号提取
      */
     async discoverSymbols(options) {
         const { rootDir, include, ignore, limit = 100, signal } = options;
@@ -24,68 +88,102 @@ export class SymbolService {
         }
         const symbols = [];
         let truncated = false;
+        let totalScannedFiles = 0;
         // 遍历文件提取符号
+        let truncatedFileSymbols = []; // 记录被截断文件的剩余符号
         for (const file of files) {
             if (signal.aborted) {
                 throw new Error('Operation aborted');
             }
-            // 简单实现：基于文件扩展名和简单正则提取符号
-            const fileSymbols = await this.extractSymbolsFromFile(file);
+            totalScannedFiles++;
+            // 使用 AST 解析提取符号
+            const fileSymbols = await this.extractSymbolsFromFileAST(file);
             for (const symbol of fileSymbols) {
                 if (symbols.length >= effectiveLimit) {
                     truncated = true;
-                    break;
+                    truncatedFileSymbols.push(symbol); // 记录被截断后剩余的符号
                 }
-                symbols.push(symbol);
+                else {
+                    symbols.push(symbol);
+                }
             }
             if (truncated)
                 break;
         }
+        // 真实总数统计：当前已收集 + 当前文件剩余 + 后续文件
+        let total = symbols.length;
+        if (truncated) {
+            total += truncatedFileSymbols.length; // 加上当前文件被截断的剩余符号
+            // 继续扫描后续文件
+            for (let i = totalScannedFiles; i < files.length; i++) {
+                if (signal.aborted)
+                    break;
+                const file = files[i];
+                const fileSymbols = await this.extractSymbolsFromFileAST(file);
+                total += fileSymbols.length;
+            }
+        }
         return {
             symbols,
-            total: symbols.length + (truncated ? 1 : 0),
+            total,
             truncated
         };
     }
     /**
-     * 从单个文件提取符号
-     * 使用简单的正则匹配作为示例实现
+     * 从单个文件使用 AST 提取符号
+     * 使用 @ast-grep/napi 进行结构化解析
      */
-    async extractSymbolsFromFile(file) {
+    async extractSymbolsFromFileAST(file) {
         const symbols = [];
-        const fs = await import('node:fs/promises');
+        // 获取文件语言
+        const language = languageFromFilePath(file);
+        if (!language) {
+            return symbols; // 不支持的文件类型
+        }
         try {
-            const content = await fs.readFile(file, 'utf8');
-            const lines = content.split('\n');
-            // 简单的正则模式匹配
-            const patterns = [
-                { kind: 'function', regex: /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)/g },
-                { kind: 'class', regex: /(?:export\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)/g },
-                { kind: 'interface', regex: /(?:export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)/g },
-                { kind: 'type', regex: /(?:export\s+)?type\s+([A-Za-z_$][A-Za-z0-9_$]*)/g },
-                { kind: 'variable', regex: /(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g },
-            ];
-            for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-                const line = lines[lineIndex];
-                for (const { kind, regex } of patterns) {
-                    let match;
-                    while ((match = regex.exec(line)) !== null) {
-                        symbols.push({
-                            name: match[1],
-                            kind,
-                            file,
-                            range: {
-                                start: { line: lineIndex + 1, column: match.index + 1, index: match.index },
-                                end: { line: lineIndex + 1, column: match.index + match[0].length, index: match.index + match[0].length }
+            // 使用 core 的 parse-cache 解析文件
+            const { root } = await defaultParseCache.parseFile(file, language, { cacheAst: true });
+            // 应用符号发现规则
+            for (const rule of SYMBOL_RULES) {
+                // 跳过不匹配当前语言的规则（语言值归一化为小写比较）
+                if (!rule.languages.includes(String(language).toLowerCase())) {
+                    continue;
+                }
+                // 查找所有匹配的节点
+                const nodes = root.findAll({ rule: rule.pattern });
+                for (const node of nodes) {
+                    // 提取符号名称
+                    const nameNode = node.getMatch('name');
+                    if (!nameNode)
+                        continue;
+                    const name = nameNode.text();
+                    if (!name)
+                        continue;
+                    // 获取位置信息
+                    const range = node.range();
+                    symbols.push({
+                        name,
+                        kind: rule.kind,
+                        file,
+                        range: {
+                            start: {
+                                line: range.start.line,
+                                column: range.start.column,
+                                index: range.start.index
+                            },
+                            end: {
+                                line: range.end.line,
+                                column: range.end.column,
+                                index: range.end.index
                             }
-                        });
-                    }
+                        }
+                    });
                 }
             }
         }
         catch (error) {
-            // 读取失败则跳过该文件
-            console.warn(`Failed to read file ${file}:`, error);
+            // 解析失败则跳过该文件
+            console.warn(`Failed to parse file ${file}:`, error);
         }
         return symbols;
     }

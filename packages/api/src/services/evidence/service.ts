@@ -42,13 +42,13 @@ export async function generateEvidence(request: GenerateEvidenceRequest): Promis
   if (request.include_context !== false) {
     for (const finding of scanResult.findings) {
       codeSnippets.push({
-        snippet_id: `snp_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
-        file_path: finding.filePath,
-        language: 'typescript', // 应该从 finding 获取
-        content: '',
+        snippet_id: `snp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        file_path: finding.file,
+        language: finding.language,
+        content: finding.excerpt,
         range: {
-          start: { line: finding.line, column: finding.column, index: 0 },
-          end: { line: finding.line, column: finding.column + 10, index: 0 },
+          start: { line: finding.range.start.line, column: finding.range.start.column, index: finding.range.start.index },
+          end: { line: finding.range.end.line, column: finding.range.end.column, index: finding.range.end.index },
         },
         surrounding_context: {
           before: '',
@@ -107,8 +107,8 @@ function generateASTNodes(finding: any): CodeASTNode[] {
       type: 'call_expression',
       text: finding.message,
       range: {
-        start: { line: finding.line, column: finding.column, index: 0 },
-        end: { line: finding.line, column: finding.column + 10, index: 0 },
+        start: { line: finding.range?.start?.line ?? 0, column: finding.range?.start?.column ?? 0, index: finding.range?.start?.index ?? 0 },
+        end: { line: finding.range?.end?.line ?? 0, column: finding.range?.end?.column ?? 0, index: finding.range?.end?.index ?? 0 },
       },
       children: [],
       properties: {},
@@ -121,7 +121,7 @@ function generateASTNodes(finding: any): CodeASTNode[] {
  */
 function generateImpactReport(scanResult: any): CodeImpactReport {
   return {
-    files_affected: new Set(scanResult.findings.map((f: any) => f.filePath)).size,
+    files_affected: new Set(scanResult.findings.map((f: any) => f.file)).size,
     symbols_affected: scanResult.findings.length,
     tests_affected: 0,
     complexity_score: Math.min(scanResult.findings.length * 0.1, 10),
@@ -175,7 +175,7 @@ export async function generateRewrite(request: GenerateRewriteRequest): Promise<
     }
 
     const candidate: RewriteCandidate = {
-      candidate_id: `cand_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
+      candidate_id: `cand_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       finding_id: finding.finding_id,
       file_path: 'src/index.ts', // 应该从 finding 获取
       original_code: 'console.log("debug")',
@@ -212,26 +212,34 @@ export async function explainCode(request: ExplainCodeRequest): Promise<ExplainC
   // 使用 los-ast Core 的 explainAtPosition 功能
   try {
     const result = await explainAtPosition({
-      filePath: request.file_path,
+      file: request.file_path,
       line: request.line,
       column: request.column,
       rootDir: process.cwd(),
     });
 
+    // 从 matches 生成解释文本
+    const explanation = result.matches.length > 0
+      ? `Found ${result.matches.length} rule match(es) at this position:\n` +
+        result.matches.map(m => `- [${m.severity}] ${m.ruleId}: ${m.message}`).join('\n')
+      : 'No rule matches found at this position.';
+
+    // 从 matches 提取符号信息（简化处理）
+    const symbols = result.matches.map((m) => ({
+      symbol_id: `sym_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      name: m.ruleId,
+      kind: 'function' as const, // 使用现有枚举值
+      file_path: result.file,
+      range: {
+        start: { line: m.range.start.line, column: m.range.start.column, index: m.range.start.index },
+        end: { line: m.range.end.line, column: m.range.end.column, index: m.range.end.index },
+      },
+      references: [],
+    }));
+
     return {
-      explanation: result.explanation,
-      symbols:
-        result.symbols?.map((s) => ({
-          symbol_id: `sym_${Date.now()}`,
-          name: s.name,
-          kind: s.kind as any,
-          file_path: s.location.file,
-          range: {
-            start: { line: s.location.line, column: s.location.column, index: 0 },
-            end: { line: s.location.line, column: s.location.column + 10, index: 0 },
-          },
-          references: [],
-        })) || [],
+      explanation,
+      symbols,
       related_findings: [],
     };
   } catch (error) {

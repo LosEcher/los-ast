@@ -8,7 +8,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   createApproval,
-  getApproval,
+  getApprovalWithScope,
   processApproval,
   queryApprovals,
   getApprovalStats,
@@ -53,9 +53,18 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   fastify.get('/', async (request: FastifyRequest) => {
     const query = request.query as Record<string, string | undefined>;
 
+    // 强制使用 request.scope 进行租户隔离，忽略 query 中的 tenant_id/project_id
+    const scope = request.scope;
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError(
+        'MISSING_SCOPE',
+        'Request scope must include tenant_id and project_id'
+      );
+    }
+
     const params: ApprovalQueryParams = {
-      tenant_id: query.tenant_id,
-      project_id: query.project_id,
+      tenant_id: scope.tenant_id,
+      project_id: scope.project_id,
       status: parseApprovalStatus(query.status),
       risk_level: query.risk_level,
       item_type: parseApprovalItemType(query.item_type),
@@ -71,7 +80,22 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   fastify.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as CreateApprovalRequest;
 
-    const approval = await createApproval(body);
+    // 强制注入 request.scope，确保数据归属正确
+    const scope = request.scope;
+    if (!scope?.tenant_id || !scope?.project_id || !scope?.actor_id) {
+      throw new ValidationError(
+        'INCOMPLETE_SCOPE',
+        'Request scope must include tenant_id, project_id, and actor_id'
+      );
+    }
+
+    const approval = await createApproval({
+      ...body,
+      scope: {
+        tenant_id: scope.tenant_id!,
+        project_id: scope.project_id!,
+      }, // 强制使用验证后的 scope
+    });
 
     reply.status(201);
     return { approval };
@@ -81,7 +105,17 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   fastify.get('/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
-    const approval = await getApproval(id);
+    // 强制使用 request.scope 进行租户边界校验
+    const scope = request.scope;
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError(
+        'MISSING_SCOPE',
+        'Request scope must include tenant_id and project_id'
+      );
+    }
+
+    // 使用 scope 校验版本，防止跨租户访问
+    const approval = await getApprovalWithScope(id, scope.tenant_id, scope.project_id);
 
     if (!approval) {
       throw new NotFoundError('Approval', id);
@@ -95,8 +129,17 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const body = request.body as ProcessApprovalRequest;
 
-    // 先检查审批项是否存在
-    const existing = await getApproval(id);
+    // 强制使用 request.scope 进行租户边界校验
+    const scope = request.scope;
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError(
+        'MISSING_SCOPE',
+        'Request scope must include tenant_id and project_id'
+      );
+    }
+
+    // 使用 scope 校验版本，防止跨租户访问
+    const existing = await getApprovalWithScope(id, scope.tenant_id, scope.project_id);
     if (!existing) {
       throw new NotFoundError('Approval', id);
     }
@@ -113,8 +156,18 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/approvals/stats - 获取统计信息 (带缓存)
-  fastify.get('/stats', async () => {
-    const cacheKey = 'approval:stats';
+  fastify.get('/stats', async (request: FastifyRequest) => {
+    // 强制使用 request.scope 进行租户隔离
+    const scope = request.scope;
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError(
+        'MISSING_SCOPE',
+        'Request scope must include tenant_id and project_id'
+      );
+    }
+
+    // 包含 scope 的缓存键，确保多租户隔离
+    const cacheKey = `approval:stats:${scope.tenant_id}:${scope.project_id}`;
 
     // 尝试从缓存获取
     const cached = statsCache.get(cacheKey);
@@ -122,8 +175,8 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
       return { stats: cached };
     }
 
-    // 获取新数据并缓存
-    const stats = getApprovalStats();
+    // 获取新数据并缓存 (按 scope 过滤)
+    const stats = getApprovalStats(scope.tenant_id, scope.project_id);
     statsCache.set(cacheKey, stats, 30000);
     return { stats };
   });

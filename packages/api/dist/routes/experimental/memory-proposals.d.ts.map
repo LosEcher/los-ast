@@ -1,1 +1,1 @@
-{"version":3,"file":"memory-proposals.d.ts","sourceRoot":"","sources":["../../../src/routes/experimental/memory-proposals.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAEH,OAAO,KAAK,EAAE,eAAe,EAAgC,MAAM,SAAS,CAAC;AAiB7E;;GAEG;AACH,wBAA8B,qBAAqB,CAAC,OAAO,EAAE,eAAe,iBAwG3E"}
+{"version":3,"file":"memory-proposals.d.ts","sourceRoot":"","sources":["../../../src/routes/experimental/memory-proposals.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAEH,OAAO,KAAK,EAAE,eAAe,EAAgC,MAAM,SAAS,CAAC;AAgC7E;;GAEG;AACH,wBAA8B,qBAAqB,CAAC,OAAO,EAAE,eAAe,iBAsL3E"}

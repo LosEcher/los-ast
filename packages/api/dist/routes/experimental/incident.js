@@ -6,6 +6,32 @@
  */
 import { createIncident, getIncident, updateIncidentStatus, queryIncidents, getStoreStats, } from '../../services/incident/store.js';
 import { collectMetrics, collectLogs, evaluateTriggers, getCollectionStats, } from '../../services/incident/collection.js';
+import { NotFoundError } from '../../types/errors.js';
+// 查询参数验证函数
+function parseIncidentStatus(value) {
+    if (!value)
+        return undefined;
+    const valid = ['detected', 'triaging', 'attributed', 'recovering', 'resolved', 'closed'];
+    return valid.includes(value) ? value : undefined;
+}
+function parseIncidentSeverity(value) {
+    if (!value)
+        return undefined;
+    const valid = ['critical', 'high', 'medium', 'low', 'info'];
+    return valid.includes(value) ? value : undefined;
+}
+function parseIncidentSourceType(value) {
+    if (!value)
+        return undefined;
+    const valid = ['metric_alert', 'log_pattern', 'user_report'];
+    return valid.includes(value) ? value : undefined;
+}
+function parseQueryInt(value, defaultValue) {
+    if (!value)
+        return defaultValue;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
+}
 /**
  * 注册 Incident 路由 (实验性)
  */
@@ -16,13 +42,13 @@ export default async function incidentRoutes(fastify) {
         const params = {
             tenant_id: query.tenant_id,
             project_id: query.project_id,
-            status: query.status,
-            severity: query.severity,
-            source_type: query.source_type,
+            status: parseIncidentStatus(query.status),
+            severity: parseIncidentSeverity(query.severity),
+            source_type: parseIncidentSourceType(query.source_type),
             from: query.from,
             to: query.to,
-            limit: query.limit ? parseInt(query.limit, 10) : undefined,
-            offset: query.offset ? parseInt(query.offset, 10) : undefined,
+            limit: parseQueryInt(query.limit),
+            offset: parseQueryInt(query.offset),
         };
         const result = await queryIncidents(params);
         return result;
@@ -35,24 +61,24 @@ export default async function incidentRoutes(fastify) {
         return { incident };
     });
     // GET /experimental/incidents/:id - 获取单个 Incident
-    fastify.get('/:id', async (request, reply) => {
+    fastify.get('/:id', async (request) => {
         const { id } = request.params;
         const incident = await getIncident(id);
         if (!incident) {
-            reply.status(404);
-            return { error: { message: 'Incident not found' } };
+            throw new NotFoundError('Incident', id);
         }
         return { incident };
     });
     // PATCH /experimental/incidents/:id/status - 更新 Incident 状态
-    fastify.patch('/:id/status', async (request, reply) => {
+    fastify.patch('/:id/status', async (request) => {
         const { id } = request.params;
         const body = request.body;
-        const incident = await updateIncidentStatus(id, body.status, body.comment, body.actor_id);
-        if (!incident) {
-            reply.status(404);
-            return { error: { message: 'Incident not found' } };
+        // 先检查是否存在
+        const existing = await getIncident(id);
+        if (!existing) {
+            throw new NotFoundError('Incident', id);
         }
+        const incident = await updateIncidentStatus(id, body.status, body.comment, body.actor_id);
         return { incident };
     });
     // POST /experimental/incidents/collect/metrics - 采集指标

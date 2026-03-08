@@ -17,7 +17,7 @@
 
 ---
 
-## 2. 三层架构详解
+## 2. 四层架构详解
 
 ### 2.1 Core 层
 
@@ -77,6 +77,26 @@
 - 仅建议在开发环境启用
 - 生产环境启用时需配合访问控制
 
+### 2.4 VPS Agent Web 集成层
+
+```
+┌─────────────────────────────────────────┐
+│  VPS Agent Web Integration Layer        │
+│  默认关闭，作为迁移期稳定前缀封装          │
+├─────────────────────────────────────────┤
+│  /vps-agent-web/incidents              │
+│  /vps-agent-web/attribution            │
+│  /vps-agent-web/recovery               │
+│  /vps-agent-web/approvals              │
+└─────────────────────────────────────────┘
+```
+
+**设计原则：**
+- 显式前缀 `/vps-agent-web`，用于外部联调与灰度接入
+- 默认关闭，需环境变量启用
+- 复用现有业务逻辑，保留 `experimental` 兼容入口
+- 通过 OpenAPI 标注稳定级别（beta/preview）与迁移目标
+
 ---
 
 ## 3. 配置参考
@@ -87,6 +107,7 @@
 |------|--------|------|
 | `ENABLE_EXPERIMENTAL_ROUTES` | `false` | 启用实验性路由 |
 | `ENABLE_INTERNAL_ROUTES` | `false` | 启用内部路由 |
+| `ENABLE_VPS_AGENT_WEB_ROUTES` | `false` | 启用 VPS Agent Web 集成路由 |
 
 ### 3.2 路由前缀
 
@@ -95,6 +116,7 @@
 | Core | `/` | `ROUTE_CONFIG.prefixes.core` |
 | Experimental | `/experimental` | `ROUTE_CONFIG.prefixes.experimental` |
 | Internal | `/internal` | `ROUTE_CONFIG.prefixes.internal` |
+| VPS Agent Web | `/vps-agent-web` | `ROUTE_CONFIG.prefixes.vpsAgentWeb` |
 
 ---
 
@@ -107,6 +129,7 @@
 | `/experimental/attribution` | los-ast | VPS Agent Web | Milestone B+ | planned |
 | `/experimental/recovery` | los-ast | VPS Agent Web | Milestone B+ | planned |
 | `/experimental/approvals` | los-ast | VPS Agent Web | Milestone B+ | planned |
+| `/vps-agent-web/*` | los-ast | VPS Agent Web | 迁移过渡期 | active-bridge |
 | `/experimental/hotreload` | los-ast | los-ast | - | keep |
 | `/experimental/evidence` | los-ast | los-ast | - | keep |
 

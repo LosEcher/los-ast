@@ -7,7 +7,7 @@ export default async function discoverRoutes(fastify) {
             description: '发现代码库中的符号定义',
             body: {
                 type: 'object',
-                required: ['scope', 'rootDir'],
+                required: ['rootDir'],
                 properties: {
                     scope: {
                         type: 'object',

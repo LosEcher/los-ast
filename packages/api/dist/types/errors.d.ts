@@ -34,4 +34,10 @@ export declare class TimeoutError extends AppError {
 export declare class ScanTooLargeError extends AppError {
     constructor(limit: number, estimated: number);
 }
+/**
+ * 资源未找到错误
+ */
+export declare class NotFoundError extends AppError {
+    constructor(resource: string, id?: string);
+}
 //# sourceMappingURL=errors.d.ts.map

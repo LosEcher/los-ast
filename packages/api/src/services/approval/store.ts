@@ -58,6 +58,26 @@ export async function getApproval(approvalId: string): Promise<ApprovalItem | nu
 }
 
 /**
+ * 获取审批项（带 scope 校验）
+ * 返回 null 如果审批项不存在或 scope 不匹配
+ */
+export async function getApprovalWithScope(
+  approvalId: string,
+  tenant_id: string,
+  project_id: string
+): Promise<ApprovalItem | null> {
+  const approval = approvalStore.get(approvalId);
+  if (!approval) {
+    return null;
+  }
+  // 强制 scope 边界检查
+  if (approval.scope.tenant_id !== tenant_id || approval.scope.project_id !== project_id) {
+    return null;
+  }
+  return approval;
+}
+
+/**
  * 处理审批
  */
 export async function processApproval(
@@ -101,7 +121,7 @@ export async function processApproval(
 }
 
 /**
- * 查询审批项
+ * 查询审批项 (强制按 scope 过滤)
  */
 export async function queryApprovals(params: ApprovalQueryParams): Promise<{
   items: ApprovalItem[];
@@ -109,15 +129,18 @@ export async function queryApprovals(params: ApprovalQueryParams): Promise<{
   has_more: boolean;
   next_offset?: number;
 }> {
+  // 强制要求 tenant_id 和 project_id
+  if (!params.tenant_id || !params.project_id) {
+    throw new Error('tenant_id and project_id are required for queryApprovals');
+  }
+
   let items = Array.from(approvalStore.values());
 
-  if (params.tenant_id) {
-    items = items.filter((a) => a.scope.tenant_id === params.tenant_id);
-  }
-
-  if (params.project_id) {
-    items = items.filter((a) => a.scope.project_id === params.project_id);
-  }
+  // 强制按 scope 过滤 (不再可选)
+  items = items.filter((a) =>
+    a.scope.tenant_id === params.tenant_id &&
+    a.scope.project_id === params.project_id
+  );
 
   if (params.status) {
     items = items.filter((a) => a.status === params.status);
@@ -170,9 +193,12 @@ export async function checkExpiredApprovals(): Promise<number> {
 }
 
 /**
- * 获取统计信息
+ * 获取统计信息 (按 scope 过滤)
  */
-export function getApprovalStats(): {
+export function getApprovalStats(
+  tenant_id: string,
+  project_id: string
+): {
   total: number;
   by_status: Record<string, number>;
   by_risk_level: Record<string, number>;
@@ -181,15 +207,21 @@ export function getApprovalStats(): {
   const by_status: Record<string, number> = {};
   const by_risk_level: Record<string, number> = {};
   const by_type: Record<string, number> = {};
+  let total = 0;
 
   for (const approval of approvalStore.values()) {
+    // 强制按 scope 过滤
+    if (approval.scope.tenant_id !== tenant_id || approval.scope.project_id !== project_id) {
+      continue;
+    }
+    total++;
     by_status[approval.status] = (by_status[approval.status] || 0) + 1;
     by_risk_level[approval.risk_level] = (by_risk_level[approval.risk_level] || 0) + 1;
     by_type[approval.item_type] = (by_type[approval.item_type] || 0) + 1;
   }
 
   return {
-    total: approvalStore.size,
+    total,
     by_status,
     by_risk_level,
     by_type,

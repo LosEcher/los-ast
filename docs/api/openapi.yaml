@@ -5,7 +5,7 @@ info:
     los-ast 服务化 API - 代码智能分析内核的 HTTP façade
 
     ## 硬约束清单
-    1. **P0 Scope Freeze**: 只提供 `/healthz/*`, `/scan`, `/discover/symbols`
+    1. **P0 Scope Freeze**: Core 稳定能力固定为 `/healthz/*`, `/scan`, `/discover/symbols`
     2. **Core/API 硬边界**: Core 只返回领域错误，API 负责协议转换
     3. **Scope 验证**: 生产环境强制完整 scope，拒绝 `mode: local`
     4. **扫描限制**: 最大 1000 文件 / 10MB 响应 / 30秒超时
@@ -263,6 +263,256 @@ paths:
                 $ref: '#/components/schemas/DiscoverSymbolsResponse'
         '400':
           description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals:
+    get:
+      summary: 查询审批项
+      description: |
+        VPS Agent Web 对接前缀下的审批查询接口。
+        请求会按 scope 做租户隔离。
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, expired]
+        - name: item_type
+          in: query
+          schema:
+            type: string
+            enum: [recovery_action, code_patch, config_change, recipe_activation]
+        - name: risk_level
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalListResponse'
+        '400':
+          description: 参数错误或缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: 创建审批项
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApprovalRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalItemEnvelope'
+        '400':
+          description: 参数错误或 scope 不完整
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals/{id}:
+    get:
+      summary: 获取审批项详情
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalItemEnvelope'
+        '404':
+          description: 审批项不存在或无权限访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals/{id}/process:
+    post:
+      summary: 处理审批项
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ScopeQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessApprovalRequest'
+      responses:
+        '200':
+          description: 处理成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalItemEnvelope'
+        '400':
+          description: 处理失败或参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals/stats:
+    get:
+      summary: 获取审批统计
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalStatsResponse'
+        '400':
+          description: 缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/incidents/stats/store:
+    get:
+      summary: 获取 Incident 存储统计
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericStatsResponse'
+        '400':
+          description: 缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/incidents/stats/collection:
+    get:
+      summary: 获取 Incident 采集统计
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericStatsResponse'
+        '400':
+          description: 缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/attribution/analyze:
+    post:
+      summary: 执行归因分析
+      description: |
+        当前实现返回模拟分析结果，建议灰度使用。
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttributionAnalyzeRequest'
+      responses:
+        '200':
+          description: 分析成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttributionAnalyzeResponse'
+        '400':
+          description: 参数错误或缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/recovery/stats:
+    get:
+      summary: 获取恢复统计
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryStatsResponse'
+        '400':
+          description: 缺少 scope
           content:
             application/json:
               schema:
@@ -537,6 +787,232 @@ components:
             details:
               type: object
               additionalProperties: true
+
+    CreateApprovalRequest:
+      type: object
+      required:
+        - item_type
+        - item_id
+        - title
+        - description
+        - risk_level
+        - timeout_seconds
+        - scope
+      properties:
+        item_type:
+          type: string
+          enum: [recovery_action, code_patch, config_change, recipe_activation]
+        item_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        timeout_seconds:
+          type: integer
+          minimum: 1
+        scope:
+          $ref: '#/components/schemas/Scope'
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ProcessApprovalRequest:
+      type: object
+      required:
+        - action
+        - actor_id
+      properties:
+        action:
+          type: string
+          enum: [approve, reject]
+        actor_id:
+          type: string
+        comment:
+          type: string
+
+    ApprovalItem:
+      type: object
+      required:
+        - approval_id
+        - item_type
+        - item_id
+        - title
+        - description
+        - risk_level
+        - status
+        - timeout_at
+        - scope
+        - created_at
+        - updated_at
+        - version
+      properties:
+        approval_id:
+          type: string
+        item_type:
+          type: string
+          enum: [recovery_action, code_patch, config_change, recipe_activation]
+        item_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [pending, approved, rejected, expired]
+        requester:
+          type: object
+          properties:
+            actor_id:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+        approver:
+          type: object
+          nullable: true
+          properties:
+            actor_id:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+            comment:
+              type: string
+        timeout_at:
+          type: string
+          format: date-time
+        scope:
+          type: object
+          required:
+            - tenant_id
+            - project_id
+          properties:
+            tenant_id:
+              type: string
+            project_id:
+              type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+
+    ApprovalItemEnvelope:
+      type: object
+      required:
+        - approval
+      properties:
+        approval:
+          $ref: '#/components/schemas/ApprovalItem'
+
+    ApprovalListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalItem'
+        total:
+          type: integer
+        has_more:
+          type: boolean
+        next_offset:
+          type: integer
+
+    ApprovalStats:
+      type: object
+      required:
+        - total
+        - by_status
+        - by_risk_level
+        - by_type
+        - avg_decision_time_seconds
+      properties:
+        total:
+          type: integer
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+        by_risk_level:
+          type: object
+          additionalProperties:
+            type: integer
+        by_type:
+          type: object
+          additionalProperties:
+            type: integer
+        avg_decision_time_seconds:
+          type: number
+
+    ApprovalStatsResponse:
+      type: object
+      required:
+        - stats
+      properties:
+        stats:
+          $ref: '#/components/schemas/ApprovalStats'
+
+    GenericStatsResponse:
+      type: object
+      additionalProperties: true
+      description: 兼容当前实现的统计对象返回（preview 阶段）
+
+    AttributionAnalyzeRequest:
+      type: object
+      required:
+        - incident_id
+        - evidence_bundle_id
+      properties:
+        incident_id:
+          type: string
+        evidence_bundle_id:
+          type: string
+
+    AttributionAnalyzeResponse:
+      type: object
+      required:
+        - analysis
+      properties:
+        analysis:
+          type: object
+          additionalProperties: true
+
+    RecoveryStatsResponse:
+      type: object
+      required:
+        - stats
+      properties:
+        stats:
+          type: object
+          additionalProperties: true
+
+  parameters:
+    ScopeQuery:
+      name: scope
+      in: query
+      required: true
+      description: URL 编码 JSON 字符串，需包含 tenant_id/project_id，部分写接口需要 actor_id
+      schema:
+        type: string
 
   headers:
     X-Request-ID:

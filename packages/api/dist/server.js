@@ -5,6 +5,7 @@ import requestIdPlugin from './plugins/request-id.js';
 import scopeValidatorPlugin from './plugins/scope-validator.js';
 import healthCheckPlugin from './plugins/health-check.js';
 import cancellationPlugin from './plugins/cancellation.js';
+import internalAccessPlugin from './plugins/internal-access.js';
 // Core Routes - P0 核心路由 (始终启用)
 import { scanRoutes, discoverRoutes } from './routes/core/index.js';
 // Experimental Routes - 实验性路由 (条件启用)
@@ -59,16 +60,20 @@ async function registerExperimentalRoutes(fastify) {
 /**
  * 注册 Internal 路由 - 条件启用
  * 默认关闭，需设置 ENABLE_INTERNAL_ROUTES=true
+ * 同时需要配置访问控制（IP白名单或Token）
  */
-async function registerInternalRoutes(_fastify) {
+async function registerInternalRoutes(fastify) {
     if (!ROUTE_CONFIG.enableInternal) {
         console.log('[ROUTES] Internal routes disabled (set ENABLE_INTERNAL_ROUTES=true to enable)');
         return;
     }
     const internal = ROUTE_CONFIG.prefixes.internal;
-    // 预留 Internal 路由注册
-    // await _fastify.register(internalRoutes, { prefix: internal });
+    // 注册内部访问控制插件（在 scope-validator 之后）
+    await fastify.register(internalAccessPlugin);
     console.log('[ROUTES] Internal routes registered with prefix:', internal);
+    console.log('[ROUTES] Internal access control: IP whitelist + Token verification enabled');
+    // 预留 Internal 路由注册
+    // await fastify.register(internalRoutes, { prefix: internal });
 }
 // ============================================
 // 3. 执行路由注册

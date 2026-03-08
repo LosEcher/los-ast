@@ -15,7 +15,9 @@ interface ScanRequestBody {
   rootDir: string;
   include?: string[];
   ignore?: string[];
+  rules?: string[];  // 规则文件 glob 模式数组
   includeStats?: boolean;
+  deterministic?: boolean;
 }
 
 export default async function scanRoutes(fastify: FastifyInstance) {
@@ -27,7 +29,7 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         description: '执行代码扫描',
         body: {
           type: 'object',
-          required: ['scope', 'project', 'rootDir'],
+          required: ['project', 'rootDir'],
           properties: {
             scope: {
               type: 'object',
@@ -42,7 +44,9 @@ export default async function scanRoutes(fastify: FastifyInstance) {
             rootDir: { type: 'string', minLength: 1 },
             include: { type: 'array', items: { type: 'string' } },
             ignore: { type: 'array', items: { type: 'string' } },
+            rules: { type: 'array', items: { type: 'string' } },
             includeStats: { type: 'boolean' },
+            deterministic: { type: 'boolean' },
           },
         },
         response: {
@@ -63,7 +67,7 @@ export default async function scanRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest<{ Body: ScanRequestBody }>, reply: FastifyReply) => {
-      const { project, rootDir, include, ignore, includeStats } = request.body;
+      const { project, rootDir, include, ignore, rules, includeStats, deterministic } = request.body;
 
       // 验证必填字段
       if (!project || typeof project !== 'string') {
@@ -84,7 +88,9 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         rootDir,
         include,
         ignore,
+        rules,
         includeStats: includeStats ?? false,
+        deterministic,
         signal,
       });
 

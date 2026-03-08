@@ -5,6 +5,7 @@ export interface ScanServiceOptions {
     include?: string[];
     ignore?: string[];
     includeStats?: boolean;
+    deterministic?: boolean;
     signal: AbortSignal;
 }
 export declare class ScanService {

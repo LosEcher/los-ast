@@ -17,9 +17,15 @@ const ERROR_STATUS_MAP: Record<ErrorCategory, number> = {
 
 /**
  * 判断是否为 AppError 类型
+ * 使用 duck typing 避免跨模块 instanceof 问题
  */
 function isAppError(error: unknown): error is AppError {
-  return error instanceof AppError;
+  return (
+    error instanceof Error &&
+    'category' in error &&
+    'code' in error &&
+    'retryable' in error
+  );
 }
 
 /**

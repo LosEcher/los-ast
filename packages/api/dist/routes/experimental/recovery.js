@@ -5,6 +5,7 @@
  * 注意: 恢复决策需要全局上下文，此路由将在 Milestone B 迁出至 VPS Agent Web
  */
 import { createRecoveryAction, getRecoveryAction, updateRecoveryActionStatus, startRecoveryAction, executeL1Action, executeL2Action, queryRecoveryActions, createRecoveryPolicy, getRecoveryPolicy, listRecoveryPolicies, getRecoveryStats, } from '../../services/recovery/store.js';
+import { NotFoundError, ValidationError } from '../../types/errors.js';
 /**
  * 注册 Recovery 路由 (实验性)
  */
@@ -49,26 +50,23 @@ export default async function recoveryRoutes(fastify) {
         return result;
     });
     // GET /experimental/recovery/actions/:id - 获取恢复动作
-    fastify.get('/actions/:id', async (request, reply) => {
+    fastify.get('/actions/:id', async (request) => {
         const { id } = request.params;
         const action = await getRecoveryAction(id);
         if (!action) {
-            reply.status(404);
-            return { error: { message: 'Recovery action not found' } };
+            throw new NotFoundError('Recovery action', id);
         }
         return { action };
     });
     // POST /experimental/recovery/actions/:id/approve - 审批恢复动作
-    fastify.post('/actions/:id/approve', async (request, reply) => {
+    fastify.post('/actions/:id/approve', async (request) => {
         const { id } = request.params;
         const action = await getRecoveryAction(id);
         if (!action) {
-            reply.status(404);
-            return { error: { message: 'Recovery action not found' } };
+            throw new NotFoundError('Recovery action', id);
         }
         if (action.status !== 'pending_approval') {
-            reply.status(400);
-            return { error: { message: 'Action is not pending approval' } };
+            throw new ValidationError('INVALID_STATUS', 'Action is not pending approval');
         }
         // 更新状态为已审批
         await updateRecoveryActionStatus(id, 'approved');
@@ -87,13 +85,12 @@ export default async function recoveryRoutes(fastify) {
         return { action: finalAction };
     });
     // POST /experimental/recovery/actions/:id/rollback - 回滚恢复动作
-    fastify.post('/actions/:id/rollback', async (request, reply) => {
+    fastify.post('/actions/:id/rollback', async (request) => {
         const { id } = request.params;
         const { actor_id, reason } = request.body;
         const action = await getRecoveryAction(id);
         if (!action) {
-            reply.status(404);
-            return { error: { message: 'Recovery action not found' } };
+            throw new NotFoundError('Recovery action', id);
         }
         // 更新状态为已回滚
         await updateRecoveryActionStatus(id, 'rolled_back', {
@@ -123,12 +120,11 @@ export default async function recoveryRoutes(fastify) {
         return { policies };
     });
     // GET /experimental/recovery/policies/:id - 获取恢复策略
-    fastify.get('/policies/:id', async (request, reply) => {
+    fastify.get('/policies/:id', async (request) => {
         const { id } = request.params;
         const policy = await getRecoveryPolicy(id);
         if (!policy) {
-            reply.status(404);
-            return { error: { message: 'Recovery policy not found' } };
+            throw new NotFoundError('Recovery policy', id);
         }
         return { policy };
     });

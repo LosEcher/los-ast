@@ -5,7 +5,21 @@
  * 注意: 此路由仅表达"提案/候选"，最终写入决策由 los-memory 或上层控制面决定
  * 避免侵蚀 los-memory sovereignty
  */
-import { createProposal, getProposal, validateProposal, queryKnowledge, getRecoveryRecipe, findMatchingRecipes, getIncidentLesson, getMemoryStats, } from '../../services/memory/store.js';
+import { createProposal, getProposalWithScope, validateProposal, queryKnowledge, getRecoveryRecipeWithScope, findMatchingRecipes, getIncidentLessonWithScope, getMemoryStats, } from '../../services/memory/store.js';
+import { NotFoundError, ValidationError } from '../../types/errors.js';
+// 查询参数验证函数
+function parseProposalType(value) {
+    if (!value)
+        return undefined;
+    const valid = ['corrected_fact', 'rejected_hypothesis', 'incident_lesson', 'recovery_recipe'];
+    return valid.includes(value) ? value : undefined;
+}
+function parseQueryInt(value, defaultValue) {
+    if (!value)
+        return defaultValue;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
+}
 /**
  * 注册 Memory Proposals 路由 (实验性)
  */
@@ -13,76 +27,124 @@ export default async function memoryProposalsRoutes(fastify) {
     // POST /experimental/memory-proposals/proposals - 创建提案
     fastify.post('/proposals', async (request, reply) => {
         const body = request.body;
-        const proposal = await createProposal(body);
+        // 强制验证 request.scope，确保数据归属正确
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('INCOMPLETE_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        // 注入 scope 到 proposal
+        const proposal = await createProposal({
+            ...body,
+            scope: {
+                tenant_id: scope.tenant_id,
+                project_id: scope.project_id,
+            },
+        });
         reply.status(201);
         return { proposal };
     });
     // GET /experimental/memory-proposals/proposals/:id - 获取提案
-    fastify.get('/proposals/:id', async (request, reply) => {
+    fastify.get('/proposals/:id', async (request) => {
         const { id } = request.params;
-        const proposal = await getProposal(id);
+        // 强制使用 request.scope 进行租户边界校验
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        // 使用 scope 校验版本，防止跨租户访问
+        const proposal = await getProposalWithScope(id, scope.tenant_id, scope.project_id);
         if (!proposal) {
-            reply.status(404);
-            return { error: { message: 'Proposal not found' } };
+            throw new NotFoundError('Proposal', id);
         }
         return { proposal };
     });
     // POST /experimental/memory-proposals/proposals/:id/validate - 验证提案
-    fastify.post('/proposals/:id/validate', async (request, reply) => {
+    fastify.post('/proposals/:id/validate', async (request) => {
         const { id } = request.params;
         const body = request.body;
-        const proposal = await validateProposal(id, body.validator_id, body.approve, body.rejection_reason);
-        if (!proposal) {
-            reply.status(404);
-            return { error: { message: 'Proposal not found' } };
+        // 强制使用 request.scope 进行租户边界校验
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
         }
+        // 使用 scope 校验版本，防止跨租户访问
+        const existing = await getProposalWithScope(id, scope.tenant_id, scope.project_id);
+        if (!existing) {
+            throw new NotFoundError('Proposal', id);
+        }
+        const proposal = await validateProposal(id, body.validator_id, body.approve, body.rejection_reason);
         return { proposal };
     });
     // GET /experimental/memory-proposals/knowledge - 查询知识库
     fastify.get('/knowledge', async (request) => {
         const query = request.query;
+        // 强制使用 request.scope 进行租户隔离
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
         const params = {
-            type: query.type,
+            type: parseProposalType(query.type),
             scope: {
-                tenant_id: query.tenant_id,
-                project_id: query.project_id,
+                tenant_id: scope.tenant_id,
+                project_id: scope.project_id,
             },
             tags: query.tags?.split(','),
-            limit: query.limit ? parseInt(query.limit, 10) : undefined,
-            offset: query.offset ? parseInt(query.offset, 10) : undefined,
+            limit: parseQueryInt(query.limit),
+            offset: parseQueryInt(query.offset),
         };
         const result = await queryKnowledge(params);
         return result;
     });
     // GET /experimental/memory-proposals/recipes/:id - 获取恢复方案
-    fastify.get('/recipes/:id', async (request, reply) => {
+    fastify.get('/recipes/:id', async (request) => {
         const { id } = request.params;
-        const recipe = await getRecoveryRecipe(id);
+        // 强制使用 request.scope 进行租户边界校验
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        // 使用 scope 校验版本，防止跨租户访问（全局方案也可访问）
+        const recipe = await getRecoveryRecipeWithScope(id, scope.tenant_id, scope.project_id);
         if (!recipe) {
-            reply.status(404);
-            return { error: { message: 'Recipe not found' } };
+            throw new NotFoundError('Recipe', id);
         }
         return { recipe };
     });
     // POST /experimental/memory-proposals/recipes/find - 查找匹配的恢复方案
     fastify.post('/recipes/find', async (request) => {
         const body = request.body;
-        const recipes = await findMatchingRecipes(body.tenant_id, body.project_id, body.keywords);
+        // 强制使用 request.scope 进行租户隔离
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const recipes = await findMatchingRecipes(scope.tenant_id, scope.project_id, body.keywords);
         return { recipes };
     });
     // GET /experimental/memory-proposals/lessons/:id - 获取事件教训
-    fastify.get('/lessons/:id', async (request, reply) => {
+    fastify.get('/lessons/:id', async (request) => {
         const { id } = request.params;
-        const lesson = await getIncidentLesson(id);
+        // 强制使用 request.scope 进行租户边界校验
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        // 使用 scope 校验版本，防止跨租户访问
+        const lesson = await getIncidentLessonWithScope(id, scope.tenant_id, scope.project_id);
         if (!lesson) {
-            reply.status(404);
-            return { error: { message: 'Lesson not found' } };
+            throw new NotFoundError('Lesson', id);
         }
         return { lesson };
     });
     // GET /experimental/memory-proposals/stats - 获取统计信息
-    fastify.get('/stats', async () => {
-        const stats = await getMemoryStats();
+    fastify.get('/stats', async (request) => {
+        // 强制使用 request.scope 进行租户隔离
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const stats = await getMemoryStats(scope.tenant_id, scope.project_id);
         return { stats };
     });
 }

@@ -32,6 +32,7 @@ export async function createProposal(request) {
         content: request.content,
         source: request.source,
         status: 'proposed',
+        scope: request.scope,
         idempotency_key: idempotencyKey,
         created_at: now,
         updated_at: now,
@@ -39,14 +40,16 @@ export async function createProposal(request) {
     };
     proposalStore.set(proposalId, proposal);
     // 根据类型存储具体内容
-    await storeTypedContent(proposalId, request.proposal_type, request.content);
+    // 传入 request.scope 强制注入到 content 中，防止 content.scope 被伪造
+    await storeTypedContent(proposalId, request.proposal_type, request.content, request.scope);
     console.log(`[MemoryStore] Created proposal ${proposalId} of type ${request.proposal_type}`);
     return proposal;
 }
 /**
  * 存储类型化内容
+ * 强制注入 proposal.scope 到 content 中，防止 scope 伪造
  */
-async function storeTypedContent(proposalId, type, content) {
+async function storeTypedContent(proposalId, type, content, scope) {
     const now = new Date().toISOString();
     switch (type) {
         case 'corrected_fact': {
@@ -54,6 +57,11 @@ async function storeTypedContent(proposalId, type, content) {
             factStore.set(fact.fact_id || proposalId, {
                 ...fact,
                 fact_id: fact.fact_id || proposalId,
+                // 强制注入 scope，防止伪造
+                scope: {
+                    tenant_id: scope.tenant_id,
+                    project_id: scope.project_id,
+                },
                 created_at: fact.created_at || now,
             });
             break;
@@ -63,6 +71,11 @@ async function storeTypedContent(proposalId, type, content) {
             rejectionStore.set(rejection.rejection_id || proposalId, {
                 ...rejection,
                 rejection_id: rejection.rejection_id || proposalId,
+                // 强制注入 scope，防止伪造
+                scope: {
+                    tenant_id: scope.tenant_id,
+                    project_id: scope.project_id,
+                },
                 created_at: rejection.created_at || now,
             });
             break;
@@ -72,6 +85,11 @@ async function storeTypedContent(proposalId, type, content) {
             lessonStore.set(lesson.lesson_id || proposalId, {
                 ...lesson,
                 lesson_id: lesson.lesson_id || proposalId,
+                // 强制注入 scope，防止伪造
+                scope: {
+                    tenant_id: scope.tenant_id,
+                    project_id: scope.project_id,
+                },
                 created_at: lesson.created_at || now,
                 updated_at: lesson.updated_at || now,
             });
@@ -82,6 +100,12 @@ async function storeTypedContent(proposalId, type, content) {
             recipeStore.set(recipe.recipe_id || proposalId, {
                 ...recipe,
                 recipe_id: recipe.recipe_id || proposalId,
+                // 强制注入 scope，防止伪造（保留 is_global 如果已设置）
+                scope: {
+                    tenant_id: scope.tenant_id,
+                    project_id: scope.project_id,
+                    is_global: recipe.scope?.is_global || false,
+                },
                 stats: recipe.stats || {
                     times_used: 0,
                     success_rate: 0,
@@ -100,6 +124,21 @@ async function storeTypedContent(proposalId, type, content) {
  */
 export async function getProposal(proposalId) {
     return proposalStore.get(proposalId) || null;
+}
+/**
+ * 获取提案（带 scope 校验）
+ * 返回 null 如果提案不存在或 scope 不匹配
+ */
+export async function getProposalWithScope(proposalId, tenant_id, project_id) {
+    const proposal = proposalStore.get(proposalId);
+    if (!proposal) {
+        return null;
+    }
+    // 强制 scope 边界检查
+    if (proposal.scope.tenant_id !== tenant_id || proposal.scope.project_id !== project_id) {
+        return null;
+    }
+    return proposal;
 }
 /**
  * 验证提案
@@ -214,20 +253,35 @@ export async function queryKnowledge(query) {
             });
         }
     }
-    // 过滤范围
-    if (query.scope?.tenant_id) {
-        // 简化实现 - 实际应该根据内容中的 scope 过滤
-        // 这里仅作演示
-    }
+    // 按 scope 过滤（强制租户隔离）
+    const filteredItems = items.filter((item) => {
+        const content = item.content;
+        const itemScope = content.scope;
+        // 如果没有 scope 信息，拒绝访问（安全默认）
+        if (!itemScope) {
+            return false;
+        }
+        // 全局项目（如 RecoveryRecipe）对所有租户可见
+        if (itemScope.is_global) {
+            return true;
+        }
+        // 强制要求 query.scope 中的 tenant_id 和 project_id
+        if (!query.scope?.tenant_id || !query.scope?.project_id) {
+            return false;
+        }
+        // 匹配 tenant_id 和 project_id
+        return (itemScope.tenant_id === query.scope.tenant_id &&
+            itemScope.project_id === query.scope.project_id);
+    });
     // 过滤标签
     if (query.tags && query.tags.length > 0) {
-        // 简化实现
+        // 简化实现 - 可以在这里添加标签过滤逻辑
     }
     // 分页
-    const total = items.length;
+    const total = filteredItems.length;
     const offset = query.offset || 0;
     const limit = query.limit || 20;
-    const paginatedItems = items.slice(offset, offset + limit);
+    const paginatedItems = filteredItems.slice(offset, offset + limit);
     return {
         items: paginatedItems,
         total,
@@ -240,6 +294,23 @@ export async function queryKnowledge(query) {
  */
 export async function getRecoveryRecipe(recipeId) {
     return recipeStore.get(recipeId) || null;
+}
+/**
+ * 获取恢复方案（带 scope 校验）
+ * 返回 null 如果方案不存在或 scope 不匹配
+ */
+export async function getRecoveryRecipeWithScope(recipeId, tenant_id, project_id) {
+    const recipe = recipeStore.get(recipeId);
+    if (!recipe) {
+        return null;
+    }
+    // 检查 scope：全局可见或匹配 tenant/project
+    const scopeMatch = recipe.scope.is_global ||
+        (recipe.scope.tenant_id === tenant_id && recipe.scope.project_id === project_id);
+    if (!scopeMatch) {
+        return null;
+    }
+    return recipe;
 }
 /**
  * 查找匹配的恢复方案
@@ -292,25 +363,90 @@ export async function getIncidentLesson(lessonId) {
     return lessonStore.get(lessonId) || null;
 }
 /**
- * 获取统计信息
+ * 获取事件教训（带 scope 校验）
+ * 返回 null 如果教训不存在或 scope 不匹配
  */
-export async function getMemoryStats() {
-    const byType = {
-        corrected_fact: factStore.size,
-        rejected_hypothesis: rejectionStore.size,
-        incident_lesson: lessonStore.size,
-        recovery_recipe: recipeStore.size,
-    };
+export async function getIncidentLessonWithScope(lessonId, tenant_id, project_id) {
+    const lesson = lessonStore.get(lessonId);
+    if (!lesson) {
+        return null;
+    }
+    // 强制 scope 边界检查
+    if (lesson.scope.tenant_id !== tenant_id || lesson.scope.project_id !== project_id) {
+        return null;
+    }
+    return lesson;
+}
+/**
+ * 获取统计信息（按 scope 过滤）
+ */
+export async function getMemoryStats(tenant_id, project_id) {
+    // 如果没有提供 scope，返回空统计（安全默认）
+    if (!tenant_id || !project_id) {
+        return {
+            total_proposals: 0,
+            by_type: {
+                corrected_fact: 0,
+                rejected_hypothesis: 0,
+                incident_lesson: 0,
+                recovery_recipe: 0,
+            },
+            by_status: {},
+            active_lessons: 0,
+            active_recipes: 0,
+        };
+    }
+    // 按 scope 过滤统计
+    let filteredProposals = 0;
     const byStatus = {};
     for (const proposal of proposalStore.values()) {
-        byStatus[proposal.status] = (byStatus[proposal.status] || 0) + 1;
+        if (proposal.scope.tenant_id === tenant_id &&
+            proposal.scope.project_id === project_id) {
+            filteredProposals++;
+            byStatus[proposal.status] = (byStatus[proposal.status] || 0) + 1;
+        }
+    }
+    // 统计各类型（按 scope 过滤）
+    let factCount = 0;
+    for (const fact of factStore.values()) {
+        if (fact.scope.tenant_id === tenant_id && fact.scope.project_id === project_id) {
+            factCount++;
+        }
+    }
+    let rejectionCount = 0;
+    for (const rejection of rejectionStore.values()) {
+        if (rejection.scope.tenant_id === tenant_id &&
+            rejection.scope.project_id === project_id) {
+            rejectionCount++;
+        }
+    }
+    let lessonCount = 0;
+    for (const lesson of lessonStore.values()) {
+        if (lesson.scope.tenant_id === tenant_id &&
+            lesson.scope.project_id === project_id) {
+            lessonCount++;
+        }
+    }
+    let recipeCount = 0;
+    for (const recipe of recipeStore.values()) {
+        // Recipe 支持全局可见
+        const scopeMatch = recipe.scope.is_global ||
+            (recipe.scope.tenant_id === tenant_id && recipe.scope.project_id === project_id);
+        if (scopeMatch) {
+            recipeCount++;
+        }
     }
     return {
-        total_proposals: proposalStore.size,
-        by_type: byType,
+        total_proposals: filteredProposals,
+        by_type: {
+            corrected_fact: factCount,
+            rejected_hypothesis: rejectionCount,
+            incident_lesson: lessonCount,
+            recovery_recipe: recipeCount,
+        },
         by_status: byStatus,
-        active_lessons: lessonStore.size,
-        active_recipes: recipeStore.size,
+        active_lessons: lessonCount,
+        active_recipes: recipeCount,
     };
 }
 /**

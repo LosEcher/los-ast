@@ -8,7 +8,7 @@ export default async function scanRoutes(fastify) {
             description: '执行代码扫描',
             body: {
                 type: 'object',
-                required: ['scope', 'project', 'rootDir'],
+                required: ['project', 'rootDir'],
                 properties: {
                     scope: {
                         type: 'object',
@@ -24,6 +24,7 @@ export default async function scanRoutes(fastify) {
                     include: { type: 'array', items: { type: 'string' } },
                     ignore: { type: 'array', items: { type: 'string' } },
                     includeStats: { type: 'boolean' },
+                    deterministic: { type: 'boolean' },
                 },
             },
             response: {
@@ -43,7 +44,7 @@ export default async function scanRoutes(fastify) {
             },
         },
     }, async (request, reply) => {
-        const { project, rootDir, include, ignore, includeStats } = request.body;
+        const { project, rootDir, include, ignore, includeStats, deterministic } = request.body;
         // 验证必填字段
         if (!project || typeof project !== 'string') {
             throw new ValidationError('INVALID_PROJECT', 'project must be a non-empty string');
@@ -61,6 +62,7 @@ export default async function scanRoutes(fastify) {
             include,
             ignore,
             includeStats: includeStats ?? false,
+            deterministic,
             signal,
         });
         // 检查响应大小限制（硬约束 #4）
