@@ -8,7 +8,12 @@ import { createTwoFilesPatch } from 'diff'
 import { languageFromFilePath, registerLanguages } from './languages.mjs'
 import { defaultParseCache } from './parse-cache.mjs'
 
-function toIsoNow() {
+// 默认使用 Unix epoch，确保机器输出默认可稳定消费
+// 只有在显式指定非确定性模式时才使用当前时间（当前未使用场景）
+function toIsoNow(deterministic = true) {
+  if (deterministic) {
+    return '1970-01-01T00:00:00.000Z'
+  }
   return new Date().toISOString()
 }
 
@@ -59,13 +64,17 @@ function passesConstraints(node, constraints) {
   return true
 }
 
-function fingerprintFor({ ruleId, file, range, proposedReplacement }) {
+function fingerprintFor({ ruleId, file, range, proposedReplacement, deterministic = false }) {
   const base = [
     String(ruleId),
     String(file),
     `${range.start.index}-${range.end.index}`,
     proposedReplacement == null ? '' : String(proposedReplacement),
   ].join('\n')
+  if (deterministic) {
+    // Use truncated hash for deterministic mode (first 16 chars)
+    return crypto.createHash('sha256').update(base).digest('hex').slice(0, 32)
+  }
   return crypto.createHash('sha256').update(base).digest('hex')
 }
 
@@ -79,6 +88,16 @@ function validateNoOverlap(edits) {
     }
   }
   return sorted
+}
+
+/**
+ * 确定性排序 - 按文件路径、行号、列号排序
+ * 用于 scan、fix、explainAtPosition 的结果排序
+ */
+function deterministicSort(a, b) {
+  if (a.file !== b.file) return a.file.localeCompare(b.file)
+  if (a.range.start.line !== b.range.start.line) return a.range.start.line - b.range.start.line
+  return a.range.start.column - b.range.start.column
 }
 
 export async function discoverFiles({ rootDir, include, ignore }) {
@@ -102,13 +121,30 @@ export async function scan({
   rules,
   parseCache = defaultParseCache,
   includeStats = false,
+  signal,
+  deterministic = false,
 }) {
   registerLanguages()
+
+  // 检查取消信号
+  if (signal?.aborted) {
+    const error = new Error('Scan cancelled by client')
+    error.name = 'AbortError'
+    error.code = 'ABORTED'
+    throw error
+  }
 
   const files = await discoverFiles({ rootDir, include, ignore })
   const findings = []
 
   for (const file of files) {
+    // 检查取消信号
+    if (signal?.aborted) {
+      const error = new Error('Scan cancelled by client')
+      error.name = 'AbortError'
+      error.code = 'ABORTED'
+      throw error
+    }
     const language = languageFromFilePath(file)
     if (!language) continue
 
@@ -132,11 +168,11 @@ export async function scan({
           ? renderReplacement(rule.fix.replace, node, rule.fix.joinBy)
           : null
 
-        const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement })
+        const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement, deterministic })
         findings.push({
           tool: 'los-ast',
           version: 0,
-          timestamp: toIsoNow(),
+          timestamp: toIsoNow(deterministic),
           project,
           ruleFile: rule.ruleFile || rule.__file || null,
           ruleId: rule.id,
@@ -152,6 +188,11 @@ export async function scan({
         })
       }
     }
+  }
+
+  // Sort findings deterministically if requested
+  if (deterministic) {
+    findings.sort(deterministicSort)
   }
 
   const res = { filesScanned: files.length, findings }
@@ -170,6 +211,7 @@ export async function fix({
   maxChanges = 20,
   parseCache = defaultParseCache,
   includeStats = false,
+  deterministic = false,
 }) {
   if (apply && dryRun) throw new Error('invalid options: --apply cannot be combined with --dry-run')
   if (!apply && !dryRun) dryRun = true
@@ -244,11 +286,11 @@ export async function fix({
 
     for (let i = 0; i < editMeta.length; i++) {
       const { rule, range, excerpt, proposedReplacement } = editMeta[i]
-      const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement })
+      const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement, deterministic })
       results.push({
         tool: 'los-ast',
         version: 0,
-        timestamp: toIsoNow(),
+        timestamp: toIsoNow(deterministic),
         project,
         ruleFile: rule.ruleFile || rule.__file || null,
         ruleId: rule.id,
@@ -267,6 +309,11 @@ export async function fix({
     }
   }
 
+  // Sort results deterministically if requested
+  if (deterministic) {
+    results.sort(deterministicSort)
+  }
+
   const res = { filesScanned: files.length, changesApplied: results.length, results }
   if (includeStats) res.parseCache = parseCache.snapshotStats()
   return res
@@ -280,6 +327,7 @@ export async function explainAtPosition({
   column,
   parseCache = defaultParseCache,
   includeStats = false,
+  deterministic = false,
 }) {
   registerLanguages()
 
@@ -299,7 +347,7 @@ export async function explainAtPosition({
         (line > r.start.line || (line === r.start.line && column >= r.start.column)) &&
         (line < r.end.line || (line === r.end.line && column <= r.end.column))
       if (!inLine) continue
-      const fingerprint = fingerprintFor({ ruleId: rule.id, file, range: r, proposedReplacement: null })
+      const fingerprint = fingerprintFor({ ruleId: rule.id, file, range: r, proposedReplacement: null, deterministic })
       matches.push({
         ruleFile: rule.ruleFile || rule.__file || null,
         ruleId: rule.id,
@@ -310,6 +358,16 @@ export async function explainAtPosition({
         fingerprint,
       })
     }
+  }
+
+  // Sort matches deterministically if requested
+  // explainAtPosition 按 ruleId 排序（因为是单文件），区别于 scan/fix 按 file 排序
+  if (deterministic) {
+    matches.sort((a, b) => {
+      if (a.ruleId !== b.ruleId) return a.ruleId.localeCompare(b.ruleId)
+      if (a.range.start.line !== b.range.start.line) return a.range.start.line - b.range.start.line
+      return a.range.start.column - b.range.start.column
+    })
   }
 
   const res = {

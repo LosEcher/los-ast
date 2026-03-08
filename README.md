@@ -10,8 +10,38 @@ los-ast 是一个面向多代码库的通用 AST 扫描与改写工具，用于�
 npm install
 ```
 
-### 对项目进行扫描（只读）
+### 快速扫描（推荐方式）
 
+**使用 --root 模式（无需配置，默认推荐）**
+```bash
+npm run los-ast -- scan --root /path/to/your/project --include "src/**/*.ts" --format jsonl
+```
+
+### 配置项目适配器（可选）
+
+项目适配器为常用项目提供便捷的预配置，适合团队协作场景：
+
+**方式1: 环境变量**
+```bash
+export LOS_AST_PROJECT_CANTOOL_ROOT=/path/to/cantool
+npm run los-ast -- scan --project cantool --format jsonl
+```
+
+**方式2: 配置文件**
+创建 `los-ast.config.json`：
+```json
+{
+  "projects": {
+    "cantool": {
+      "rootDir": "/path/to/cantool",
+      "include": ["src/**/*.rs", "frontend/src/**/*.ts"],
+      "ruleGlobs": ["rules/projects/cantool/**/*.yml"]
+    }
+  }
+}
+```
+
+**使用适配器扫描**
 ```bash
 npm run los-ast -- scan --project cantool --format jsonl
 ```
@@ -33,12 +63,26 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 - 架构说明：[architecture.md](docs/architecture.md)
 - 生态调研：[tooling-landscape.md](docs/research/tooling-landscape.md)
 - AI 使用手册：[AI_USAGE_GUIDE.md](docs/ai/AI_USAGE_GUIDE.md)
+- API 使用示例：[API_USAGE.md](API_USAGE.md)
+- 两周优化计划：[optimization-plan-2weeks.md](docs/optimization-plan-2weeks.md)
+- lsclaw 集成执行方案：[lsclaw-integration-execution-plan.md](docs/lsclaw-integration-execution-plan.md)
+- VPS Agent Web 集成：[vps-agent-web-integration.md](docs/api/vps-agent-web-integration.md)
+- VPS Agent Web 对接清单：[vps-agent-web-contract-checklist.md](docs/api/vps-agent-web-contract-checklist.md)
+- VPS Agent Web 请求示例与错误映射：[vps-agent-web-examples-errors.md](docs/api/vps-agent-web-examples-errors.md)
 - 输出格式（JSONL）：[OUTPUT_SCHEMA.md](docs/ai/OUTPUT_SCHEMA.md)
 - 规则编写规范：[RULE_AUTHORING.md](docs/rules/RULE_AUTHORING.md)
 - 项目适配器：
   - [cantool.md](docs/adapters/cantool.md)
   - [lsclaw.md](docs/adapters/lsclaw.md)
   - [fullstackframe.md](docs/adapters/fullstackframe.md)
+
+## 部署入口
+
+- 开发编排（仓库根目录）：`docker-compose.yml`
+- 部署编排（deploy 目录）：`deploy/docker-compose.yml`
+- API 镜像构建文件：
+  - `packages/api/Dockerfile`
+  - `deploy/Dockerfile`
 
 ## 目录结构
 

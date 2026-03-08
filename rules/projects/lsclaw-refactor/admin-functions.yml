@@ -1,0 +1,8 @@
+id: lsclaw-refactor.admin-functions
+language: JavaScript
+severity: info
+message: "Admin page function"
+rule:
+  any:
+    - pattern: function $NAME() { $$$BODY }
+    - pattern: async function $NAME() { $$$BODY }

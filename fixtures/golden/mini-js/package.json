@@ -1,0 +1,9 @@
+{
+  "name": "mini-js-sample",
+  "version": "1.0.0",
+  "description": "Minimal JavaScript project for los-ast validation",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo 'No tests'"
+  }
+}

@@ -1,4 +1,28 @@
-export function toJsonLines(records) {
+/**
+ * 深排序对象键 - 用于确定性 JSON 输出
+ * 递归地对所有嵌套对象的键进行排序
+ */
+function deepSortKeys(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(deepSortKeys)
+  }
+
+  const sorted = {}
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = deepSortKeys(obj[key])
+  }
+  return sorted
+}
+
+export function toJsonLines(records, deterministic = false) {
+  if (deterministic) {
+    // Deep sort keys for deterministic output
+    return records.map((r) => JSON.stringify(deepSortKeys(r))).join('\n') + (records.length ? '\n' : '')
+  }
   return records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '')
 }
 

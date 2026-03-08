@@ -1,0 +1,24 @@
+{
+  "description": "Expected scan output for cantool-sample (Rust)",
+  "project": "cantool-sample",
+  "filesScanned": 2,
+  "expectedFindings": {
+    "patterns": [
+      {
+        "ruleId": "no-unwrap",
+        "messagePattern": "unwrap",
+        "minimumOccurrences": 1
+      },
+      {
+        "ruleId": "unused-function",
+        "messagePattern": "unused_helper",
+        "minimumOccurrences": 1
+      }
+    ],
+    "filesAffected": ["src/main.rs", "src/lib.rs"]
+  },
+  "invariants": {
+    "tool": "los-ast",
+    "language": "rust"
+  }
+}

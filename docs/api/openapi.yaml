@@ -1,0 +1,1035 @@
+openapi: 3.0.3
+info:
+  title: los-ast API
+  description: |
+    los-ast 服务化 API - 代码智能分析内核的 HTTP façade
+
+    ## 硬约束清单
+    1. **P0 Scope Freeze**: Core 稳定能力固定为 `/healthz/*`, `/scan`, `/discover/symbols`
+    2. **Core/API 硬边界**: Core 只返回领域错误，API 负责协议转换
+    3. **Scope 验证**: 生产环境强制完整 scope，拒绝 `mode: local`
+    4. **扫描限制**: 最大 1000 文件 / 10MB 响应 / 30秒超时
+    5. **取消语义**: 区分 client disconnect vs server timeout
+
+  version: 1.0.0
+  contact:
+    name: los-ast Team
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /healthz/live:
+    get:
+      summary: 存活检查
+      description: |
+        服务存活检查端点。返回服务是否正在运行。
+        此端点不检查依赖服务（如 Core 加载状态）。
+      tags:
+        - Health
+      responses:
+        '200':
+          description: 服务存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: alive
+                timestamp: "2026-03-07T12:00:00.000Z"
+
+  /healthz/ready:
+    get:
+      summary: 就绪检查
+      description: |
+        服务就绪检查端点。检查 Core 模块是否已完全加载。
+        用于 Kubernetes readiness probe。
+      tags:
+        - Health
+      responses:
+        '200':
+          description: 服务就绪，Core 已加载
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: ready
+                timestamp: "2026-03-07T12:00:00.000Z"
+                version: "1.0.0"
+        '503':
+          description: 服务未就绪，Core 加载中或失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: unavailable
+                timestamp: "2026-03-07T12:00:00.000Z"
+
+  /scan:
+    post:
+      summary: 执行代码扫描
+      description: |
+        同步扫描代码库，返回发现的 issues。
+
+        ## 限制
+        - 最大文件数：1000（可配置）
+        - 最大响应大小：10MB（可配置）
+        - 最大执行时间：30秒（可配置）
+
+        ## 取消语义
+        - Client Disconnect: HTTP 连接断开时扫描终止
+        - Server Timeout: 超过 `maxDurationMs` 返回 408
+
+        ## Scope 要求
+        - 生产环境：必须提供完整的 `tenant_id`, `project_id`, `actor_id`
+        - 生产环境：`mode: 'local'` 会被拒绝（403）
+        - 开发环境：允许 `mode: 'local'` 简化调试
+      tags:
+        - Scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+            examples:
+              minimal:
+                summary: 最小请求
+                value:
+                  scope:
+                    tenant_id: "tenant-001"
+                    project_id: "project-001"
+                    actor_id: "actor-001"
+                  project: "my-project"
+                  rootDir: "/path/to/code"
+              withOptions:
+                summary: 完整选项
+                value:
+                  scope:
+                    tenant_id: "tenant-001"
+                    project_id: "project-001"
+                    actor_id: "actor-001"
+                    mode: "service"
+                  project: "my-project"
+                  rootDir: "/path/to/code"
+                  include:
+                    - "src/**/*.ts"
+                    - "lib/**/*.js"
+                  ignore:
+                    - "node_modules/**"
+                    - "dist/**"
+                  includeStats: true
+      responses:
+        '200':
+          description: 扫描成功
+          headers:
+            X-Request-ID:
+              description: 请求追踪 ID
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validation:
+                  summary: 参数验证失败
+                  value:
+                    error:
+                      category: "VALIDATION"
+                      code: "INVALID_PROJECT"
+                      message: "project must be a non-empty string"
+                      requestId: "req-123"
+                      timestamp: "2026-03-07T12:00:00.000Z"
+                      retryable: false
+        '403':
+          description: 生产环境拒绝 local 模式
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                localForbidden:
+                  summary: Local 模式被禁止
+                  value:
+                    error:
+                      category: "SCOPE"
+                      code: "LOCAL_SCOPE_FORBIDDEN"
+                      message: "scope.mode=local is not allowed in production"
+                      requestId: "req-123"
+                      timestamp: "2026-03-07T12:00:00.000Z"
+                      retryable: false
+        '408':
+          description: 扫描超时
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                timeout:
+                  summary: 扫描超时
+                  value:
+                    error:
+                      category: "TIMEOUT"
+                      code: "SCAN_TIMEOUT"
+                      message: "Scan exceeded maximum duration of 30000ms"
+                      requestId: "req-123"
+                      timestamp: "2026-03-07T12:00:00.000Z"
+                      retryable: true
+                      details:
+                        limit_ms: 30000
+                        elapsed_ms: 30001
+        '413':
+          description: 扫描结果过大
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                tooLarge:
+                  summary: 响应过大
+                  value:
+                    error:
+                      category: "SCAN_TOO_LARGE"
+                      code: "RESPONSE_TOO_LARGE"
+                      message: "Response size exceeds 10MB limit"
+                      requestId: "req-123"
+                      timestamp: "2026-03-07T12:00:00.000Z"
+                      retryable: true
+                      details:
+                        limit_bytes: 10485760
+                        actual_bytes: 15242880
+
+  /discover/symbols:
+    post:
+      summary: 发现代码符号
+      description: |
+        发现代码库中的符号定义（函数、类、接口、变量、类型）。
+
+        ## 限制
+        - 最大返回数：1000（默认 100）
+        - 结果可能被截断（`truncated: true`）
+
+        ## Scope 要求
+        同 `/scan` 端点
+      tags:
+        - Discover
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoverSymbolsRequest'
+            examples:
+              minimal:
+                summary: 最小请求
+                value:
+                  scope:
+                    tenant_id: "tenant-001"
+                    project_id: "project-001"
+                    actor_id: "actor-001"
+                  rootDir: "/path/to/code"
+              withLimit:
+                summary: 带限制
+                value:
+                  scope:
+                    tenant_id: "tenant-001"
+                    project_id: "project-001"
+                    actor_id: "actor-001"
+                  rootDir: "/path/to/code"
+                  include:
+                    - "src/**/*.ts"
+                  limit: 500
+      responses:
+        '200':
+          description: 发现成功
+          headers:
+            X-Request-ID:
+              description: 请求追踪 ID
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoverSymbolsResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals:
+    get:
+      summary: 查询审批项
+      description: |
+        VPS Agent Web 对接前缀下的审批查询接口。
+        请求会按 scope 做租户隔离。
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, expired]
+        - name: item_type
+          in: query
+          schema:
+            type: string
+            enum: [recovery_action, code_patch, config_change, recipe_activation]
+        - name: risk_level
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalListResponse'
+        '400':
+          description: 参数错误或缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: 创建审批项
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApprovalRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalItemEnvelope'
+        '400':
+          description: 参数错误或 scope 不完整
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals/{id}:
+    get:
+      summary: 获取审批项详情
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalItemEnvelope'
+        '404':
+          description: 审批项不存在或无权限访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals/{id}/process:
+    post:
+      summary: 处理审批项
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ScopeQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessApprovalRequest'
+      responses:
+        '200':
+          description: 处理成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalItemEnvelope'
+        '400':
+          description: 处理失败或参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/approvals/stats:
+    get:
+      summary: 获取审批统计
+      tags:
+        - VPS Agent Web
+      x-stability: beta
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalStatsResponse'
+        '400':
+          description: 缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/incidents/stats/store:
+    get:
+      summary: 获取 Incident 存储统计
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericStatsResponse'
+        '400':
+          description: 缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/incidents/stats/collection:
+    get:
+      summary: 获取 Incident 采集统计
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericStatsResponse'
+        '400':
+          description: 缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/attribution/analyze:
+    post:
+      summary: 执行归因分析
+      description: |
+        当前实现返回模拟分析结果，建议灰度使用。
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttributionAnalyzeRequest'
+      responses:
+        '200':
+          description: 分析成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttributionAnalyzeResponse'
+        '400':
+          description: 参数错误或缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vps-agent-web/recovery/stats:
+    get:
+      summary: 获取恢复统计
+      tags:
+        - VPS Agent Web
+      x-stability: preview
+      x-migration-target: VPS Agent Web
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryStatsResponse'
+        '400':
+          description: 缺少 scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [alive, ready, unavailable]
+          description: 健康状态
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 时间戳
+        version:
+          type: string
+          description: API 版本（仅 ready 状态）
+
+    Scope:
+      type: object
+      description: |
+        请求范围标识。生产环境需要完整 scope，开发环境允许 local 模式。
+      properties:
+        tenant_id:
+          type: string
+          description: 租户 ID（生产环境必填）
+        project_id:
+          type: string
+          description: 项目 ID（生产环境必填）
+        actor_id:
+          type: string
+          description: 执行者 ID（生产环境必填）
+        mode:
+          type: string
+          enum: [local, service]
+          description: |
+            执行模式。`local` 仅在开发环境允许，生产环境会被拒绝。
+      required:
+        - tenant_id
+        - project_id
+        - actor_id
+
+    ScanRequest:
+      type: object
+      required:
+        - scope
+        - project
+        - rootDir
+      properties:
+        scope:
+          $ref: '#/components/schemas/Scope'
+        project:
+          type: string
+          minLength: 1
+          description: 项目名称
+        rootDir:
+          type: string
+          minLength: 1
+          description: 代码根目录路径
+        include:
+          type: array
+          items:
+            type: string
+          description: 包含模式（glob）
+        ignore:
+          type: array
+          items:
+            type: string
+          description: 忽略模式（glob）
+        includeStats:
+          type: boolean
+          description: 是否包含解析缓存统计
+          default: false
+
+    ScanResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            filesScanned:
+              type: integer
+              description: 扫描的文件数
+            findings:
+              type: array
+              items:
+                $ref: '#/components/schemas/Finding'
+            parseCache:
+              type: object
+              description: 解析缓存统计（仅 includeStats=true）
+              properties:
+                hits:
+                  type: integer
+                misses:
+                  type: integer
+                size:
+                  type: integer
+
+    Finding:
+      type: object
+      required:
+        - tool
+        - version
+        - timestamp
+        - project
+        - ruleId
+        - severity
+        - message
+        - file
+        - language
+        - range
+        - fingerprint
+      properties:
+        tool:
+          type: string
+          enum: [los-ast]
+        version:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        project:
+          type: string
+        ruleFile:
+          type: string
+          nullable: true
+        ruleId:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, error]
+        message:
+          type: string
+        file:
+          type: string
+        language:
+          type: string
+        range:
+          $ref: '#/components/schemas/Range'
+        excerpt:
+          type: string
+        hasFix:
+          type: boolean
+        proposedReplacement:
+          type: string
+          nullable: true
+        fingerprint:
+          type: string
+
+    Range:
+      type: object
+      required:
+        - start
+        - end
+      properties:
+        start:
+          $ref: '#/components/schemas/Position'
+        end:
+          $ref: '#/components/schemas/Position'
+
+    Position:
+      type: object
+      required:
+        - line
+        - column
+        - index
+      properties:
+        line:
+          type: integer
+          minimum: 1
+        column:
+          type: integer
+          minimum: 0
+        index:
+          type: integer
+          minimum: 0
+
+    DiscoverSymbolsRequest:
+      type: object
+      required:
+        - scope
+        - rootDir
+      properties:
+        scope:
+          $ref: '#/components/schemas/Scope'
+        rootDir:
+          type: string
+          minLength: 1
+        include:
+          type: array
+          items:
+            type: string
+        ignore:
+          type: array
+          items:
+            type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+
+    DiscoverSymbolsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            symbols:
+              type: array
+              items:
+                $ref: '#/components/schemas/SymbolInfo'
+            total:
+              type: integer
+            truncated:
+              type: boolean
+
+    SymbolInfo:
+      type: object
+      required:
+        - name
+        - kind
+        - file
+        - range
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [function, class, interface, variable, type]
+        file:
+          type: string
+        range:
+          $ref: '#/components/schemas/Range'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - category
+            - code
+            - message
+            - requestId
+            - timestamp
+            - retryable
+          properties:
+            category:
+              type: string
+              enum: [VALIDATION, SCOPE, TIMEOUT, SCAN_TOO_LARGE, NOT_FOUND, INTERNAL]
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+            retryable:
+              type: boolean
+            details:
+              type: object
+              additionalProperties: true
+
+    CreateApprovalRequest:
+      type: object
+      required:
+        - item_type
+        - item_id
+        - title
+        - description
+        - risk_level
+        - timeout_seconds
+        - scope
+      properties:
+        item_type:
+          type: string
+          enum: [recovery_action, code_patch, config_change, recipe_activation]
+        item_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        timeout_seconds:
+          type: integer
+          minimum: 1
+        scope:
+          $ref: '#/components/schemas/Scope'
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ProcessApprovalRequest:
+      type: object
+      required:
+        - action
+        - actor_id
+      properties:
+        action:
+          type: string
+          enum: [approve, reject]
+        actor_id:
+          type: string
+        comment:
+          type: string
+
+    ApprovalItem:
+      type: object
+      required:
+        - approval_id
+        - item_type
+        - item_id
+        - title
+        - description
+        - risk_level
+        - status
+        - timeout_at
+        - scope
+        - created_at
+        - updated_at
+        - version
+      properties:
+        approval_id:
+          type: string
+        item_type:
+          type: string
+          enum: [recovery_action, code_patch, config_change, recipe_activation]
+        item_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [pending, approved, rejected, expired]
+        requester:
+          type: object
+          properties:
+            actor_id:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+        approver:
+          type: object
+          nullable: true
+          properties:
+            actor_id:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+            comment:
+              type: string
+        timeout_at:
+          type: string
+          format: date-time
+        scope:
+          type: object
+          required:
+            - tenant_id
+            - project_id
+          properties:
+            tenant_id:
+              type: string
+            project_id:
+              type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+
+    ApprovalItemEnvelope:
+      type: object
+      required:
+        - approval
+      properties:
+        approval:
+          $ref: '#/components/schemas/ApprovalItem'
+
+    ApprovalListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalItem'
+        total:
+          type: integer
+        has_more:
+          type: boolean
+        next_offset:
+          type: integer
+
+    ApprovalStats:
+      type: object
+      required:
+        - total
+        - by_status
+        - by_risk_level
+        - by_type
+        - avg_decision_time_seconds
+      properties:
+        total:
+          type: integer
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+        by_risk_level:
+          type: object
+          additionalProperties:
+            type: integer
+        by_type:
+          type: object
+          additionalProperties:
+            type: integer
+        avg_decision_time_seconds:
+          type: number
+
+    ApprovalStatsResponse:
+      type: object
+      required:
+        - stats
+      properties:
+        stats:
+          $ref: '#/components/schemas/ApprovalStats'
+
+    GenericStatsResponse:
+      type: object
+      additionalProperties: true
+      description: 兼容当前实现的统计对象返回（preview 阶段）
+
+    AttributionAnalyzeRequest:
+      type: object
+      required:
+        - incident_id
+        - evidence_bundle_id
+      properties:
+        incident_id:
+          type: string
+        evidence_bundle_id:
+          type: string
+
+    AttributionAnalyzeResponse:
+      type: object
+      required:
+        - analysis
+      properties:
+        analysis:
+          type: object
+          additionalProperties: true
+
+    RecoveryStatsResponse:
+      type: object
+      required:
+        - stats
+      properties:
+        stats:
+          type: object
+          additionalProperties: true
+
+  parameters:
+    ScopeQuery:
+      name: scope
+      in: query
+      required: true
+      description: URL 编码 JSON 字符串，需包含 tenant_id/project_id，部分写接口需要 actor_id
+      schema:
+        type: string
+
+  headers:
+    X-Request-ID:
+      description: 请求追踪 ID，用于端到端追踪
+      schema:
+        type: string
+
+  responses:
+    NotFound:
+      description: 资源未找到
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: 内部服务器错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

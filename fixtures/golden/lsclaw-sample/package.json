@@ -1,0 +1,16 @@
+{
+  "name": "lsclaw-sample",
+  "version": "1.0.0",
+  "description": "Medium TypeScript project for los-ast validation",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
