@@ -21,7 +21,6 @@ export async function initializeCore() {
   // 如加载默认规则文件等
 
   coreReady = true;
-  console.log('[CORE] Core module initialized and ready');
 }
 
 /**

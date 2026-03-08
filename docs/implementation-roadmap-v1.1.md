@@ -521,7 +521,7 @@ await losMemory.commit({ /* 审批后 */ });
 | 架构边界说明书 | `docs/architecture-boundary-spec.md` | 四项目职责边界 |
 | 本实施路线图 | `docs/implementation-roadmap-v1.1.md` | 实施主文档 |
 | API 规范 | `docs/api/openapi.yaml` | OpenAPI 3.0 |
-| 部署手册 | `docs/ops/deployment-guide.md` | K8s 部署（Milestone D） |
+| 部署入口 | `deploy/docker-compose.yml` | 当前部署编排入口（K8s 规划待补充） |
 
 ---
 

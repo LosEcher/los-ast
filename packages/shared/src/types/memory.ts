@@ -3,6 +3,8 @@
  * Phase 1.2: 经验沉淀存储
  */
 
+import type { Scope } from './api.js';
+
 export type ProposalType =
   | 'corrected_fact'
   | 'rejected_hypothesis'
@@ -26,6 +28,7 @@ export interface Proposal {
   content: unknown;
   source: ProposalSource;
   status: ProposalStatus;
+  scope: Scope;
   validation?: {
     validated_by: string[];
     validated_at?: string;
@@ -144,6 +147,7 @@ export interface CreateProposalRequest {
   proposal_type: ProposalType;
   content: unknown;
   source: ProposalSource;
+  scope: Scope;
   idempotency_key?: string;
 }
 

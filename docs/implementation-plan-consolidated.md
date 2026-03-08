@@ -69,15 +69,9 @@ los-ast/
 │       └── mini-js/                   # 微型JS项目
 │
 ├── deploy/
-│   ├── docker-compose.yml             # 本地开发编排
-│   ├── docker-compose.test.yml        # 测试环境
-│   └── k8s/                           # K8s清单 (Milestone D)
-│       ├── deployment.yaml
-│       ├── service.yaml
-│       └── hpa.yaml
-│
-├── scripts/
-│   └── smoke-test.sh                  # 冒烟测试
+│   ├── docker-compose.yml             # 部署编排
+│   ├── Dockerfile                     # API 镜像构建
+│   └── init.sql                       # 初始化脚本
 │
 └── docs/
     ├── architecture-boundary-spec.md  # 架构边界说明书

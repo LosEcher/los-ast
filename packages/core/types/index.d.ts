@@ -24,12 +24,44 @@ export interface RuleFile {
 }
 
 export interface Rule {
-  name: string;
-  pattern: string;
-  message?: string;
+  id: string;
+  name?: string;
+  rule: {
+    pattern?: string;
+    kind?: string;
+    regex?: string;
+    [key: string]: unknown;
+  };
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  language: string;
+  fix?: {
+    replace: string;
+    joinBy?: string;
+  };
+  constraints?: Array<{
+    name: string;
+    regex: string;
+    flags?: string;
+    mode?: 'any' | 'all';
+  }>;
+  ruleFile?: string;
+  __file?: string;
 }
 
-export declare function loadRuleFiles(ruleDir: string): Promise<Rule[]>;
+export declare function loadRuleFiles(ruleGlobs: string[]): Promise<Rule[]>;
+
+// 范围类型
+export interface Position {
+  line: number;
+  column: number;
+  index: number;
+}
+
+export interface Range {
+  start: Position;
+  end: Position;
+}
 
 // 扫描模块
 export interface ScanOptions {
@@ -40,25 +72,38 @@ export interface ScanOptions {
   includeStats?: boolean;
   signal?: AbortSignal;
   rules?: Rule[];
+  deterministic?: boolean;
 }
 
 export interface Finding {
-  filePath: string;
-  line: number;
-  column: number;
-  message: string;
-  rule: string;
+  tool: string;
+  version: number;
+  timestamp: string;
+  project: string;
+  ruleFile: string | null;
+  ruleId: string;
   severity: 'error' | 'warning' | 'info';
+  message: string;
+  file: string;
+  language: string;
+  range: Range;
+  excerpt: string;
+  hasFix: boolean;
+  proposedReplacement: string | null;
+  fingerprint: string;
+}
+
+export interface ParseCacheStats {
+  hits: number;
+  misses: number;
+  entries: number;
+  maxEntries: number;
 }
 
 export interface ScanResult {
   filesScanned: number;
   findings: Finding[];
-  parseCache?: {
-    hits: number;
-    misses: number;
-    size: number;
-  };
+  parseCache?: ParseCacheStats;
 }
 
 export declare function discoverFiles(options: {
@@ -75,50 +120,90 @@ export interface FixOptions {
   rootDir: string;
   include?: string[];
   ignore?: string[];
+  rules?: Rule[];
+  dryRun?: boolean;
+  apply?: boolean;
+  maxChanges?: number;
+  parseCache?: ParseCache;
+  includeStats?: boolean;
+  deterministic?: boolean;
+}
+
+export interface FixResultItem {
+  tool: string;
+  version: number;
+  timestamp: string;
+  project: string;
+  ruleFile: string | null;
+  ruleId: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  file: string;
+  language: string;
+  range: Range;
+  excerpt: string;
+  hasFix: boolean;
+  proposedReplacement: string;
+  diff?: string;
+  applied: boolean;
+  fingerprint: string;
 }
 
 export interface FixResult {
-  fixedFiles: string[];
-  errors: string[];
+  filesScanned: number;
+  changesApplied: number;
+  results: FixResultItem[];
+  parseCache?: ParseCacheStats;
 }
 
 export declare function fix(options: FixOptions): Promise<FixResult>;
 
 // Explain 模块
 export interface ExplainOptions {
-  filePath: string;
+  file: string;
   line: number;
   column: number;
   rootDir: string;
+  rules?: Rule[];
+  parseCache?: ParseCache;
+  includeStats?: boolean;
+  deterministic?: boolean;
+}
+
+export interface MatchInfo {
+  ruleFile: string | null;
+  ruleId: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  range: Range;
+  excerpt: string;
+  fingerprint: string;
 }
 
 export interface ExplainResult {
-  explanation: string;
-  symbols?: SymbolInfo[];
-}
-
-export interface SymbolInfo {
-  name: string;
-  kind: string;
-  location: {
-    file: string;
+  rootDir: string;
+  file: string;
+  language: string;
+  position: {
     line: number;
     column: number;
   };
+  matches: MatchInfo[];
+  parseCache?: ParseCacheStats;
 }
 
 export declare function explainAtPosition(options: ExplainOptions): Promise<ExplainResult>;
 
 // 报告模块
-export declare function toJsonLines(result: ScanResult): string;
+export declare function toJsonLines(records: unknown[], deterministic?: boolean): string;
 export declare function toMarkdownFix(result: FixResult): string;
 export declare function toMarkdownScan(result: ScanResult): string;
 
 // 解析缓存模块
 export interface ParseCache {
-  get(filePath: string): unknown | undefined;
-  set(filePath: string, value: unknown): void;
-  clear(): void;
+  parseFile(filePath: string, language: string, options?: { cacheAst?: boolean }): Promise<{ root: unknown; source: string }>;
+  invalidateFile(filePath: string): void;
+  snapshotStats(): ParseCacheStats;
 }
 
 export declare function createParseCache(): ParseCache;

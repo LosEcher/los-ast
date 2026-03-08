@@ -56,7 +56,8 @@ export interface ScanResult {
   parseCache?: {
     hits: number;
     misses: number;
-    size: number;
+    entries: number;
+    maxEntries: number;
   };
 }
 

@@ -66,11 +66,8 @@ P0 核心功能，始终启用，保证向后兼容。
 **响应**:
 ```json
 {
-  "data": {
-    "status": "alive",
-    "timestamp": "2026-03-07T12:00:00.000Z",
-    "version": "1.0.0"
-  }
+  "status": "alive",
+  "timestamp": "2026-03-07T12:00:00.000Z"
 }
 ```
 
@@ -81,11 +78,8 @@ P0 核心功能，始终启用，保证向后兼容。
 **响应**:
 ```json
 {
-  "data": {
-    "status": "ready",
-    "timestamp": "2026-03-07T12:00:00.000Z",
-    "core": { "ready": true, "version": "1.0.0" }
-  }
+  "status": "ready",
+  "timestamp": "2026-03-07T12:00:00.000Z"
 }
 ```
 
@@ -139,7 +133,7 @@ X-Request-ID: <可选，自动生成为UUID>
     "findings": [
       {
         "tool": "los-ast",
-        "version": 1,
+        "version": 0,
         "timestamp": "2026-03-07T12:00:00.000Z",
         "project": "my-project",
         "ruleFile": "rulesets/recommended.json",
@@ -161,7 +155,8 @@ X-Request-ID: <可选，自动生成为UUID>
     "parseCache": {
       "hits": 35,
       "misses": 7,
-      "size": 42
+      "entries": 42,
+      "maxEntries": 128
     }
   }
 }

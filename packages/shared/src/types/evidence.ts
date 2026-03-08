@@ -21,14 +21,24 @@ export interface CodeEvidenceBundle {
 
 /**
  * Core Finding (from @los-ast/core)
+ * Matches the actual runtime structure from @los-ast/core runner.mjs
  */
 export interface CoreFinding {
-  filePath: string;
-  line: number;
-  column: number;
-  message: string;
-  rule: string;
+  tool: string;
+  version: number;
+  timestamp: string;
+  project: string;
+  ruleFile: string | null;
+  ruleId: string;
   severity: 'error' | 'warning' | 'info';
+  message: string;
+  file: string;
+  language: string;
+  range: Range;
+  excerpt: string;
+  hasFix: boolean;
+  proposedReplacement: string | null;
+  fingerprint: string;
 }
 
 export interface EvidenceFinding extends CoreFinding {

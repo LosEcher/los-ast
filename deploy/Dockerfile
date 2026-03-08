@@ -34,7 +34,7 @@ COPY packages/api/package*.json ./packages/api/
 COPY packages/core/package*.json ./packages/core/
 COPY packages/shared/package*.json ./packages/shared/
 
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -58,7 +58,6 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy built files
 COPY --from=builder /app/packages/api/dist ./packages/api/dist
 COPY --from=builder /app/packages/core/src ./packages/core/src
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
