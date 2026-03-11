@@ -254,6 +254,47 @@ describe('API Integration Tests', () => {
       }));
     });
 
+    it('POST /scan should forward openApiComparisons to scan service', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          openApiComparisons: [
+            {
+              source: 'openapi-compare',
+              file: '/tmp/openapi.yaml',
+              baseline: 'openapi: 3.0.3\npaths: {}\n',
+              current: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        openApiComparisons: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-compare',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
+      }));
+    });
+
     it('POST /scan should forward schemaDocuments to scan service', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,

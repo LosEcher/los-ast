@@ -1,15 +1,17 @@
 import type {
   ContractArtifactFindingInput,
+  OpenApiComparisonInput,
   OpenApiDocumentInput,
   SchemaArtifactFindingInput,
   SchemaComparisonInput,
   SchemaDocumentInput,
 } from '@los-ast/shared/types';
-import { buildContractArtifactsFromOpenApi } from '../openapi-artifacts.js';
+import { buildContractArtifactsFromOpenApi, buildContractArtifactsFromOpenApiComparisons } from '../openapi-artifacts.js';
 import { buildSchemaArtifactsFromComparisons, buildSchemaArtifactsFromDocuments } from '../schema-artifacts.js';
 
 export interface ArtifactParserContext {
   openApiDocuments?: OpenApiDocumentInput[];
+  openApiComparisons?: OpenApiComparisonInput[];
   schemaDocuments?: SchemaDocumentInput[];
   schemaComparisons?: SchemaComparisonInput[];
 }
@@ -44,18 +46,27 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'missing operationId',
         'missing security on mutating operations',
         'missing success response',
+        'breaking request required-field add',
+        'breaking response field drop',
+        'breaking response field type change',
       ],
       limitations: [
         'heuristic line mapping only',
         'does not resolve remote refs',
-        'does not yet inspect field-level schema compatibility',
+        'comparison requires caller-provided baseline/current pair',
+        'comparison only inspects top-level application/json schemas',
       ],
       fixtureFiles: [
         'fixtures/artifact-parsers/openapi-minimal.yaml',
+        'fixtures/artifact-parsers/openapi-compare-baseline.yaml',
+        'fixtures/artifact-parsers/openapi-compare-current.yaml',
       ],
     },
     parse(context) {
-      return buildContractArtifactsFromOpenApi(context.openApiDocuments);
+      return [
+        ...buildContractArtifactsFromOpenApi(context.openApiDocuments),
+        ...buildContractArtifactsFromOpenApiComparisons(context.openApiComparisons),
+      ];
     },
   },
   {

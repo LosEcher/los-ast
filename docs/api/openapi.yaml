@@ -678,6 +678,32 @@ components:
                 type: string
                 enum: [yaml, json]
                 description: 可选格式提示
+        openApiComparisons:
+          type: array
+          description: >
+            可选 OpenAPI 对比输入。每个 baseline/current 对会被解析为 `findingSource=contract` 的 compatibility findings。
+          items:
+            type: object
+            required:
+              - baseline
+              - current
+            properties:
+              source:
+                type: string
+                description: OpenAPI 比较来源标识
+              file:
+                type: string
+                description: 逻辑文件名
+              baseline:
+                type: string
+                description: 基线 OpenAPI YAML/JSON 文本
+              current:
+                type: string
+                description: 当前 OpenAPI YAML/JSON 文本
+              format:
+                type: string
+                enum: [yaml, json]
+                description: 可选格式提示
         schemaDocuments:
           type: array
           description: >

@@ -20,13 +20,20 @@
   - 缺少 `operationId`
   - 变更类接口缺少 `security`
   - 缺少成功响应声明
+  - baseline/current 对比下的请求必填字段新增
+  - baseline/current 对比下的响应字段删除
+  - baseline/current 对比下的响应字段类型变化
 - 当前限制：
   - 仅做启发式定位
   - 不解析远程 `$ref`
-  - 不做字段级兼容性分析
+  - 对比依赖调用方提供 baseline/current 对
+  - 仅比较 top-level `application/json` schema
 - fixture：
   - `fixtures/artifact-parsers/openapi-minimal.yaml`
   - `fixtures/artifact-parsers/openapi-minimal.expected.json`
+  - `fixtures/artifact-parsers/openapi-compare-baseline.yaml`
+  - `fixtures/artifact-parsers/openapi-compare-current.yaml`
+  - `fixtures/artifact-parsers/openapi-compare.expected.json`
 - enable flag：
   - `ENABLE_OPENAPI_NATIVE_PARSER=true|false`
 

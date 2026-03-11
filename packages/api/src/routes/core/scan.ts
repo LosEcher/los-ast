@@ -80,6 +80,13 @@ interface ScanRequestBody {
     content: string;
     format?: 'yaml' | 'json';
   }>;
+  openApiComparisons?: Array<{
+    source?: string;
+    file?: string;
+    baseline: string;
+    current: string;
+    format?: 'yaml' | 'json';
+  }>;
   schemaDocuments?: Array<{
     source?: string;
     file?: string;
@@ -174,6 +181,20 @@ export default async function scanRoutes(fastify: FastifyInstance) {
                   source: { type: 'string' },
                   file: { type: 'string' },
                   content: { type: 'string', minLength: 1 },
+                  format: { type: 'string', enum: ['yaml', 'json'] },
+                },
+              },
+            },
+            openApiComparisons: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['baseline', 'current'],
+                properties: {
+                  source: { type: 'string' },
+                  file: { type: 'string' },
+                  baseline: { type: 'string', minLength: 1 },
+                  current: { type: 'string', minLength: 1 },
                   format: { type: 'string', enum: ['yaml', 'json'] },
                 },
               },
@@ -337,6 +358,7 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         deterministic,
         rulePack,
         openApiDocuments,
+        openApiComparisons,
         schemaDocuments,
         schemaComparisons,
       } = request.body as ScanRequestBody;
@@ -364,6 +386,7 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         includeStats: includeStats ?? false,
         deterministic,
         openApiDocuments,
+        openApiComparisons,
         schemaDocuments,
         schemaComparisons,
         contractArtifacts,

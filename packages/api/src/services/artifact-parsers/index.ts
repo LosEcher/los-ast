@@ -1,5 +1,6 @@
 import type {
   ContractArtifactFindingInput,
+  OpenApiComparisonInput,
   OpenApiDocumentInput,
   SchemaArtifactFindingInput,
   SchemaComparisonInput,
@@ -14,6 +15,7 @@ export interface ArtifactParserRuntimeConfig {
 
 export interface ArtifactParserInput {
   openApiDocuments?: OpenApiDocumentInput[];
+  openApiComparisons?: OpenApiComparisonInput[];
   schemaDocuments?: SchemaDocumentInput[];
   schemaComparisons?: SchemaComparisonInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
@@ -43,6 +45,7 @@ export function parseArtifactInputs(input: ArtifactParserInput): ParsedArtifactI
 
     const findings = profile.parse({
       openApiDocuments: input.openApiDocuments,
+      openApiComparisons: input.openApiComparisons,
       schemaDocuments: input.schemaDocuments,
       schemaComparisons: input.schemaComparisons,
     });

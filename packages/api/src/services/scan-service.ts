@@ -9,6 +9,7 @@ import type {
   FindingSource,
   ContractArtifactFindingInput,
   SchemaArtifactFindingInput,
+  OpenApiComparisonInput,
   OpenApiDocumentInput,
   SchemaComparisonInput,
   SchemaDocumentInput,
@@ -37,6 +38,7 @@ export interface ScanServiceOptions {
   includeStats?: boolean;
   deterministic?: boolean;
   openApiDocuments?: OpenApiDocumentInput[];
+  openApiComparisons?: OpenApiComparisonInput[];
   schemaDocuments?: SchemaDocumentInput[];
   schemaComparisons?: SchemaComparisonInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
@@ -228,6 +230,7 @@ export class ScanService {
       includeStats,
       deterministic,
       openApiDocuments,
+      openApiComparisons,
       schemaDocuments,
       schemaComparisons,
       contractArtifacts,
@@ -272,6 +275,7 @@ export class ScanService {
 
     const parsedArtifacts = parseArtifactInputs({
       openApiDocuments,
+      openApiComparisons,
       schemaDocuments,
       schemaComparisons,
       contractArtifacts,

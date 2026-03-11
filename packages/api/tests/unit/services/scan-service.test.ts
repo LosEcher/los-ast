@@ -193,6 +193,82 @@ describe('ScanService', () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
+    it('should derive contract compatibility findings from openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              properties:',
+              '                email: { type: string }',
+              '                nickname: { type: string }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  id: { type: string }',
+              '                  nickname: { type: string }',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [email]',
+              '              properties:',
+              '                email: { type: string }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  id: { type: integer }',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-required-add',
+        'contract/openapi-breaking-response-field-type-change',
+        'contract/openapi-breaking-response-field-drop',
+      ]);
+      expect(result.findings.every((finding) => finding.findingSource === 'contract')).toBe(true);
+    });
+
     it('should derive schema findings from schemaDocuments', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

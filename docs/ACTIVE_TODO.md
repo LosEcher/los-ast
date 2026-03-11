@@ -32,8 +32,8 @@
 
 1. 原生 contract 输入源
 - 已完成 `openApiDocuments -> contract findings` 最小闭环。
-- 当前覆盖 `operationId`、变更接口安全要求、成功响应声明 3 类基础检查。
-- 下一步扩展到更细粒度的 schema / field 语义规则。
+- 已完成最小 `openApiComparisons -> contract compatibility findings` 闭环，当前覆盖请求必填字段新增、响应字段删除、响应字段类型变化。
+- 下一步扩展到更细粒度的 schema / field 语义规则与 `$ref` 展开。
 
 2. 原生 schema 输入源
 - 已完成 `schemaDocuments -> schema findings` 最小闭环。

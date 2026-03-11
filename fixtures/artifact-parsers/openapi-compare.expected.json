@@ -1,0 +1,9 @@
+{
+  "profile": "openapi-native",
+  "findingSource": "contract",
+  "expectedRuleIds": [
+    "contract/openapi-breaking-request-required-add",
+    "contract/openapi-breaking-response-field-type-change",
+    "contract/openapi-breaking-response-field-drop"
+  ]
+}

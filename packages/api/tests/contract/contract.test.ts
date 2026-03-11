@@ -424,6 +424,80 @@ describe('API Contract Tests', () => {
       });
     });
 
+    it('POST /scan should accept openApiComparisons as native contract comparison input', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'openapi-compare',
+            ruleId: 'contract/openapi-breaking-request-required-add',
+            findingSource: 'contract',
+            severity: 'error',
+            message: 'OpenAPI operation POST /users added required request field email',
+            file: '/tmp/openapi.yaml',
+            language: 'contract',
+            range: {
+              start: { line: 1, column: 0, index: 0 },
+              end: { line: 1, column: 1, index: 1 },
+            },
+            excerpt: 'POST /users request.email',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'openapi-compare-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          include: ['packages/core/src/**/*.mjs'],
+          openApiComparisons: [
+            {
+              source: 'openapi-compare',
+              file: '/tmp/openapi.yaml',
+              baseline: 'openapi: 3.0.3\npaths: {}\n',
+              current: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        openApiComparisons: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-compare',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'contract',
+        ruleId: 'contract/openapi-breaking-request-required-add',
+        language: 'contract',
+      });
+    });
+
     it('POST /scan should accept schemaDocuments as native schema input', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,

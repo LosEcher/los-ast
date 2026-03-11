@@ -30,6 +30,7 @@ export interface ScanParams {
   includeStats?: boolean;
   deterministic?: boolean;
   openApiDocuments?: OpenApiDocumentInput[];
+  openApiComparisons?: OpenApiComparisonInput[];
   schemaDocuments?: SchemaDocumentInput[];
   schemaComparisons?: SchemaComparisonInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
@@ -40,6 +41,14 @@ export interface OpenApiDocumentInput {
   source?: string;
   file?: string;
   content: string;
+  format?: 'yaml' | 'json';
+}
+
+export interface OpenApiComparisonInput {
+  source?: string;
+  file?: string;
+  baseline: string;
+  current: string;
   format?: 'yaml' | 'json';
 }
 

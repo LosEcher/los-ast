@@ -100,4 +100,27 @@ describe('Artifact Parser Golden', () => {
     expect(result.schemaArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
     expect(expected.findingSource).toBe('schema');
   });
+
+  it('openapi comparison fixture should stay stable', () => {
+    const baseline = fs.readFileSync(path.join(fixturesDir, 'openapi-compare-baseline.yaml'), 'utf8');
+    const current = fs.readFileSync(path.join(fixturesDir, 'openapi-compare-current.yaml'), 'utf8');
+    const expected = JSON.parse(
+      fs.readFileSync(path.join(fixturesDir, 'openapi-compare.expected.json'), 'utf8')
+    ) as ExpectedFixture;
+
+    const result = parseArtifactInputs({
+      openApiComparisons: [
+        {
+          source: 'openapi-compare',
+          file: 'fixtures/artifact-parsers/openapi-compare.yaml',
+          baseline,
+          current,
+          format: 'yaml',
+        },
+      ],
+    });
+
+    expect(result.contractArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
+    expect(expected.findingSource).toBe('contract');
+  });
 });
