@@ -33,6 +33,35 @@ export ATTRIBUTION_PROVIDER=lsclaw
 - 它不改变 `los-ast` 的核心定位：`los-ast` 仍应主要承担代码扫描、结构发现、finding 输出与证据生成。
 - 若相关域长期存在并走向持久化/编排化，应优先迁往独立控制面或上层服务，而不是继续扩张到 `los-ast` 内核边界中。
 
+## 推荐集成姿势
+
+`VPS Agent Web` 与 `los-ast` 的推荐协作方式现在分两层：
+
+1. 稳定证据层：调用 `/scan` / `/discover/symbols`
+2. 迁移兼容层：调用 `/vps-agent-web/*`
+
+建议：
+
+- 代码、接口、字段证据统一走 `/scan`
+- 审批、事件、归因、恢复等兼容流程仍按 `/vps-agent-web/*` 灰度使用
+
+### 证据层输入建议
+
+- 代码治理：常规 `rules` / `rulePack`
+- 接口治理：`openApiDocuments`
+- 字段治理：`schemaDocuments`
+
+### Runtime 开关
+
+- `ENABLE_VPS_AGENT_WEB_ROUTES=true`
+- `ENABLE_OPENAPI_NATIVE_PARSER=true|false`
+- `ENABLE_SCHEMA_NATIVE_PARSER=true|false`
+
+说明：
+
+- parser 开关只影响 `/scan` 的 native input 解析
+- 不影响 `contractArtifacts` / `schemaArtifacts` passthrough
+
 ## 与 experimental 路由关系
 
 - 本路由组复用现有业务处理逻辑，属于稳定前缀封装。
@@ -44,3 +73,13 @@ export ATTRIBUTION_PROVIDER=lsclaw
 
 - 对接清单：`docs/api/vps-agent-web-contract-checklist.md`
 - 请求示例与错误码映射：`docs/api/vps-agent-web-examples-errors.md`
+- Parser Profiles：`docs/api/artifact-parser-profiles.md`
+
+## 当前验证状态
+
+2026-03-11 已完成一轮针对性自测，覆盖 `/scan` native input、parser registry、contract/integration/golden。
+
+结果：
+
+- `7` 个测试文件
+- `70` 个测试全部通过

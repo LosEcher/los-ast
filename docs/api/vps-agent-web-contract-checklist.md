@@ -3,8 +3,10 @@
 ## 1. 开关与入口
 
 - 环境变量：`ENABLE_VPS_AGENT_WEB_ROUTES=true`，`ATTRIBUTION_PROVIDER=lsclaw`
+- 原生 parser 开关：`ENABLE_OPENAPI_NATIVE_PARSER=true`、`ENABLE_SCHEMA_NATIVE_PARSER=true`
 - 路由前缀：`/vps-agent-web`
 - 兼容策略：`/experimental/*` 与 `/vps-agent-web/*` 并行
+- 稳定证据入口：`/scan`、`/discover/symbols`
 
 ## 2. 契约清单
 
@@ -33,6 +35,19 @@
 
 ## 4. 迁移步骤
 
-1. 调用方优先接入 `/vps-agent-web/*` 前缀。
-2. 迁移期双跑：同请求分别调用新旧前缀比对结果。
-3. 验证通过后只保留新前缀，旧前缀进入降级兼容。
+1. 代码/接口/字段治理优先接入 `/scan`，不要把 preview 路由当稳定扫描入口。
+2. 审批/事件/归因/恢复场景再按需接入 `/vps-agent-web/*`。
+3. 迁移期双跑：对 preview 流程同时调用 `/experimental/*` 与 `/vps-agent-web/*` 比对结果。
+4. 验证通过后保留 `/vps-agent-web/*`，旧前缀进入降级兼容。
+
+## 5. 当前已验证基线
+
+2026-03-11 已完成针对以下链路的自测：
+
+- `openApiDocuments -> contract findings`
+- `schemaDocuments -> schema findings`
+- parser runtime 开关
+- `/scan` contract / integration
+- parser golden baseline
+
+结果：`70/70` 通过。

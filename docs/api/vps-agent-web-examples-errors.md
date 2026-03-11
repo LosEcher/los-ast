@@ -5,6 +5,10 @@
 - 基础地址：`http://localhost:3000`
 - 路由前缀：`/vps-agent-web`
 - 启用开关：`ENABLE_VPS_AGENT_WEB_ROUTES=true`
+- 稳定证据入口：`/scan`
+- 原生 parser 开关：
+  - `ENABLE_OPENAPI_NATIVE_PARSER=true|false`
+  - `ENABLE_SCHEMA_NATIVE_PARSER=true|false`
 - 身份头（推荐）：
   - `Authorization: Bearer <jwt>`
 - 兼容字段：
@@ -12,6 +16,48 @@
   - POST：兼容传 `scope`，生产态建议省略并依赖 JWT 派生上下文
 
 ## 2. 请求示例（可直接联调）
+
+### 2.0 `/scan` 证据层（推荐）
+
+OpenAPI 原生输入：
+
+```bash
+curl -X POST "http://localhost:3000/scan" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LSCLAW_JWT" \
+  -d '{
+    "project": "vps-agent-web",
+    "rootDir": "/workspace/vps-agent-web",
+    "openApiDocuments": [
+      {
+        "source": "gateway-openapi",
+        "file": "openapi.yaml",
+        "content": "openapi: 3.0.3\npaths: {}",
+        "format": "yaml"
+      }
+    ]
+  }'
+```
+
+Schema 原生输入：
+
+```bash
+curl -X POST "http://localhost:3000/scan" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LSCLAW_JWT" \
+  -d '{
+    "project": "vps-agent-web",
+    "rootDir": "/workspace/vps-agent-web",
+    "schemaDocuments": [
+      {
+        "source": "main-schema",
+        "file": "schema.prisma",
+        "content": "model User { email String? }",
+        "format": "prisma"
+      }
+    ]
+  }'
+```
 
 ### 2.1 Approvals（beta）
 
