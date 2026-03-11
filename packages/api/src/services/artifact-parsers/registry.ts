@@ -67,6 +67,8 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
       checks: [
         'missing primary key',
         'nullable sensitive field',
+        'missing lifecycle default',
+        'missing audit timestamp default',
       ],
       limitations: [
         'heuristic parsing only',

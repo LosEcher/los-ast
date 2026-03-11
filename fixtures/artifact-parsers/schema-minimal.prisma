@@ -1,4 +1,6 @@
 model User {
+  status   String
+  createdAt DateTime
   email    String?
   password String
 }

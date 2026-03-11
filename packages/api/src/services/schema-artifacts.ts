@@ -2,6 +2,8 @@ import type { SchemaArtifactFindingInput, SchemaDocumentInput } from '@los-ast/s
 import { ValidationError } from '../types/errors.js';
 
 const SENSITIVE_FIELD_RE = /(email|phone|mobile|token|secret|password)/i;
+const LIFECYCLE_FIELD_RE = /^(status|state)$/i;
+const AUDIT_TIMESTAMP_RE = /^(created_at|updated_at|createdAt|updatedAt)$/i;
 
 type ParsedSchemaFormat = 'sql' | 'prisma';
 
@@ -58,7 +60,9 @@ function buildSqlArtifacts(document: SchemaDocumentInput, sourceLabel: string, f
       }
 
       const fieldName = cleanSqlIdentifier(columnMatch[1]);
+      const fieldType = columnMatch[2];
       const isNullable = !/\bnot\s+null\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine);
+      const hasDefault = /\bdefault\b/i.test(lowerLine);
       if (SENSITIVE_FIELD_RE.test(fieldName) && isNullable) {
         artifacts.push({
           source: sourceLabel,
@@ -72,6 +76,38 @@ function buildSqlArtifacts(document: SchemaDocumentInput, sourceLabel: string, f
           excerpt: normalizedLine,
           governanceDomain: ['database'],
           impactHint: 'medium',
+        });
+      }
+
+      if (LIFECYCLE_FIELD_RE.test(fieldName) && !isNullable && !hasDefault) {
+        artifacts.push({
+          source: sourceLabel,
+          ruleId: 'schema/sql-lifecycle-default',
+          severity: 'warning',
+          message: `Lifecycle column ${tableName}.${fieldName} should declare a default value`,
+          file: fileLabel,
+          language: 'schema',
+          line,
+          column: 0,
+          excerpt: normalizedLine,
+          governanceDomain: ['database', 'interface'],
+          impactHint: 'medium',
+        });
+      }
+
+      if (AUDIT_TIMESTAMP_RE.test(fieldName) && /(timestamp|datetime)/i.test(fieldType) && !hasDefault) {
+        artifacts.push({
+          source: sourceLabel,
+          ruleId: 'schema/sql-audit-timestamp-default',
+          severity: 'info',
+          message: `Audit timestamp ${tableName}.${fieldName} should declare a default value`,
+          file: fileLabel,
+          language: 'schema',
+          line,
+          column: 0,
+          excerpt: normalizedLine,
+          governanceDomain: ['database'],
+          impactHint: 'low',
         });
       }
     }
@@ -128,6 +164,8 @@ function buildPrismaArtifacts(document: SchemaDocumentInput, sourceLabel: string
       const fieldName = fieldMatch[1];
       const typeToken = fieldMatch[2];
       const isNullable = typeToken.endsWith('?') && !/@id\b/.test(rawLine);
+      const hasDefault = /@default\s*\(/.test(rawLine);
+      const hasUpdatedAt = /@updatedAt\b/.test(rawLine);
 
       if (SENSITIVE_FIELD_RE.test(fieldName) && isNullable) {
         artifacts.push({
@@ -142,6 +180,38 @@ function buildPrismaArtifacts(document: SchemaDocumentInput, sourceLabel: string
           excerpt: rawLine,
           governanceDomain: ['database'],
           impactHint: 'medium',
+        });
+      }
+
+      if (LIFECYCLE_FIELD_RE.test(fieldName) && !isNullable && !hasDefault) {
+        artifacts.push({
+          source: sourceLabel,
+          ruleId: 'schema/prisma-lifecycle-default',
+          severity: 'warning',
+          message: `Lifecycle field ${modelName}.${fieldName} should declare @default(...)`,
+          file: fileLabel,
+          language: 'schema',
+          line,
+          column: 0,
+          excerpt: rawLine,
+          governanceDomain: ['database', 'interface'],
+          impactHint: 'medium',
+        });
+      }
+
+      if (AUDIT_TIMESTAMP_RE.test(fieldName) && /^DateTime\??$/.test(typeToken) && !hasDefault && !hasUpdatedAt) {
+        artifacts.push({
+          source: sourceLabel,
+          ruleId: 'schema/prisma-audit-timestamp-default',
+          severity: 'info',
+          message: `Audit field ${modelName}.${fieldName} should declare @default(now()) or @updatedAt`,
+          file: fileLabel,
+          language: 'schema',
+          line,
+          column: 0,
+          excerpt: rawLine,
+          governanceDomain: ['database'],
+          impactHint: 'low',
         });
       }
     }

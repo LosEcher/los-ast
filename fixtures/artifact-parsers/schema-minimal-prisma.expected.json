@@ -3,6 +3,8 @@
   "findingSource": "schema",
   "expectedRuleIds": [
     "schema/prisma-sensitive-nullable",
+    "schema/prisma-lifecycle-default",
+    "schema/prisma-audit-timestamp-default",
     "schema/prisma-primary-key"
   ]
 }

@@ -3,6 +3,8 @@
   "findingSource": "schema",
   "expectedRuleIds": [
     "schema/sql-sensitive-nullable",
+    "schema/sql-lifecycle-default",
+    "schema/sql-audit-timestamp-default",
     "schema/sql-primary-key"
   ]
 }

@@ -209,6 +209,8 @@ describe('ScanService', () => {
             content: [
               'CREATE TABLE users (',
               '  email TEXT,',
+              '  status TEXT NOT NULL,',
+              '  created_at TIMESTAMP NOT NULL,',
               '  password TEXT NOT NULL',
               ');',
             ].join('\n'),
@@ -218,9 +220,11 @@ describe('ScanService', () => {
         signal: new AbortController().signal,
       });
 
-      expect(result.findings).toHaveLength(2);
+      expect(result.findings).toHaveLength(4);
       expect(result.findings.map((finding) => finding.ruleId)).toEqual([
         'schema/sql-sensitive-nullable',
+        'schema/sql-lifecycle-default',
+        'schema/sql-audit-timestamp-default',
         'schema/sql-primary-key',
       ]);
       expect(result.findings.every((finding) => finding.findingSource === 'schema')).toBe(true);
