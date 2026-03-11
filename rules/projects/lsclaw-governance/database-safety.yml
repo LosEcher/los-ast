@@ -1,0 +1,19 @@
+id: lsclaw-governance.database-concat-query
+language: TypeScript
+severity: error
+message: "检测到数据库查询字符串拼接，建议参数化查询以避免注入风险"
+rule:
+  any:
+    - pattern: $DB.query($SQL + $REST)
+    - pattern: $DB.execute($SQL + $REST)
+    - pattern: $DB.raw($SQL + $REST)
+constraints:
+  - name: SQL
+    regex: "(select|insert|update|delete|from)"
+    flags: "i"
+    mode: any
+governance:
+  domain: database
+  owner: backend
+  impact: high
+  rationale: 防止 SQL 注入与不可追踪字段写入风险

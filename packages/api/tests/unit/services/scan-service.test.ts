@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { scanService } from '../../../src/services/scan-service';
 import { SCAN_LIMITS } from '../../../src/config';
+import { CoreNotReadyError } from '../../../src/types/errors.js';
 import * as core from '@los-ast/core';
 
 // Mock Core 模块
@@ -17,6 +18,7 @@ vi.mock('@los-ast/core', () => ({
 describe('ScanService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(core.isReady).mockReturnValue(true);
   });
 
   describe('execute', () => {
@@ -57,6 +59,19 @@ describe('ScanService', () => {
       ).rejects.toThrow('Scan aborted');
     });
 
+    it('should throw Service Unavailable when Core is not ready', async () => {
+      vi.mocked(core.isReady).mockReturnValue(false);
+
+      const signal = new AbortController().signal;
+      await expect(
+        scanService.execute({
+          project: 'test-project',
+          rootDir: '/test/path',
+          signal,
+        })
+      ).rejects.toBeInstanceOf(CoreNotReadyError);
+    });
+
     it('should include stats when includeStats is true', async () => {
       const mockResult = {
         filesScanned: 3,
@@ -77,6 +92,169 @@ describe('ScanService', () => {
         expect.objectContaining({ includeStats: true })
       );
       expect(result.parseCache).toBeDefined();
+    });
+
+    it('should merge contract artifacts as contract findings', async () => {
+      const mockResult = {
+        filesScanned: 1,
+        findings: [],
+        stats: { durationMs: 40, filesScanned: 1 },
+      };
+      vi.mocked(core.scan).mockResolvedValue(mockResult as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        contractArtifacts: [
+          {
+            source: 'contract-baseline',
+            ruleId: 'contract/endpoint-auth',
+            severity: 'error',
+            message: 'Missing auth requirement in public endpoint',
+            file: '/tmp/openapi.yaml',
+            line: 12,
+            column: 4,
+            governanceDomain: ['backend'],
+            impactHint: 'high',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0]).toMatchObject({
+        findingSource: 'contract',
+        ruleFile: 'contract-baseline',
+        ruleId: 'contract/endpoint-auth',
+        severity: 'error',
+        message: 'Missing auth requirement in public endpoint',
+        file: '/tmp/openapi.yaml',
+        language: 'contract',
+        governanceDomain: ['backend'],
+        impactHint: 'high',
+      });
+    });
+
+    it('should merge schema artifacts as schema findings', async () => {
+      const mockResult = {
+        filesScanned: 1,
+        findings: [],
+        stats: { durationMs: 50, filesScanned: 1 },
+      };
+      vi.mocked(core.scan).mockResolvedValue(mockResult as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaArtifacts: [
+          {
+            source: 'schema-legacy',
+            ruleId: 'schema/field-nullability',
+            severity: 'warning',
+            message: 'Nullable sensitive column should be constrained',
+            file: '/tmp/schema.sql',
+            line: 4,
+            column: 3,
+            governanceDomain: ['database'],
+            impactHint: 'low',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0]).toMatchObject({
+        findingSource: 'schema',
+        ruleFile: 'schema-legacy',
+        ruleId: 'schema/field-nullability',
+        severity: 'warning',
+        message: 'Nullable sensitive column should be constrained',
+        file: '/tmp/schema.sql',
+        language: 'schema',
+        governanceDomain: ['database'],
+        impactHint: 'low',
+      });
+    });
+
+    it('should merge contract and schema artifacts together', async () => {
+      const mockResult = {
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '1970-01-01T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: null,
+            ruleId: 'ast/no-console',
+            findingSource: 'ast',
+            severity: 'warning',
+            message: 'unexpected console',
+            file: 'src/index.ts',
+            language: 'typescript',
+            range: {
+              start: { line: 1, column: 1, index: 10 },
+              end: { line: 1, column: 2, index: 11 },
+            },
+            excerpt: 'console.log',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'ast1',
+          },
+        ],
+      };
+      vi.mocked(core.scan).mockResolvedValue(mockResult as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        contractArtifacts: [
+          {
+            source: 'contract-baseline',
+            ruleId: 'contract/auth-required',
+            severity: 'error',
+            message: 'Contract requires auth',
+            file: '/tmp/openapi.yaml',
+            line: 20,
+            column: 1,
+            governanceDomain: 'backend',
+            impactHint: 'high',
+          },
+        ],
+        schemaArtifacts: [
+          {
+            source: 'schema/user-db.sql',
+            ruleId: 'schema/field-nullability',
+            severity: 'warning',
+            message: 'Schema field nullable risk',
+            file: '/tmp/schema.sql',
+            line: 5,
+            column: 3,
+            governanceDomain: ['database'],
+            impactHint: 'medium',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(3);
+      const findingSources = result.findings
+        .map((finding) => finding.findingSource)
+        .filter((findingSource): findingSource is 'ast' | 'contract' | 'schema' =>
+          findingSource === 'ast' || findingSource === 'contract' || findingSource === 'schema'
+        );
+
+      expect(findingSources).toEqual(['ast', 'contract', 'schema']);
+
+      expect(result.findings[1]).toMatchObject({
+        findingSource: 'contract',
+        ruleId: 'contract/auth-required',
+      });
+
+      expect(result.findings[2]).toMatchObject({
+        findingSource: 'schema',
+        ruleId: 'schema/field-nullability',
+      });
     });
   });
 

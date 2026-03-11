@@ -1,0 +1,5 @@
+bench_pid,98413
+elapsed_s,cpu_percent,mem_percent,rss_kb,runtime_s
+0,0.0,0.0,896,0
+1,0.6,0.2,55328,1
+2,0.0,0.2,55328,2

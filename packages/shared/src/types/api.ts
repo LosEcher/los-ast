@@ -3,17 +3,20 @@
  * @version 1.0.0
  */
 
-// === Scope 定义 (硬约束 #3) ===
-
 export interface Scope {
-  /** 租户ID */
   tenant_id?: string;
-  /** 项目ID */
   project_id?: string;
-  /** 执行者ID */
   actor_id?: string;
-  /** 本地模式 (仅开发环境) */
   mode?: 'local' | 'service';
+}
+
+export interface VerifiedScope {
+  tenant_id: string;
+  project_id: string;
+  actor_id: string;
+  mode: 'local' | 'service';
+  identity_verified: boolean;
+  identity_source: 'jwt' | 'service_token' | 'local_dev';
 }
 
 // === 扫描相关类型 ===
@@ -25,12 +28,39 @@ export interface ScanParams {
   include?: string[];
   ignore?: string[];
   includeStats?: boolean;
+  deterministic?: boolean;
+  contractArtifacts?: ContractArtifactFindingInput[];
+  schemaArtifacts?: SchemaArtifactFindingInput[];
 }
+
+export interface ContractArtifactFindingInput {
+  source?: string;
+  ruleId?: string;
+  severity?: 'info' | 'warning' | 'error';
+  message?: string;
+  file?: string;
+  language?: string;
+  line?: number;
+  column?: number;
+  startIndex?: number;
+  endIndex?: number;
+  excerpt?: string;
+  governanceDomain?: string | string[];
+  impactHint?: 'low' | 'medium' | 'high';
+  range?: {
+    start: { line: number; column: number; index: number };
+    end: { line: number; column: number; index: number };
+  };
+}
+
+export interface SchemaArtifactFindingInput extends ContractArtifactFindingInput {}
 
 export interface Range {
   start: { line: number; column: number; index: number };
   end: { line: number; column: number; index: number };
 }
+
+export type FindingSource = 'ast' | 'contract' | 'schema';
 
 export interface Finding {
   tool: 'los-ast';
@@ -48,6 +78,9 @@ export interface Finding {
   hasFix: boolean;
   proposedReplacement: string | null;
   fingerprint: string;
+  findingSource?: FindingSource;
+  governanceDomain?: string[];
+  impactHint?: 'low' | 'medium' | 'high';
 }
 
 export interface ScanResult {
@@ -89,9 +122,11 @@ export interface SymbolResult {
 export type ErrorCategory =
   | 'VALIDATION'
   | 'SCOPE'
+  | 'AUTHENTICATION'
   | 'TIMEOUT'
   | 'SCAN_TOO_LARGE'
   | 'NOT_FOUND'
+  | 'SERVICE_UNAVAILABLE'
   | 'INTERNAL';
 
 export interface ApiError {

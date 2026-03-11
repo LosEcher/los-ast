@@ -1,0 +1,16 @@
+id: lsclaw-governance.backend-route-handler
+language: TypeScript
+severity: warning
+message: "路由处理器建议显式处理异常，避免未捕获错误直接泄露实现细节"
+rule:
+  any:
+    - pattern: app.$METHOD($PATH, ($REQ, $RES) => { $$$BODY })
+    - pattern: router.$METHOD($PATH, ($REQ, $RES) => { $$$BODY })
+constraints:
+  - name: METHOD
+    regex: "^(get|post|put|patch|delete|all)$"
+governance:
+  domain: backend
+  owner: backend
+  impact: medium
+  rationale: 保障 API 边界一致性和错误处理标准化

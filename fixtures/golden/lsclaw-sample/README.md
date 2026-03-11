@@ -14,14 +14,14 @@ src/
 ## Expected Findings
 
 When scanned with appropriate rules:
-- `src/index.ts:13` - console.log in start method
-- `src/index.ts:14` - console.log in start method
-- `src/index.ts:19` - console.log in stop method
-- `src/index.ts:35` - console.error in main
-- `src/router.ts:14` - console.log in initialize
+- `src/index.ts:16` - console.log in start method
+- `src/index.ts:18` - console.log in start method
+- `src/index.ts:22` - console.log in stop method
+- `src/index.ts:40` - console.error in main
+- `src/router.ts:13` - console.log in initialize
 - `src/router.ts:23` - console.log in cleanup
-- `src/config.ts:26` - console.log in load
-- `src/config.ts:45` - unused method validatePort
+- `src/config.ts:20` - console.log in load
+- `src/config.ts:42` - unused method validatePort
 
 ## Usage
 

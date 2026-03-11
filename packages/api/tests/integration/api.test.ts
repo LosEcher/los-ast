@@ -3,15 +3,19 @@
  * API 端到端集成测试
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import path from 'node:path';
 import errorHandlerPlugin from '../../src/plugins/error-handler';
 import requestIdPlugin from '../../src/plugins/request-id';
 import scopeValidatorPlugin from '../../src/plugins/scope-validator';
 import cancellationPlugin from '../../src/plugins/cancellation';
 import healthCheckPlugin from '../../src/plugins/health-check';
 import { scanRoutes, discoverRoutes } from '../../src/routes/core';
+import { scanService } from '../../src/services/scan-service';
+import { symbolService } from '../../src/services/symbol-service';
+import { CoreNotReadyError } from '../../src/types/errors.js';
 
 describe('API Integration Tests', () => {
   let app: FastifyInstance;
@@ -35,6 +39,14 @@ describe('API Integration Tests', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('Health Endpoints', () => {
@@ -119,6 +131,143 @@ describe('API Integration Tests', () => {
       // 无论成功失败，都应该有 request ID
       expect(response.headers['x-request-id']).toBeDefined();
     });
+
+    it('POST /scan should merge schemaArtifacts as schema findings', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test',
+            ruleFile: 'schema/db.sql',
+            ruleId: 'schema/email-nullability',
+            findingSource: 'schema',
+            severity: 'warning',
+            message: 'email 字段应标记为非空',
+            file: 'schema/db.sql',
+            language: 'schema',
+            range: {
+              start: {
+                line: 12,
+                column: 4,
+                index: 120,
+              },
+              end: {
+                line: 12,
+                column: 5,
+                index: 121,
+              },
+            },
+            excerpt: 'email TEXT NULL',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'deadbeef',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          schemaArtifacts: [
+            {
+              source: 'schema/db.sql',
+              ruleId: 'schema/email-nullability',
+              severity: 'warning',
+              message: 'email 字段应标记为非空',
+              file: 'schema/db.sql',
+              line: 12,
+              column: 4,
+              governanceDomain: 'database',
+              impactHint: 'medium',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        schemaArtifacts: expect.arrayContaining([
+          expect.objectContaining({
+            ruleId: 'schema/email-nullability',
+            source: 'schema/db.sql',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data).toHaveProperty('findings');
+      expect(body.data.findings).toHaveLength(1);
+      expect(body.data.findings[0].findingSource).toBe('schema');
+      expect(body.data.findings[0].language).toBe('schema');
+      expect(body.data.findings[0].ruleFile).toBe('schema/db.sql');
+      expect(body.data.findings[0].ruleId).toBe('schema/email-nullability');
+    });
+
+    it('POST /scan should resolve lsclaw-governance rulePack into built-in rule paths', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          rulePack: 'lsclaw-governance',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        rules: expect.arrayContaining([
+          expect.stringContaining(path.join('rules', 'projects', 'lsclaw-governance')),
+        ]),
+      }));
+    });
+
+    it('POST /scan should return 503 with explicit service-unavailable when core is not ready', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockRejectedValueOnce(new CoreNotReadyError());
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body);
+      expect(body.error).toMatchObject({
+        category: 'SERVICE_UNAVAILABLE',
+        code: 'CORE_NOT_READY',
+      });
+      expect(executeSpy).toHaveBeenCalled();
+    });
   });
 
   describe('Discover Symbols Endpoint', () => {
@@ -176,6 +325,31 @@ describe('API Integration Tests', () => {
         const body = JSON.parse(response.body);
         expect(body.error.code).not.toBe('INVALID_LIMIT');
       }
+    });
+
+    it('POST /discover/symbols should return 503 with explicit service-unavailable when core is not ready', async () => {
+      const discoverSpy = vi.spyOn(symbolService, 'discoverSymbols').mockRejectedValueOnce(new CoreNotReadyError());
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/discover/symbols',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          rootDir: '/test',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body);
+      expect(body.error).toMatchObject({
+        category: 'SERVICE_UNAVAILABLE',
+        code: 'CORE_NOT_READY',
+      });
+      expect(discoverSpy).toHaveBeenCalled();
     });
   });
 

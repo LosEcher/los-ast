@@ -16,6 +16,10 @@
 | 代码质量 | 良好 |
 | 文档完整度 | 需要补充 |
 
+## 1.1 2026-03-11 追加更新
+
+- 完成“未就绪即显式降级”补齐：`/scan` 与 `/discover/symbols` 在 `core not ready` 时走 `503 SERVICE_UNAVAILABLE`（`CORE_NOT_READY`）并在 OpenAPI/API_USAGE 中可见，集成测试与单元测试同步覆盖。
+
 ---
 
 ## 2. 硬约束检查清单
@@ -53,6 +57,7 @@
 ```
 packages/core/src/index.mjs - JavaScript，无 HTTP 依赖
 packages/api/src/plugins/error-handler.ts - 错误映射层
+packages/api/src/types/errors.ts - Core 未就绪错误模型新增
 ```
 
 ---
@@ -188,7 +193,7 @@ export declare const CORE_FACADE_VERSION: string;
 **要求**: Milestone A 结束时冻结 `/scan`, `/discover/symbols` 基础契约
 
 **实现状态**:
-- ⚠️ **OpenAPI 文档刚创建** - 需要评审确认
+- ✅ `OPENAPI` 已同步补充 `/scan` 与 `/discover/symbols` 的 `503 SERVICE_UNAVAILABLE` 与 `CORE_NOT_READY` 示例
 - ⚠️ **契约测试缺失** - 建议使用 Pact 实现契约测试
 
 **建议**:

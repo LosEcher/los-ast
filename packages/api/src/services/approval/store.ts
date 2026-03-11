@@ -17,7 +17,10 @@ const approvalStore: Map<string, ApprovalItem> = new Map();
 /**
  * 创建审批项
  */
-export async function createApproval(request: CreateApprovalRequest): Promise<ApprovalItem> {
+export async function createApproval(
+  request: CreateApprovalRequest,
+  actorId: string
+): Promise<ApprovalItem> {
   const now = new Date().toISOString();
   const approvalId = generateId('apr');
 
@@ -33,7 +36,7 @@ export async function createApproval(request: CreateApprovalRequest): Promise<Ap
     risk_level: request.risk_level,
     status: 'pending',
     requester: {
-      actor_id: 'system', // 实际应该从上下文获取
+      actor_id: actorId,
       timestamp: now,
     },
     timeout_at: timeoutAt,

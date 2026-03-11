@@ -95,7 +95,7 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
         tenant_id: scope.tenant_id!,
         project_id: scope.project_id!,
       }, // 强制使用验证后的 scope
-    });
+    }, scope.actor_id);
 
     reply.status(201);
     return { approval };

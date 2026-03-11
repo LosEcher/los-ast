@@ -158,6 +158,9 @@ export async function scan({
 
     for (const rule of rules) {
       if (rule.language !== String(language)) continue
+      const findingSource = rule.findingSource || 'ast'
+      const governanceDomain = rule.governance?.domain || null
+      const impactHint = rule.governance?.impact || null
       const nodes = root.findAll({ rule: rule.rule })
       for (const node of nodes) {
         if (!passesConstraints(node, rule.constraints)) continue
@@ -176,6 +179,9 @@ export async function scan({
           project,
           ruleFile: rule.ruleFile || rule.__file || null,
           ruleId: rule.id,
+          findingSource,
+          governanceDomain,
+          impactHint,
           severity: rule.severity,
           message: rule.message,
           file,
@@ -248,7 +254,7 @@ export async function fix({
     const { source, root } = parsed
 
     const edits = []
-    const editMeta = []
+      const editMeta = []
 
     for (const rule of langRules) {
       if (changesApplied >= maxChanges) break
@@ -269,7 +275,7 @@ export async function fix({
 
     if (edits.length === 0) continue
 
-    const sortedEdits = validateNoOverlap(edits)
+      const sortedEdits = validateNoOverlap(edits)
     const newSource = root.commitEdits(sortedEdits)
     const diff = createTwoFilesPatch(
       path.relative(rootDir, file),
@@ -284,20 +290,26 @@ export async function fix({
     if (apply) await fs.writeFile(file, newSource, 'utf8')
     if (apply) parseCache.invalidateFile(file)
 
-    for (let i = 0; i < editMeta.length; i++) {
-      const { rule, range, excerpt, proposedReplacement } = editMeta[i]
-      const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement, deterministic })
-      results.push({
-        tool: 'los-ast',
-        version: 0,
-        timestamp: toIsoNow(deterministic),
-        project,
-        ruleFile: rule.ruleFile || rule.__file || null,
-        ruleId: rule.id,
-        severity: rule.severity,
-        message: rule.message,
-        file,
-        language: langKey,
+      for (let i = 0; i < editMeta.length; i++) {
+        const { rule, range, excerpt, proposedReplacement } = editMeta[i]
+        const findingSource = rule.findingSource || 'ast'
+        const governanceDomain = rule.governance?.domain || null
+        const impactHint = rule.governance?.impact || null
+        const fingerprint = fingerprintFor({ ruleId: rule.id, file, range, proposedReplacement, deterministic })
+        results.push({
+          tool: 'los-ast',
+          version: 0,
+          timestamp: toIsoNow(deterministic),
+          project,
+          ruleFile: rule.ruleFile || rule.__file || null,
+          ruleId: rule.id,
+          findingSource,
+          governanceDomain,
+          impactHint,
+          severity: rule.severity,
+          message: rule.message,
+          file,
+          language: langKey,
         range,
         excerpt,
         hasFix: true,

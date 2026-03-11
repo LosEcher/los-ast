@@ -4,6 +4,7 @@ import { logStartupConfig, PORT, ROUTE_CONFIG, validateConfig } from './config/i
 import errorHandlerPlugin from './plugins/error-handler.js';
 import requestIdPlugin from './plugins/request-id.js';
 import scopeValidatorPlugin from './plugins/scope-validator.js';
+import identityPlugin from './plugins/identity.js';
 import healthCheckPlugin from './plugins/health-check.js';
 import cancellationPlugin from './plugins/cancellation.js';
 import internalAccessPlugin from './plugins/internal-access.js';
@@ -40,6 +41,7 @@ await server.register(healthCheckPlugin);
 await server.register(cancellationPlugin);
 // 5. 注册 scope-validator，验证 scope（在路由之前）
 await server.register(scopeValidatorPlugin);
+await server.register(identityPlugin);
 
 // ============================================
 // 2. 路由分组注册函数

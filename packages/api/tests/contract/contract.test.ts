@@ -3,7 +3,7 @@
  * 验证文档/OpenAPI/响应体一致性
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import errorHandlerPlugin from '../../src/plugins/error-handler';
@@ -16,6 +16,7 @@ import {
   memoryProposalsRoutes,
   approvalRoutes,
 } from '../../src/routes/experimental';
+import { scanService } from '../../src/services/scan-service';
 
 describe('API Contract Tests', () => {
   let app: FastifyInstance;
@@ -43,6 +44,10 @@ describe('API Contract Tests', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('Health Check Endpoints', () => {
@@ -160,6 +165,182 @@ describe('API Contract Tests', () => {
         expect(finding).not.toHaveProperty('line');
         expect(finding).not.toHaveProperty('column');
       }
+    });
+
+    it('POST /scan should preserve contract artifact findingSource as contract in contract response', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'contract-baseline.yaml',
+            ruleId: 'contract/auth-required',
+            findingSource: 'contract',
+            severity: 'error',
+            message: 'Public endpoint lacks auth rule',
+            file: 'openapi.yaml',
+            language: 'contract',
+            range: {
+              start: {
+                line: 8,
+                column: 2,
+                index: 80,
+              },
+              end: {
+                line: 8,
+                column: 30,
+                index: 100,
+              },
+            },
+            excerpt: '/v1/users',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'contract-artifact-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          include: ['packages/core/src/**/*.mjs'],
+          contractArtifacts: [
+            {
+              source: 'contract-baseline.yaml',
+              ruleId: 'contract/auth-required',
+              severity: 'error',
+              message: 'Public endpoint lacks auth rule',
+              file: 'openapi.yaml',
+              line: 8,
+              column: 2,
+              governanceDomain: ['backend'],
+              impactHint: 'high',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        contractArtifacts: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'contract-baseline.yaml',
+            ruleId: 'contract/auth-required',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data).toHaveProperty('findings');
+      expect(body.data.findings).toHaveLength(1);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'contract',
+        ruleFile: 'contract-baseline.yaml',
+        ruleId: 'contract/auth-required',
+        language: 'contract',
+      });
+    });
+
+    it('POST /scan should preserve schema artifact findingSource as schema in contract response', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'schema/db.sql',
+            ruleId: 'schema/email-nullability',
+            findingSource: 'schema',
+            severity: 'warning',
+            message: 'email 字段应标记为非空',
+            file: 'schema/db.sql',
+            language: 'schema',
+            range: {
+              start: {
+                line: 12,
+                column: 4,
+                index: 120,
+              },
+              end: {
+                line: 12,
+                column: 20,
+                index: 140,
+              },
+            },
+            excerpt: 'email TEXT NULL',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'contract-schema-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          include: ['packages/core/src/**/*.mjs'],
+          schemaArtifacts: [
+            {
+              source: 'schema/db.sql',
+              ruleId: 'schema/email-nullability',
+              severity: 'warning',
+              message: 'email 字段应标记为非空',
+              file: 'schema/db.sql',
+              line: 12,
+              column: 4,
+              governanceDomain: ['database'],
+              impactHint: 'medium',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        schemaArtifacts: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'schema/db.sql',
+            ruleId: 'schema/email-nullability',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data).toHaveProperty('findings');
+      expect(body.data.findings).toHaveLength(1);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'schema',
+        ruleFile: 'schema/db.sql',
+        ruleId: 'schema/email-nullability',
+        language: 'schema',
+      });
     });
   });
 

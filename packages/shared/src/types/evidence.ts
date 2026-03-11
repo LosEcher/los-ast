@@ -5,14 +5,29 @@
 
 import type { Range } from './api.js';
 
-/**
- * 代码证据包
- */
+export interface EvidenceSignature {
+  algorithm: 'hmac-sha256' | 'ed25519' | 'none';
+  value: string;
+  key_id?: string;
+  signed_at: string;
+  signed_by: string;
+}
+
+export interface EvidenceActor {
+  actor_id: string;
+  identity_source: 'jwt' | 'service_token' | 'local_dev';
+  identity_verified: boolean;
+}
+
 export interface CodeEvidenceBundle {
   bundle_id: string;
   project: string;
   root_dir: string;
   created_at: string;
+  scope: {
+    tenant_id: string;
+    project_id: string;
+  };
   schema_version: string;
   generator: {
     tool: 'los-ast';
@@ -23,6 +38,8 @@ export interface CodeEvidenceBundle {
   code_snippets: CodeSnippet[];
   symbol_index: CodeSymbolInfo[];
   impact_report: CodeImpactReport;
+  actor: EvidenceActor;
+  signature?: EvidenceSignature;
 }
 
 /**

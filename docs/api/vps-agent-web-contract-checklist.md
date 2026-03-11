@@ -22,10 +22,14 @@
 
 ## 3. Scope 约束
 
-- 所有端点都需要 scope。
-- GET 端点通过 query `scope` 传 URL 编码 JSON 字符串。
-- 写接口建议 body 中提供完整 scope（tenant_id/project_id/actor_id）。
-- incidents/recovery/attribution 的 stats 返回按 scope 隔离后的统计结果。
+- 所有端点都要求具备可验证身份来源，建议优先使用 `Authorization: Bearer <jwt>`。
+- 在生产态 JWT 模式下，`scope` 由服务端 `identity` 插件从 JWT claims 派生，应用于租户隔离；
+  兼容期可继续接收客户端 `scope`，但必须与 `scope` 校验通过（`tenant_id`、`project_id`、`actor_id` 必须一致）。
+- GET 端点的 `scope` query 为兼容参数，作为非生产场景 fallback；生产路径可不传。
+- 写接口如 `POST /approvals` / `POST /attribution/analyze` 以 JWT 的派生 `scope` 为权威上下文。
+- incidents/recovery/attribution 的 stats 返回按实际 `scope`（服务端派生）做租户隔离后的统计结果。
+- 就绪/降级策略：所有调用 Core 的联调链路遵循统一 `SERVICE_UNAVAILABLE + CORE_NOT_READY` 契约，先 `GET /healthz/ready` 再重试，详见  
+  [Service Readiness & Explicit Degradation Contract](../service-readiness-degradation-contract.md)。
 
 ## 4. 迁移步骤
 

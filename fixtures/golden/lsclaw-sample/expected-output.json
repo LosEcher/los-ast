@@ -1,19 +1,29 @@
 {
   "description": "Expected scan output for lsclaw-sample (TypeScript)",
   "project": "lsclaw-sample",
+  "schema_version": "1.0.0",
+  "generator": "los-ast-scan",
   "filesScanned": 3,
   "expectedFindings": {
     "patterns": [
       {
-        "ruleId": "no-console",
+        "ruleId": "lang.typescript.no-console-log",
         "messagePattern": "console",
-        "minimumOccurrences": 3
+        "minimumOccurrences": 6,
+        "actualOccurrences": 6,
+        "findingsByFile": {
+          "src/index.ts": 3,
+          "src/router.ts": 2,
+          "src/config.ts": 1
+        }
       }
     ],
     "filesAffected": ["src/index.ts", "src/router.ts", "src/config.ts"]
   },
   "invariants": {
     "tool": "los-ast",
-    "language": "typescript"
+    "version": 0,
+    "language": "typescript",
+    "deterministic": true
   }
 }

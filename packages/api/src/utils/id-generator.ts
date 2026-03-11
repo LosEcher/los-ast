@@ -10,6 +10,7 @@ const PREFIX_MAP: Record<string, string> = {
   cfg: 'cfg', // config
   evd: 'evd', // evidence
   fct: 'fct', // fact
+  ana: 'ana', // analysis
 };
 
 /**

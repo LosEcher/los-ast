@@ -4,14 +4,41 @@
  */
 import { generateId } from '../../utils/id-generator.js';
 import { scan, explainAtPosition, loadRuleFiles } from '@los-ast/core';
+import { EVIDENCE_CONFIG } from '../../config/index.js';
 // 内存存储
 const evidenceStore = new Map();
 const EVIDENCE_SCHEMA_VERSION = '1.0.0';
 const EVIDENCE_GENERATOR_VERSION = '1.0.0';
+async function generateSignature(bundle, scope) {
+    if (!EVIDENCE_CONFIG.enableSignatures || !EVIDENCE_CONFIG.signingKey) {
+        return undefined;
+    }
+    const crypto = await import('crypto');
+    const content = JSON.stringify({
+        bundle_id: bundle.bundle_id,
+        project: bundle.project,
+        created_at: bundle.created_at,
+        findings_count: bundle.findings.length,
+        actor_id: scope.actor_id,
+        tenant_id: scope.tenant_id,
+        project_id: scope.project_id,
+    });
+    const signature = crypto
+        .createHmac('sha256', EVIDENCE_CONFIG.signingKey)
+        .update(content)
+        .digest('base64url');
+    return {
+        algorithm: 'hmac-sha256',
+        value: signature,
+        key_id: EVIDENCE_CONFIG.signingKey.slice(0, 8),
+        signed_at: new Date().toISOString(),
+        signed_by: scope.actor_id,
+    };
+}
 /**
  * 生成证据包
  */
-export async function generateEvidence(request) {
+export async function generateEvidence(request, scope) {
     const bundleId = generateId('evd');
     const rules = request.rules && request.rules.length > 0
         ? await loadRuleFiles(request.rules)
@@ -61,6 +88,11 @@ export async function generateEvidence(request) {
             references: [],
         });
     }
+    const actor = {
+        actor_id: scope.actor_id,
+        identity_source: scope.identity_source,
+        identity_verified: scope.identity_verified,
+    };
     const bundle = {
         bundle_id: bundleId,
         project: request.project,
@@ -81,9 +113,14 @@ export async function generateEvidence(request) {
         code_snippets: codeSnippets,
         symbol_index: symbolIndex,
         impact_report: generateImpactReport(scanResult),
+        actor,
     };
+    const signature = await generateSignature(bundle, scope);
+    if (signature) {
+        bundle.signature = signature;
+    }
     evidenceStore.set(bundleId, bundle);
-    console.log(`[EvidenceService] Generated evidence bundle ${bundleId}`);
+    console.log(`[EvidenceService] Generated evidence bundle ${bundleId} by ${actor.actor_id}`);
     return bundle;
 }
 /**

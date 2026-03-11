@@ -28,16 +28,16 @@
 
 ## 任务拆分与验收
 
-### T1：lsclaw adapter smoke
+### T1：lsclaw adapter smoke ✅
 
 - 新增 smoke 测试：
   - Core `/scan` 使用 `fixtures/golden/lsclaw-sample`
   - VPS `/vps-agent-web/attribution/analyze` 返回基础分析结构
 - 验收：
-  - 本地 `npm run test:api:smoke` 通过
-  - CI 新增 smoke job 并通过
+  - ✅ 本地 `npm run test:api:smoke` 通过
+  - ✅ CI 新增 smoke job 并通过
 
-### T2：evidence 契约固化
+### T2：evidence 契约固化 ✅
 
 - 为 `CodeEvidenceBundle` 增加可消费元信息：
   - `schema_version`
@@ -45,17 +45,35 @@
   - `deterministic`
 - 同步 service 赋值与集成测试校验。
 - 验收：
-  - 相关测试通过
-  - 下游可稳定读取固定字段
+  - ✅ 相关测试通过
+  - ✅ 下游可稳定读取固定字段
 
-### T3：文档与脚本同步
+### T3：文档与脚本同步 ✅
 
 - 更新 API 使用文档中的 smoke 执行入口。
 - 更新 README 增加执行方案入口。
 - 验收：
-  - 文档命令可直接执行
-  - 入口可检索到相关说明
+  - ✅ 文档命令可直接执行
+  - ✅ 入口可检索到相关说明
 
 ## 本轮实施范围
 
 - 执行 T1 + T2 + T3 的最小闭环，不触及持久化迁移与 provider 真正调用链。
+
+## 集成基线 (Round 1 - los-ast)
+
+### 状态: ✅ 已冻结
+
+**验证结果:**
+- `lsclaw-sample` 扫描: 6 findings found (3 in index.ts, 2 in router.ts, 1 in config.ts)
+- Golden tests: 7/7 passed
+- Integration tests: 5/5 passed
+- Type check: No errors
+
+**契约符合度:**
+- expected-output.json 匹配实际扫描输出
+- scan.ts 和 scan-service.ts 接口稳定
+- 文档和模板与实现一致
+
+**允许范围内的修复:**
+- fixtures/golden/lsclaw-sample/README.md: 修正 expected findings 行号

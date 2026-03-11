@@ -11,10 +11,10 @@ import { notFound, created, ok } from '../../utils/http-helpers.js';
  * 注册 Evidence 路由 (实验性)
  */
 export default async function evidenceRoutes(fastify) {
-    // POST /experimental/evidence/generate - 生成证据包
     fastify.post('/generate', async (request, reply) => {
         const body = request.body;
-        const bundle = await generateEvidence(body);
+        const scope = request.scope;
+        const bundle = await generateEvidence(body, scope);
         return created(reply, bundle);
     });
     // GET /experimental/evidence/:id - 获取证据包

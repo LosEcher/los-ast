@@ -97,18 +97,17 @@ P0 核心功能，始终启用，保证向后兼容。
 **请求头**:
 ```
 Content-Type: application/json
+Authorization: Bearer <jwt>
 X-Request-ID: <可选，自动生成为UUID>
 ```
+
+**身份与 Scope 约定**:
+- 生产态采用 `Authorization: Bearer <jwt>` 为主身份来源，`scope` 由服务端基于 JWT claims 派生。
+- 生产环境中请求不再要求 body 携带完整 `scope`（保留兼容层可继续接收旧 `scope`，但会做签名一致性校验）。
 
 **请求体**:
 ```json
 {
-  "scope": {
-    "tenant_id": "tenant-001",
-    "project_id": "proj-001",
-    "actor_id": "user-001",
-    "mode": "service"
-  },
   "project": "my-project",
   "rootDir": "/path/to/code",
   "include": ["**/*.ts", "**/*.tsx"],
@@ -121,16 +120,22 @@ X-Request-ID: <可选，自动生成为UUID>
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `scope` | object | 是 | 请求作用域 |
-| `scope.tenant_id` | string | 条件 | 租户ID (REQUIRE_FULL_SCOPE=true时必填) |
-| `scope.project_id` | string | 条件 | 项目ID (REQUIRE_FULL_SCOPE=true时必填) |
-| `scope.actor_id` | string | 条件 | 执行者ID (REQUIRE_FULL_SCOPE=true时必填) |
+| `scope` | object | 否 | 请求作用域（兼容层字段，仅在未携带 JWT 时用于回退） |
+| `scope.tenant_id` | string | 否（生产态可省略） | 租户ID |
+| `scope.project_id` | string | 否（生产态可省略） | 项目ID |
+| `scope.actor_id` | string | 否（生产态可省略） | 执行者ID |
 | `scope.mode` | string | 否 | `local` 或 `service`，默认 `service` |
 | `project` | string | 是 | 项目名称 |
 | `rootDir` | string | 是 | 扫描根目录绝对路径 |
 | `include` | string[] | 否 | 包含文件模式 (glob) |
 | `ignore` | string[] | 否 | 排除文件模式 |
 | `includeStats` | boolean | 否 | 是否包含解析缓存统计 |
+| `deterministic` | boolean | 否 | 是否开启可复现排序/指纹（默认 true） |
+
+**发现字段补充（v1.1 预留）：**
+- `findingSource`：`ast`（当前默认）
+- `governanceDomain`：`['frontend', 'backend', 'database']` 等标签（可选）
+- `impactHint`：`low` | `medium` | `high`（可选）
 
 **响应** (200 OK):
 ```json
@@ -177,18 +182,28 @@ X-Request-ID: <可选，自动生成为UUID>
 | 403 | SCOPE | Scope 验证失败 |
 | 408 | TIMEOUT | 扫描超时或被取消 |
 | 413 | SCAN_TOO_LARGE | 扫描结果超过大小限制 |
+| 503 | SERVICE_UNAVAILABLE | Core 未就绪（请等待 /healthz/ready 恢复） |
+
+**故障处理建议（与 lsclaw/vps-agent-web 对齐）**:
+- 当返回 `503 SERVICE_UNAVAILABLE`（`CORE_NOT_READY`）时，调用方应按统一服务就绪契约处理：<br>
+  [Service Readiness & Explicit Degradation Contract](./docs/service-readiness-degradation-contract.md)。
 
 #### `POST /discover/symbols` [稳定]
 
 发现代码中的符号（函数、类、接口等）。
 
+**请求头**:
+```
+Content-Type: application/json
+Authorization: Bearer <jwt>
+X-Request-ID: <可选，自动生成为UUID>
+```
+
+**身份与 Scope 约定**同上。
+
 **请求体**:
 ```json
 {
-  "scope": {
-    "tenant_id": "tenant-001",
-    "project_id": "proj-001"
-  },
   "rootDir": "/path/to/code",
   "include": ["**/*.ts"],
   "ignore": ["**/*.test.ts"],
@@ -216,6 +231,17 @@ X-Request-ID: <可选，自动生成为UUID>
   }
 }
 ```
+
+**错误响应**:
+
+| 状态码 | 错误类型 | 说明 |
+|--------|----------|------|
+| 400 | VALIDATION | 请求参数验证失败 |
+| 503 | SERVICE_UNAVAILABLE | Core 未就绪（请等待 /healthz/ready 恢复） |
+
+**故障处理建议（与 lsclaw/vps-agent-web 对齐）**:
+- 当返回 `503 SERVICE_UNAVAILABLE`（`CORE_NOT_READY`）时，调用方应按统一服务就绪契约处理：<br>
+  [Service Readiness & Explicit Degradation Contract](./docs/service-readiness-degradation-contract.md)。
 
 ---
 
@@ -269,6 +295,7 @@ ENABLE_EXPERIMENTAL_ROUTES=true npm run dev
 |------|------------|------|--------|
 | `VALIDATION` | 400 | 请求参数验证失败 | 否 |
 | `SCOPE` | 403 | Scope 验证失败 | 否 |
+| `SERVICE_UNAVAILABLE` | 503 | Core 未就绪（显式降级） | 是 |
 | `TIMEOUT` | 408 | 请求超时 | 是 |
 | `SCAN_TOO_LARGE` | 413 | 扫描结果过大 | 否 |
 | `NOT_FOUND` | 404 | 资源不存在 | 否 |
@@ -316,7 +343,6 @@ const response = await fetch('http://localhost:3000/scan', {
 
 ```typescript
 import type {
-  Scope,
   ScanParams,
   ScanResult,
   Finding,
@@ -337,13 +363,10 @@ import type {
 import type { ScanParams, ScanResult } from '@los-ast/shared/types';
 
 async function scanProject(rootDir: string): Promise<ScanResult> {
-  const params: ScanParams = {
-    scope: {
-      tenant_id: 'my-tenant',
-      project_id: 'my-project',
-      actor_id: 'cli-user',
-      mode: 'service',
-    },
+const jwt = process.env.LSCLAW_JWT;
+if (!jwt) throw new Error('LSCLAW_JWT is required');
+
+  const params: Omit<ScanParams, 'scope'> = {
     project: 'my-project',
     rootDir,
     include: ['**/*.ts'],
@@ -352,7 +375,10 @@ async function scanProject(rootDir: string): Promise<ScanResult> {
 
   const response = await fetch('http://localhost:3000/scan', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${jwt}`,
+    },
     body: JSON.stringify(params),
   });
 
@@ -372,13 +398,9 @@ async function scanProject(rootDir: string): Promise<ScanResult> {
 # 扫描项目
 curl -X POST http://localhost:3000/scan \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LSCLAW_JWT" \
   -H "X-Request-ID: $(uuidgen)" \
   -d '{
-    "scope": {
-      "tenant_id": "test",
-      "project_id": "demo",
-      "actor_id": "cli"
-    },
     "project": "demo",
     "rootDir": "'$(pwd)'/fixtures/sample-project",
     "include": ["**/*.ts", "**/*.tsx"],
@@ -388,8 +410,8 @@ curl -X POST http://localhost:3000/scan \
 # 发现符号
 curl -X POST http://localhost:3000/discover/symbols \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LSCLAW_JWT" \
   -d '{
-    "scope": { "tenant_id": "test" },
     "rootDir": "'$(pwd)'/src",
     "limit": 100
   }'
@@ -407,12 +429,7 @@ los-ast 可作为 lsclaw 的代码分析后端：
 // lsclaw 配置示例
 const losAstConfig = {
   baseUrl: process.env.LOS_AST_URL || 'http://localhost:3000',
-  scope: {
-    tenant_id: process.env.LSCLAW_TENANT_ID,
-    project_id: process.env.LSCLAW_PROJECT_ID,
-    actor_id: 'lsclaw-agent',
-    mode: 'service',
-  },
+  jwt: process.env.LSCLAW_JWT,
   limits: {
     maxFiles: 1000,
     maxBytes: 10 * 1024 * 1024,
@@ -424,9 +441,11 @@ const losAstConfig = {
 async function analyzeCode(rootDir: string) {
   const response = await fetch(`${losAstConfig.baseUrl}/scan`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${losAstConfig.jwt}`,
+    },
     body: JSON.stringify({
-      scope: losAstConfig.scope,
       project: 'lsclaw-analysis',
       rootDir,
     }),

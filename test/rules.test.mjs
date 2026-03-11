@@ -124,3 +124,28 @@ test('constraints filter, ruleFile/fingerprint exist, parse cache hits', async (
   assert.equal(fixRes2.results.length, 0)
   assert.equal(await fs.readFile(file, 'utf8'), after)
 })
+
+test('governance metadata is projected into scan findings', async () => {
+  const rules = await loadRuleFiles(['rules/projects/lsclaw-governance/frontend-interface.yml'])
+
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'los-ast-'))
+  const file = path.join(tmpRoot, 'demo.js')
+  await fs.writeFile(
+    file,
+    "const resp = await fetch('/api/v1/items', { method: 'GET' })\n",
+    'utf8'
+  )
+
+  const scanRes = await scan({
+    project: 'custom',
+    rootDir: tmpRoot,
+    include: ['**/*.js'],
+    ignore: [],
+    rules,
+  })
+
+  assert.equal(scanRes.findings.length, 1)
+  assert.equal(scanRes.findings[0].findingSource, 'ast')
+  assert.deepEqual(scanRes.findings[0].governanceDomain, ['frontend'])
+  assert.equal(scanRes.findings[0].impactHint, 'medium')
+})

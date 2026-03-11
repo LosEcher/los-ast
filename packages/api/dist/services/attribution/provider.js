@@ -1,5 +1,6 @@
 import { getIncident } from '../incident/store.js';
 import { getEvidenceBundle } from './store.js';
+import { generateId } from '../../utils/id-generator.js';
 function resolveProvider() {
     const configured = process.env.ATTRIBUTION_PROVIDER?.toLowerCase();
     if (configured === 'mock') {
@@ -33,7 +34,7 @@ async function runMockProvider(input) {
         },
     ];
     return {
-        analysis_id: `ana_${Date.now()}`,
+        analysis_id: generateId('ana'),
         incident_id: input.incidentId,
         scope: input.scope,
         hypotheses,
@@ -82,7 +83,7 @@ async function runLsclawProvider(input) {
         },
     ];
     return {
-        analysis_id: `ana_${Date.now()}`,
+        analysis_id: generateId('ana'),
         incident_id: input.incidentId,
         scope: input.scope,
         hypotheses,

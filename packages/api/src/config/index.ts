@@ -1,210 +1,334 @@
 import type { ScanLimits } from '../types/index.js';
+import { z } from 'zod';
 
-/**
- * API 配置
- * 配置来源优先级：环境变量 > 配置文件 > 代码默认值
- */
+const NODE_ENVS = ['development', 'production', 'test'] as const;
 
-export const NODE_ENV = process.env.NODE_ENV || 'development';
+const boolFromEnvSchema = z.preprocess((value) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '') {
+    return undefined;
+  }
+
+  if (['true', '1', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['false', '0', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return value;
+}, z.boolean({
+  message: 'Invalid boolean value. Expected true/false-like value.',
+}));
+
+const stringOrUndefined = z.preprocess((value) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}, z.string().optional());
+
+const routePrefixSchema = z.preprocess((value) => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  return typeof value === 'string' ? value.trim() : value;
+}, z.string()
+  .min(1, { message: 'Route prefix cannot be empty.' })
+  .refine((value) => value.startsWith('/'), {
+    message: 'Route prefix must start with "/".',
+  })
+  .refine((value) => !value.includes(' '), {
+    message: 'Route prefix must not contain spaces.',
+  }));
+
+const configSchema = z
+  .object({
+    NODE_ENV: z
+      .preprocess((value) => {
+        return value === undefined || value === null || typeof value === 'string' ? value : String(value);
+      }, z.enum(NODE_ENVS))
+      .default('development'),
+    PORT: z.coerce
+      .number({ message: 'PORT should be a number.' })
+      .int('PORT should be an integer.')
+      .min(1, { message: 'PORT must be between 1 and 65535.' })
+      .max(65535, { message: 'PORT must be between 1 and 65535.' })
+      .default(3000),
+    MAX_FILES_PER_SYNC_SCAN: z.coerce
+      .number({ message: 'MAX_FILES_PER_SYNC_SCAN should be a number.' })
+      .int('MAX_FILES_PER_SYNC_SCAN should be an integer.')
+      .min(1, { message: 'MAX_FILES_PER_SYNC_SCAN must be at least 1.' })
+      .default(1000),
+    MAX_RESPONSE_BYTES: z.coerce
+      .number({ message: 'MAX_RESPONSE_BYTES should be a number.' })
+      .int('MAX_RESPONSE_BYTES should be an integer.')
+      .min(1024, { message: 'MAX_RESPONSE_BYTES must be at least 1024 bytes.' })
+      .default(10 * 1024 * 1024),
+    MAX_SCAN_DURATION_MS: z.coerce
+      .number({ message: 'MAX_SCAN_DURATION_MS should be a number.' })
+      .int('MAX_SCAN_DURATION_MS should be an integer.')
+      .min(1000, { message: 'MAX_SCAN_DURATION_MS must be at least 1000ms.' })
+      .default(30000),
+    REQUIRE_FULL_SCOPE: boolFromEnvSchema.default(false),
+    ENFORCE_JWT: boolFromEnvSchema.default(false),
+    JWT_SECRET: stringOrUndefined,
+    LSCLAW_JWT_SECRET: stringOrUndefined,
+    DEV_ALLOW_UNVERIFIED_IDENTITY: boolFromEnvSchema.default(false),
+    EVIDENCE_SIGNING_KEY: stringOrUndefined,
+    ENABLE_EXPERIMENTAL_ROUTES: boolFromEnvSchema.default(false),
+    ENABLE_INTERNAL_ROUTES: boolFromEnvSchema.default(false),
+    ENABLE_VPS_AGENT_WEB_ROUTES: boolFromEnvSchema.default(false),
+    INTERNAL_ROUTES_ALLOWED_IPS: stringOrUndefined,
+    INTERNAL_ROUTES_TOKEN: stringOrUndefined,
+    INTERNAL_ROUTES_ALLOW_LOCALHOST: boolFromEnvSchema.default(true),
+    ROUTE_PREFIX_EXPERIMENTAL: routePrefixSchema.default('/experimental'),
+    ROUTE_PREFIX_INTERNAL: routePrefixSchema.default('/internal'),
+    ROUTE_PREFIX_VPS_AGENT_WEB: routePrefixSchema.default('/vps-agent-web'),
+  })
+  .superRefine((values, ctx) => {
+    if (values.ENABLE_INTERNAL_ROUTES) {
+      const hasAllowedIps = Boolean(values.INTERNAL_ROUTES_ALLOWED_IPS);
+      const hasToken = Boolean(values.INTERNAL_ROUTES_TOKEN);
+
+      if (!hasAllowedIps && !hasToken) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ENABLE_INTERNAL_ROUTES'],
+          message: 'INTERNAL_ROUTES requires INTERNAL_ROUTES_ALLOWED_IPS or INTERNAL_ROUTES_TOKEN.',
+        });
+      }
+
+      if (hasAllowedIps) {
+        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const entries = values.INTERNAL_ROUTES_ALLOWED_IPS?.split(',') ?? [];
+        for (const entry of entries) {
+          const trimmed = entry.trim();
+          if (trimmed.length > 0 && !ipv4Regex.test(trimmed) && trimmed !== 'localhost') {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['INTERNAL_ROUTES_ALLOWED_IPS'],
+              message: `Invalid IP address in INTERNAL_ROUTES_ALLOWED_IPS: "${trimmed}".`,
+            });
+          }
+        }
+      }
+
+      if (hasToken && (values.INTERNAL_ROUTES_TOKEN?.length ?? 0) < 32) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['INTERNAL_ROUTES_TOKEN'],
+          message: 'INTERNAL_ROUTES_TOKEN should be at least 32 characters for security.',
+        });
+      }
+
+      if (values.NODE_ENV === 'production' && !hasAllowedIps && !hasToken) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['INTERNAL_ROUTES_ALLOWED_IPS'],
+          message: 'Production safety: INTERNAL_ROUTES_ENABLED requires INTERNAL_ROUTES_ALLOWED_IPS or INTERNAL_ROUTES_TOKEN.',
+        });
+      }
+    }
+  });
+
+type ConfigInput = z.input<typeof configSchema>;
+
+interface ConfigValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+interface ParsedConfig extends z.output<typeof configSchema> {}
+
+const CONFIG_WITH_DEFAULTS: ParsedConfig = configSchema.parse({
+  PORT: '3000',
+  MAX_FILES_PER_SYNC_SCAN: '1000',
+  MAX_RESPONSE_BYTES: '10485760',
+  MAX_SCAN_DURATION_MS: '30000',
+});
+
+interface ParsedConfigResult {
+  values: ParsedConfig;
+  errors: string[];
+}
+
+function resolveNodeEnv(rawNodeEnv: string | undefined): ParsedConfig['NODE_ENV'] {
+  return rawNodeEnv === 'production' || rawNodeEnv === 'test' || rawNodeEnv === 'development'
+    ? rawNodeEnv
+    : 'development';
+}
+
+function normalizeAndValidateConfig(env: NodeJS.ProcessEnv): ParsedConfigResult {
+  const rawEnv: ConfigInput = {
+    NODE_ENV: env.NODE_ENV,
+    PORT: env.PORT,
+    MAX_FILES_PER_SYNC_SCAN: env.MAX_FILES_PER_SYNC_SCAN,
+    MAX_RESPONSE_BYTES: env.MAX_RESPONSE_BYTES,
+    MAX_SCAN_DURATION_MS: env.MAX_SCAN_DURATION_MS,
+    REQUIRE_FULL_SCOPE: env.REQUIRE_FULL_SCOPE,
+    ENFORCE_JWT: env.ENFORCE_JWT,
+    JWT_SECRET: env.JWT_SECRET,
+    LSCLAW_JWT_SECRET: env.LSCLAW_JWT_SECRET,
+    DEV_ALLOW_UNVERIFIED_IDENTITY: env.DEV_ALLOW_UNVERIFIED_IDENTITY,
+    EVIDENCE_SIGNING_KEY: env.EVIDENCE_SIGNING_KEY,
+    ENABLE_EXPERIMENTAL_ROUTES: env.ENABLE_EXPERIMENTAL_ROUTES,
+    ENABLE_INTERNAL_ROUTES: env.ENABLE_INTERNAL_ROUTES,
+    ENABLE_VPS_AGENT_WEB_ROUTES: env.ENABLE_VPS_AGENT_WEB_ROUTES,
+    INTERNAL_ROUTES_ALLOWED_IPS: env.INTERNAL_ROUTES_ALLOWED_IPS,
+    INTERNAL_ROUTES_TOKEN: env.INTERNAL_ROUTES_TOKEN,
+    INTERNAL_ROUTES_ALLOW_LOCALHOST: env.INTERNAL_ROUTES_ALLOW_LOCALHOST,
+    ROUTE_PREFIX_EXPERIMENTAL: env.ROUTE_PREFIX_EXPERIMENTAL,
+    ROUTE_PREFIX_INTERNAL: env.ROUTE_PREFIX_INTERNAL,
+    ROUTE_PREFIX_VPS_AGENT_WEB: env.ROUTE_PREFIX_VPS_AGENT_WEB,
+  };
+
+  const parseResult = configSchema.safeParse(rawEnv);
+  const errors: string[] = [];
+
+  if (!parseResult.success) {
+    for (const issue of parseResult.error.issues) {
+      const name = issue.path.join('.') || 'config';
+      errors.push(`Invalid ${name}: ${issue.message}`);
+    }
+
+    const fallback = {
+      values: CONFIG_WITH_DEFAULTS,
+      errors: [...errors],
+    };
+
+    if (env.ENFORCE_JWT === 'true' || env.ENFORCE_JWT === '1' || resolveNodeEnv(env.NODE_ENV) === 'production') {
+      if (!fallback.values.JWT_SECRET && !fallback.values.LSCLAW_JWT_SECRET) {
+        fallback.errors.push('Invalid JWT secret: ENFORCE_JWT requires JWT_SECRET or LSCLAW_JWT_SECRET to be set.');
+      }
+    }
+
+    return fallback;
+  }
+
+  const values = parseResult.data;
+
+  if ((values.ENFORCE_JWT || values.NODE_ENV === 'production') && !values.JWT_SECRET && !values.LSCLAW_JWT_SECRET) {
+    errors.push('Invalid JWT secret: ENFORCE_JWT requires JWT_SECRET or LSCLAW_JWT_SECRET to be set.');
+  }
+
+  return {
+    values,
+    errors,
+  };
+}
+
+const parsedConfig = normalizeAndValidateConfig(process.env);
+
+export const NODE_ENV = parsedConfig.values.NODE_ENV;
 export const IS_PRODUCTION = NODE_ENV === 'production';
-export const PORT = parseInt(process.env.PORT || '3000', 10);
+export const PORT = parsedConfig.values.PORT;
 
-/**
- * 扫描限制配置 (硬约束 #4)
- */
 export const SCAN_LIMITS: ScanLimits = {
-  maxFilesPerSyncScan: parseInt(process.env.MAX_FILES_PER_SYNC_SCAN || '1000', 10),
-  maxResponseBytes: parseInt(process.env.MAX_RESPONSE_BYTES || '10485760', 10), // 10MB
-  maxDurationMs: parseInt(process.env.MAX_SCAN_DURATION_MS || '30000', 10),     // 30s
+  maxFilesPerSyncScan: parsedConfig.values.MAX_FILES_PER_SYNC_SCAN,
+  maxResponseBytes: parsedConfig.values.MAX_RESPONSE_BYTES,
+  maxDurationMs: parsedConfig.values.MAX_SCAN_DURATION_MS,
 };
 
-/**
- * Scope 配置 (硬约束 #3)
- */
 export const SCOPE_CONFIG = {
-  requireFullScope: process.env.REQUIRE_FULL_SCOPE === 'true' || IS_PRODUCTION,
+  requireFullScope: parsedConfig.values.REQUIRE_FULL_SCOPE || IS_PRODUCTION,
   allowedModes: {
     production: ['service'] as const,
     development: ['local', 'service'] as const,
   },
 };
 
-/**
- * 路由分层配置
- * 支持核心路由、实验性路由和内部路由的分离
- */
+export const JWT_CONFIG = {
+  secret: parsedConfig.values.JWT_SECRET ?? parsedConfig.values.LSCLAW_JWT_SECRET ?? null,
+  enforceJWT: IS_PRODUCTION || parsedConfig.values.ENFORCE_JWT,
+};
+
+export const DEV_ALLOW_UNVERIFIED_IDENTITY = IS_PRODUCTION
+  ? false
+  : parsedConfig.values.DEV_ALLOW_UNVERIFIED_IDENTITY;
+
+export const EVIDENCE_CONFIG = {
+  signingKey: parsedConfig.values.EVIDENCE_SIGNING_KEY ?? null,
+  enableSignatures: !!parsedConfig.values.EVIDENCE_SIGNING_KEY || IS_PRODUCTION,
+};
+
 export const ROUTE_CONFIG = {
-  /**
-   * 是否启用实验性路由
-   * 实验性路由挂载在 /experimental/* 下
-   */
-  enableExperimental: process.env.ENABLE_EXPERIMENTAL_ROUTES === 'true',
-
-  /**
-   * 是否启用内部路由
-   * 内部路由挂载在 /internal/* 下
-   */
-  enableInternal: process.env.ENABLE_INTERNAL_ROUTES === 'true',
-
-  enableVpsAgentWeb: process.env.ENABLE_VPS_AGENT_WEB_ROUTES === 'true',
-
-  /**
-   * 路由前缀配置
-   */
+  enableExperimental: parsedConfig.values.ENABLE_EXPERIMENTAL_ROUTES,
+  enableInternal: parsedConfig.values.ENABLE_INTERNAL_ROUTES,
+  enableVpsAgentWeb: parsedConfig.values.ENABLE_VPS_AGENT_WEB_ROUTES,
   prefixes: {
     core: '',
-    experimental: '/experimental',
-    internal: '/internal',
-    vpsAgentWeb: '/vps-agent-web',
+    experimental: parsedConfig.values.ROUTE_PREFIX_EXPERIMENTAL,
+    internal: parsedConfig.values.ROUTE_PREFIX_INTERNAL,
+    vpsAgentWeb: parsedConfig.values.ROUTE_PREFIX_VPS_AGENT_WEB,
   },
 };
 
-/**
- * 有效的 NODE_ENV 值
- */
-const VALID_NODE_ENVS = ['development', 'production', 'test'] as const;
+export function validateConfig(): ConfigValidationResult {
+  const result: ConfigValidationResult = {
+    valid: parsedConfig.errors.length === 0,
+    errors: [...parsedConfig.errors],
+  };
 
-/**
- * 验证路由前缀格式
- */
-function validateRoutePrefix(prefix: string, name: string, errors: string[]): void {
-  if (prefix && !prefix.startsWith('/')) {
-    errors.push(`Invalid ${name} prefix: "${prefix}". Must start with "/".`);
-  }
-  if (prefix.includes(' ')) {
-    errors.push(`Invalid ${name} prefix: "${prefix}". Must not contain spaces.`);
-  }
-}
+  const env = parsedConfig.values;
 
-/**
- * 验证字符串枚举值
- */
-function validateEnum(value: string, validValues: readonly string[], name: string, errors: string[]): void {
-  if (!validValues.includes(value)) {
-    errors.push(`Invalid ${name}: "${value}". Must be one of: ${validValues.join(', ')}.`);
-  }
-}
-
-/**
- * 验证内部访问控制配置
- */
-function validateInternalAccessConfig(errors: string[]): void {
-  if (!ROUTE_CONFIG.enableInternal) {
-    return;
+  if (env.ENABLE_INTERNAL_ROUTES && !env.ENABLE_EXPERIMENTAL_ROUTES) {
+    console.warn('[WARNING] Internal routes are enabled but experimental routes are disabled. Internal routes typically depend on experimental features.');
   }
 
-  const allowedIps = process.env.INTERNAL_ROUTES_ALLOWED_IPS;
-  const token = process.env.INTERNAL_ROUTES_TOKEN;
-  const allowLocalhost = process.env.INTERNAL_ROUTES_ALLOW_LOCALHOST !== 'false';
-
-  // 生产环境必须配置访问控制
-  if (IS_PRODUCTION) {
-    if (!allowedIps && !token) {
-      errors.push(
-        'Production safety: INTERNAL_ROUTES_ENABLED=true requires either ' +
-        'INTERNAL_ROUTES_ALLOWED_IPS or INTERNAL_ROUTES_TOKEN to be set.'
-      );
-    }
-  }
-
-  // 验证 IP 格式
-  if (allowedIps) {
-    const ipList = allowedIps.split(',').map(ip => ip.trim());
-    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-    for (const ip of ipList) {
-      if (!ipv4Regex.test(ip) && ip !== 'localhost') {
-        errors.push(`Invalid IP address in INTERNAL_ROUTES_ALLOWED_IPS: "${ip}".`);
-      }
-    }
-  }
-
-  // 验证 Token 长度（如果设置了）
-  if (token && token.length < 32) {
-    errors.push('INTERNAL_ROUTES_TOKEN should be at least 32 characters for security.');
-  }
-
-  // 记录 localhost 配置（用于调试）
-  if (!allowLocalhost) {
-    console.log('[INFO] Internal routes localhost access is disabled.');
-  }
-}
-
-/**
- * 验证环境变量组合
- */
-function validateEnvironmentCombinations(): void {
-  // 如果启用了内部路由但没有实验性路由，给出警告
-  if (ROUTE_CONFIG.enableInternal && !ROUTE_CONFIG.enableExperimental) {
-    console.warn('[WARNING] Internal routes are enabled but experimental routes are disabled. ' +
-      'Internal routes typically depend on experimental features.');
-  }
-
-  // 开发环境检查
   if (!IS_PRODUCTION) {
-    // 开发环境允许宽松配置，但给出提示
     if (!SCOPE_CONFIG.requireFullScope) {
       console.log('[INFO] Running in development mode with relaxed scope validation.');
     }
-  }
-}
 
-/**
- * 配置验证函数
- * 在服务器启动前验证所有配置项的合法性
- */
-export function validateConfig(): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
+    if (!DEV_ALLOW_UNVERIFIED_IDENTITY) {
+      console.log('[INFO] Unverified identity is disabled in development mode.');
+    } else {
+      console.log('[INFO] Unverified identity is enabled in development mode.');
+    }
 
-  // 1. 验证端口范围
-  if (PORT < 1 || PORT > 65535) {
-    errors.push(`Invalid PORT: ${PORT}. Must be between 1 and 65535.`);
+    if (!env.INTERNAL_ROUTES_ALLOW_LOCALHOST) {
+      console.log('[INFO] Internal routes localhost access is disabled.');
+    }
   }
 
-  // 2. 验证扫描限制合理性
-  if (SCAN_LIMITS.maxFilesPerSyncScan < 1) {
-    errors.push(`Invalid MAX_FILES_PER_SYNC_SCAN: ${SCAN_LIMITS.maxFilesPerSyncScan}. Must be at least 1.`);
-  }
-  if (SCAN_LIMITS.maxResponseBytes < 1024) {
-    errors.push(`Invalid MAX_RESPONSE_BYTES: ${SCAN_LIMITS.maxResponseBytes}. Must be at least 1024 bytes.`);
-  }
-  if (SCAN_LIMITS.maxDurationMs < 1000) {
-    errors.push(`Invalid MAX_SCAN_DURATION_MS: ${SCAN_LIMITS.maxDurationMs}. Must be at least 1000ms.`);
-  }
-
-  // 3. 验证路由前缀格式
-  validateRoutePrefix(ROUTE_CONFIG.prefixes.experimental, 'Experimental route', errors);
-  validateRoutePrefix(ROUTE_CONFIG.prefixes.internal, 'Internal route', errors);
-  validateRoutePrefix(ROUTE_CONFIG.prefixes.vpsAgentWeb, 'VPS Agent Web route', errors);
-
-  // 4. 验证 NODE_ENV 枚举值
-  validateEnum(NODE_ENV, VALID_NODE_ENVS, 'NODE_ENV', errors);
-
-  // 5. 验证内部访问控制配置
-  validateInternalAccessConfig(errors);
-
-  // 6. 验证环境变量组合
-  validateEnvironmentCombinations();
-
-  // 7. 生产环境警告（如果实验性功能启用）
-  if (IS_PRODUCTION && ROUTE_CONFIG.enableExperimental) {
+  if (IS_PRODUCTION && env.ENABLE_EXPERIMENTAL_ROUTES) {
     console.warn('[WARNING] Experimental routes are enabled in production environment. This is not recommended.');
   }
-  if (IS_PRODUCTION && ROUTE_CONFIG.enableInternal) {
+  if (IS_PRODUCTION && env.ENABLE_INTERNAL_ROUTES) {
     console.warn('[WARNING] Internal routes are enabled in production environment. Ensure proper access control is in place.');
   }
-  if (IS_PRODUCTION && ROUTE_CONFIG.enableVpsAgentWeb) {
+  if (IS_PRODUCTION && env.ENABLE_VPS_AGENT_WEB_ROUTES) {
     console.warn('[WARNING] VPS Agent Web routes are enabled in production environment. Verify API gateway policies are in place.');
   }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+  return result;
 }
 
-/**
- * 启动时打印生效的配置值
- */
 export function logStartupConfig(): void {
   console.log('[STARTUP] ============================================');
   console.log('[STARTUP] Scan limits: ' +
@@ -213,8 +337,13 @@ export function logStartupConfig(): void {
     `maxDuration=${Math.round(SCAN_LIMITS.maxDurationMs / 1000)}s (default)`
   );
   console.log(`[STARTUP] Environment: ${NODE_ENV}, Full scope required: ${SCOPE_CONFIG.requireFullScope}`);
+  console.log('[STARTUP] Identity strategy:');
+  console.log(`[STARTUP]   - Enforce JWT: ${JWT_CONFIG.enforceJWT}`);
+  console.log(`[STARTUP]   - JWT secret source: ${JWT_CONFIG.secret ? (parsedConfig.values.JWT_SECRET ? 'JWT_SECRET' : 'LSCLAW_JWT_SECRET') : 'unset'}`);
+  console.log(`[STARTUP]   - JWT secret configured: ${!!JWT_CONFIG.secret}`);
+  console.log(`[STARTUP]   - Dev allow unverified identity: ${DEV_ALLOW_UNVERIFIED_IDENTITY}`);
+  console.log(`[STARTUP]   - Evidence signing: ${EVIDENCE_CONFIG.enableSignatures ? 'ENABLED' : 'DISABLED'}`);
 
-  // 路由配置输出
   console.log('[STARTUP] Route configuration:');
   console.log(`[STARTUP]   - Experimental routes: ${ROUTE_CONFIG.enableExperimental ? 'ENABLED' : 'DISABLED'}`);
   console.log(`[STARTUP]   - Internal routes: ${ROUTE_CONFIG.enableInternal ? 'ENABLED' : 'DISABLED'}`);

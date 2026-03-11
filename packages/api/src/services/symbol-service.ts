@@ -1,5 +1,6 @@
 import { discoverFiles, isReady, languageFromFilePath, defaultParseCache } from '@los-ast/core';
 import type { SymbolInfo, SymbolResult } from '@los-ast/shared/types';
+import { CoreNotReadyError } from '../types/errors.js';
 
 export interface SymbolServiceOptions {
   rootDir: string;
@@ -84,7 +85,7 @@ export class SymbolService {
 
     // 验证 Core 是否已初始化
     if (!isReady()) {
-      throw new Error('Core is not ready');
+      throw new CoreNotReadyError();
     }
 
     // 验证 limit 参数

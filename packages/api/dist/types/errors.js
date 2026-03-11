@@ -66,4 +66,9 @@ export class NotFoundError extends AppError {
         super('NOT_FOUND', 'RESOURCE_NOT_FOUND', id ? `${resource} with id '${id}' not found` : `${resource} not found`, false, id ? { resource, id } : { resource });
     }
 }
+export class AuthenticationError extends AppError {
+    constructor(code, message) {
+        super('AUTHENTICATION', code, message, false);
+    }
+}
 //# sourceMappingURL=errors.js.map

@@ -53,18 +53,18 @@ interface ExpectedOutput {
 const goldenCases: GoldenCase[] = [
   {
     name: 'mini-js',
-    rootDir: path.resolve(process.cwd(), '../../fixtures/golden/mini-js'),
-    expectedOutputPath: path.resolve(process.cwd(), '../../fixtures/golden/mini-js/expected-output.json'),
+    rootDir: path.resolve(__dirname, '../../../../fixtures/golden/mini-js'),
+    expectedOutputPath: path.resolve(__dirname, '../../../../fixtures/golden/mini-js/expected-output.json'),
   },
   {
     name: 'cantool-sample',
-    rootDir: path.resolve(process.cwd(), '../../fixtures/golden/cantool-sample'),
-    expectedOutputPath: path.resolve(process.cwd(), '../../fixtures/golden/cantool-sample/expected-output.json'),
+    rootDir: path.resolve(__dirname, '../../../../fixtures/golden/cantool-sample'),
+    expectedOutputPath: path.resolve(__dirname, '../../../../fixtures/golden/cantool-sample/expected-output.json'),
   },
   {
     name: 'lsclaw-sample',
-    rootDir: path.resolve(process.cwd(), '../../fixtures/golden/lsclaw-sample'),
-    expectedOutputPath: path.resolve(process.cwd(), '../../fixtures/golden/lsclaw-sample/expected-output.json'),
+    rootDir: path.resolve(__dirname, '../../../../fixtures/golden/lsclaw-sample'),
+    expectedOutputPath: path.resolve(__dirname, '../../../../fixtures/golden/lsclaw-sample/expected-output.json'),
   },
 ];
 

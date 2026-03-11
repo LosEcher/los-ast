@@ -137,8 +137,8 @@ packages/
 |------|----------|--------|
 | `/healthz/live` | 是 | 存活检查 |
 | `/healthz/ready` | 是 | 就绪检查 + Core状态 |
-| `POST /scan` | 是 | 扫描流程 + 限制验证 |
-| `POST /discover/symbols` | 是 | 符号发现 |
+| `POST /scan` | 是 | 扫描流程 + 限制验证；Core 未就绪时显式降级为 `503 SERVICE_UNAVAILABLE` |
+| `POST /discover/symbols` | 是 | 符号发现 + Core 未就绪显式降级 |
 | Scope验证 | 是 | 403/400错误 |
 | 取消语义 | 是 | 408超时 |
 | 扫描限制 | 是 | 413过大 |
@@ -211,9 +211,10 @@ console.log(CORE_FACADE_VERSION); // '1.0.0'
 | 优先级 | 项目 | 状态 | 说明 |
 |--------|------|------|------|
 | 高 | 路由分组 | ✅ 已完成 | Phase 1.x路由已移到 `/experimental` |
+| 高 | 就绪态降级治理 | ✅ 已完成 | `/scan` 与 `/discover/symbols` 在 Core 未就绪时返回 `503`（`SERVICE_UNAVAILABLE` + `CORE_NOT_READY`） |
 | 中 | Cancellation重构 | 待办 | 提取重复逻辑 |
 | 中 | 配置验证 | 待办 | 使用Zod验证环境变量 |
-| 低 | 性能基准 | 待办 | 添加benchmark测试 |
+| 低 | 性能基准 | 已完成 | 添加 `packages/api/scripts/scan-benchmark.ts` 与 `benchmark:scan` 命令 |
 
 ---
 

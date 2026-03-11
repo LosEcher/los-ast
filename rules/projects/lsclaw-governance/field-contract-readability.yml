@@ -1,0 +1,18 @@
+id: lsclaw-governance.api-response-field-exposure
+language: TypeScript
+severity: info
+message: "返回对象直接透传数据库模型时，建议通过 DTO 映射并控制字段列表"
+rule:
+  pattern: |
+    function $FN($ARGS) {
+      return $RES.$METHOD($DATA)
+    }
+constraints:
+  - name: METHOD
+    regex: "(json|send)"
+    mode: any
+governance:
+  domain: interface
+  owner: platform
+  impact: low
+  rationale: 支持后续字段治理规则的落地，先做可观测告警基础

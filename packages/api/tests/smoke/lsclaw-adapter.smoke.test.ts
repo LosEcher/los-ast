@@ -1,27 +1,55 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHmac } from 'node:crypto';
 import errorHandlerPlugin from '../../src/plugins/error-handler';
 import requestIdPlugin from '../../src/plugins/request-id';
 import scopeValidatorPlugin from '../../src/plugins/scope-validator';
 import cancellationPlugin from '../../src/plugins/cancellation';
 import healthCheckPlugin from '../../src/plugins/health-check';
+import identityPlugin from '../../src/plugins/identity';
 import { scanRoutes, discoverRoutes } from '../../src/routes/core';
 import vpsAgentWebRoutes from '../../src/routes/vps-agent-web/index';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const lsclawFixtureRoot = resolve(__dirname, '../../../../fixtures/golden/lsclaw-sample');
+const { JWT_SECRET } = vi.hoisted(() => ({
+  JWT_SECRET: 'test-smoke-jwt-secret',
+}));
+
+vi.mock('../../src/config/index.js', async () => {
+  const actual = await vi.importActual('../../src/config/index.js');
+  return {
+    ...actual,
+    SCOPE_CONFIG: {
+      requireFullScope: false,
+      allowedModes: {
+        production: ['service'],
+        development: ['local', 'service'],
+      },
+    },
+    JWT_CONFIG: {
+      secret: JWT_SECRET,
+      enforceJWT: true,
+    },
+    DEV_ALLOW_UNVERIFIED_IDENTITY: false,
+    IS_PRODUCTION: true,
+  };
+});
+
+function createJwt(payloadData: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(payloadData)).toString('base64url');
+  const signature = createHmac('sha256', JWT_SECRET)
+    .update(`${header}.${payload}`)
+    .digest('base64url');
+  return `${header}.${payload}.${signature}`;
+}
 
 describe('lsclaw Adapter Smoke Tests', () => {
   let app: FastifyInstance;
-  const scope = {
-    tenant_id: 'tenant-smoke',
-    project_id: 'lsclaw-smoke',
-    actor_id: 'smoke-runner',
-    mode: 'service',
-  };
 
   beforeAll(async () => {
     app = Fastify({ logger: false });
@@ -30,6 +58,7 @@ describe('lsclaw Adapter Smoke Tests', () => {
     await app.register(healthCheckPlugin);
     await app.register(cancellationPlugin);
     await app.register(scopeValidatorPlugin);
+    await app.register(identityPlugin);
     await app.register(scanRoutes, { prefix: '/scan' });
     await app.register(discoverRoutes, { prefix: '/discover' });
     await app.register(vpsAgentWebRoutes, { prefix: '/vps-agent-web' });
@@ -41,11 +70,21 @@ describe('lsclaw Adapter Smoke Tests', () => {
   });
 
   it('POST /scan should scan lsclaw fixture successfully', async () => {
+    const jwt = createJwt({
+      sub: 'smoke-runner',
+      tenant_id: 'tenant-smoke',
+      project_id: 'lsclaw-smoke',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+
     const response = await app.inject({
       method: 'POST',
       url: '/scan',
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        'x-request-id': `smoke-scan-${Date.now()}`,
+      },
       payload: {
-        scope,
         project: 'lsclaw',
         rootDir: lsclawFixtureRoot,
         include: ['src/**/*.{ts,js,mjs}'],
@@ -61,11 +100,21 @@ describe('lsclaw Adapter Smoke Tests', () => {
   });
 
   it('POST /vps-agent-web/attribution/analyze should return analysis payload', async () => {
+    const jwt = createJwt({
+      sub: 'smoke-runner',
+      tenant_id: 'tenant-smoke',
+      project_id: 'lsclaw-smoke',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+
     const response = await app.inject({
       method: 'POST',
       url: '/vps-agent-web/attribution/analyze',
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        'x-request-id': `smoke-attribution-${Date.now()}`,
+      },
       payload: {
-        scope,
         incident_id: 'inc-smoke-001',
         evidence_bundle_id: 'evd-smoke-001',
       },

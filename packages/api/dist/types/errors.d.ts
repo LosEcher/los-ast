@@ -40,4 +40,7 @@ export declare class ScanTooLargeError extends AppError {
 export declare class NotFoundError extends AppError {
     constructor(resource: string, id?: string);
 }
+export declare class AuthenticationError extends AppError {
+    constructor(code: string, message: string);
+}
 //# sourceMappingURL=errors.d.ts.map

@@ -2,11 +2,11 @@
  * los-ast 证据生成服务
  * Phase 1.7: los-ast 证据生成
  */
-import type { CodeEvidenceBundle, GenerateEvidenceRequest, ValidatePatchSafetyRequest, ValidatePatchSafetyResponse, GenerateRewriteRequest, GenerateRewriteResponse, ExplainCodeRequest, ExplainCodeResponse, CodeStats } from '@los-ast/shared/types';
+import type { CodeEvidenceBundle, GenerateEvidenceRequest, ValidatePatchSafetyRequest, ValidatePatchSafetyResponse, GenerateRewriteRequest, GenerateRewriteResponse, ExplainCodeRequest, ExplainCodeResponse, CodeStats, VerifiedScope } from '@los-ast/shared/types';
 /**
  * 生成证据包
  */
-export declare function generateEvidence(request: GenerateEvidenceRequest): Promise<CodeEvidenceBundle>;
+export declare function generateEvidence(request: GenerateEvidenceRequest, scope: VerifiedScope): Promise<CodeEvidenceBundle>;
 /**
  * 验证 Patch 安全性
  */

@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0
 **Stability:** Stable (frozen for remote evidence interface)
-**Last Updated:** 2026-03-08
+**Last Updated:** 2026-03-11
 
 ## Overview
 
@@ -40,6 +40,25 @@ interface ScanRequest {
   rules?: string[];        // Rule file glob patterns (default: auto-resolve)
   includeStats?: boolean;  // Include parse cache statistics
   deterministic?: boolean; // Default: true (stable sorting, fixed timestamps)
+  contractArtifacts?: Array<{
+    source?: string;                 // 契约来源标签
+    ruleId?: string;                 // 规则标识
+    severity?: 'info' | 'warning' | 'error';
+    message?: string;                // 规则内容（required if ruleId missing）
+    file?: string;                   // 关联文件路径
+    language?: string;               // 默认 contract
+    line?: number;                   // 未提供 range 时回退
+    column?: number;                 // 未提供 range 时回退
+    startIndex?: number;             // 未提供 range 时回退
+    endIndex?: number;               // 未提供 range 时回退
+    excerpt?: string;                // 可选摘录
+    governanceDomain?: string | string[]; // 可选治理域
+    impactHint?: 'low' | 'medium' | 'high';
+    range?: {                        // 可选精确定位
+      start: { line: number; column: number; index: number };
+      end: { line: number; column: number; index: number };
+    };
+  }>;
 }
 ```
 
@@ -58,6 +77,7 @@ interface ScanRequest {
 | `ignore` | string[] | No | Glob patterns to exclude |
 | `includeStats` | boolean | No | Include `parseCache` in response (default: false) |
 | `deterministic` | boolean | No | Produce deterministic output (default: true). When true: sorted keys, fixed epoch timestamp, truncated fingerprints |
+| `contractArtifacts` | object[] | No | Optional contract/scheme findings input. Each entry is normalized into `findingSource='contract'` findings |
 
 ### Example Request
 
@@ -114,6 +134,9 @@ interface Finding {
   hasFix: boolean;                      // Auto-fix available
   proposedReplacement: string | null;   // Suggested fix
   fingerprint: string;                  // SHA-256 hash for deduplication
+  findingSource?: 'ast' | 'contract' | 'schema'; // Result source tag
+  governanceDomain?: string[];          // 可选治理域标签: frontend/backend/database/interface/quality...
+  impactHint?: 'low' | 'medium' | 'high'; // 可选风险提示
 }
 ```
 
@@ -180,6 +203,7 @@ type ErrorCategory =
   | 'TIMEOUT'         // Request timeout
   | 'SCAN_TOO_LARGE'  // Response exceeds size limit
   | 'NOT_FOUND'       // Resource not found
+  | 'SERVICE_UNAVAILABLE'; // Core not ready / explicit fallback
   | 'INTERNAL';       // Internal server error
 ```
 
@@ -190,12 +214,18 @@ type ErrorCategory =
 | 400 | VALIDATION | `INVALID_PROJECT` | Project field missing or invalid |
 | 400 | VALIDATION | `INVALID_ROOTDIR` | rootDir field missing or invalid |
 | 413 | SCAN_TOO_LARGE | `SCAN_TOO_LARGE` | Response size exceeds limit |
+| 503 | SERVICE_UNAVAILABLE | `CORE_NOT_READY` | Core is not ready, explicit fallback path |
 | 403 | SCOPE | `SCOPE_ERROR` | Scope/permission issue |
 | 404 | NOT_FOUND | `RESOURCE_NOT_FOUND` | Requested resource not found |
 | 404 | NOT_FOUND | `ROUTE_NOT_FOUND` | API endpoint not found |
 | 408 | TIMEOUT | `REQUEST_TIMEOUT` | Scan exceeded time limit |
 | 500 | INTERNAL | `INTERNAL_ERROR` | Unexpected server error |
 | 500 | INTERNAL | `UNKNOWN_ERROR` | Unknown error type |
+
+### Readiness & Explicit Degradation Contract
+
+对 `503 SERVICE_UNAVAILABLE + CORE_NOT_READY` 的重试与回退策略，请以  
+[Service Readiness & Explicit Degradation Contract](../../../docs/service-readiness-degradation-contract.md) 为准。
 
 ### Example Error Response
 
@@ -222,6 +252,18 @@ type ErrorCategory =
 | Timeout | 30s | Maximum scan duration |
 | Excerpt Length | 240 chars | Maximum finding excerpt length |
 | Cache Entries | 100 | Maximum parse cache entries |
+
+## Governance Scope Note (March 2026)
+
+`/scan` 当前已补齐代码层扫描能力，并支持最小化 `contractArtifacts` 直通，默认输出的 `findingSource` 为 `ast`，并可与 `contract` findings 并行返回。  
+
+| 维度 | 当前状态 | 说明 |
+|------|----------|------|
+| 前端/后端接口治理 | 代码层可扫描（如调用方式、错误处理、网络层封装） | 可通过规则包持续补齐 |
+| 接口契约治理 | `contract` 域已支持最小接入 | 通过 `contractArtifacts` 字段输入轻量条目，后续将对接 OpenAPI/IDL/Schema 提取器 |
+| 数据库字段治理 | `schema` 域未内置 | 需要 schema/DDL 侧解析与字段变更语义模型 |
+
+`findingSource='contract'|'schema'` 是后续演进预留字段，与现有 `findingSource='ast'` 兼容。
 
 ## CLI/API Parity
 

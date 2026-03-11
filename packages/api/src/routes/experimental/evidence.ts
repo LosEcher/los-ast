@@ -21,23 +21,25 @@ import type {
   ValidatePatchSafetyRequest,
   GenerateRewriteRequest,
   ExplainCodeRequest,
+  VerifiedScope,
 } from '@los-ast/shared/types';
 
 /**
  * 注册 Evidence 路由 (实验性)
  */
 export default async function evidenceRoutes(fastify: FastifyInstance) {
-  // POST /experimental/evidence/generate - 生成证据包
   fastify.post('/generate', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as GenerateEvidenceRequest;
-    const bundle = await generateEvidence(body);
+    const scope = request.scope as VerifiedScope;
+    const bundle = await generateEvidence(body, scope);
     return created(reply, bundle);
   });
 
   // GET /experimental/evidence/:id - 获取证据包
   fastify.get('/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const bundle = await getEvidenceBundle(id);
+    const scope = request.scope as VerifiedScope;
+    const bundle = await getEvidenceBundle(id, scope);
     if (!bundle) return notFound(reply, 'Evidence bundle');
     return ok(bundle);
   });

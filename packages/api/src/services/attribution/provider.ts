@@ -1,6 +1,7 @@
 import type { AttributionAnalysis, HypothesisDraft, Scope } from '@los-ast/shared/types';
 import { getIncident } from '../incident/store.js';
 import { getEvidenceBundle } from './store.js';
+import { generateId } from '../../utils/id-generator.js';
 
 type ProviderName = 'lsclaw' | 'mock';
 
@@ -47,7 +48,7 @@ async function runMockProvider(input: AnalyzeAttributionInput): Promise<Attribut
   ];
 
   return {
-    analysis_id: `ana_${Date.now()}`,
+    analysis_id: generateId('ana'),
     incident_id: input.incidentId,
     scope: input.scope,
     hypotheses,
@@ -100,7 +101,7 @@ async function runLsclawProvider(input: AnalyzeAttributionInput): Promise<Attrib
   ];
 
   return {
-    analysis_id: `ana_${Date.now()}`,
+    analysis_id: generateId('ana'),
     incident_id: input.incidentId,
     scope: input.scope,
     hypotheses,

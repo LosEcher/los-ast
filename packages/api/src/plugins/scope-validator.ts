@@ -1,7 +1,7 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ScopeError, ValidationError } from '../types/errors.js';
-import { SCOPE_CONFIG } from '../config/index.js';
+import { IS_PRODUCTION, JWT_CONFIG, SCOPE_CONFIG } from '../config/index.js';
 import type { Scope } from '@los-ast/shared/types';
 
 /**
@@ -20,7 +20,21 @@ export default fp(async function scopeValidatorPlugin(fastify: FastifyInstance) 
     // 尝试从请求体或查询参数中获取 scope
     const scope = extractScope(request);
 
-    // 如果没有 scope，返回 400
+    // 生产环境且 JWT 强制时，允许缺少客户端 scope。
+    // 权威 scope 将由 identity 插件从 JWT claims 派生。
+    if (IS_PRODUCTION && JWT_CONFIG.enforceJWT) {
+      if (scope?.mode === 'local') {
+        throw new ScopeError(
+          'LOCAL_SCOPE_FORBIDDEN',
+          'Mode "local" is not allowed in production environment'
+        );
+      }
+
+      request.scope = scope || {};
+      return;
+    }
+
+    // 非生产 JWT 强制模式下，如果没有 scope，返回 400
     if (!scope) {
       throw new ValidationError('MISSING_SCOPE', 'Scope is required in request body or query parameters');
     }

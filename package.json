@@ -8,6 +8,7 @@
   "scripts": {
     "los-ast": "node ./packages/cli/src/index.mjs",
     "hub-lite:artifacts": "node ./packages/cli/src/export-artifacts.mjs",
+    "bench:scan": "cd packages/api && npm run benchmark:scan --",
     "build:api": "cd packages/api && npm run build",
     "test": "npm run test:core && npm run test:api",
     "test:core": "node --test test/rules.test.mjs",

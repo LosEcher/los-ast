@@ -40,6 +40,30 @@ function normalizeConstraints(constraints) {
   return null
 }
 
+function normalizeGovernanceDomain(domain) {
+  if (!domain) return null
+  if (Array.isArray(domain)) return domain.filter(Boolean).map((item) => String(item).trim()).filter(Boolean)
+  if (typeof domain === 'string' && domain.trim()) return [domain.trim()]
+  return null
+}
+
+function normalizeGovernance(governance) {
+  if (!governance || typeof governance !== 'object') return null
+
+  const normalized = {
+    domain: normalizeGovernanceDomain(governance.domain || governance.domains),
+    owner: governance.owner ? String(governance.owner) : undefined,
+    impact: governance.impact ? String(governance.impact) : undefined,
+    rationale: governance.rationale ? String(governance.rationale) : undefined,
+  }
+
+  if (normalized.domain == null && !normalized.owner && !normalized.impact && !normalized.rationale) {
+    return null
+  }
+
+  return normalized
+}
+
 export async function loadRuleFiles(rulePaths) {
   const files = await fg(rulePaths, {
     onlyFiles: true,
@@ -62,6 +86,13 @@ export async function loadRuleFiles(rulePaths) {
     const rule = { ...r }
     rule.severity = normalizeSeverity(rule.severity)
     rule.constraints = normalizeConstraints(rule.constraints)
+    rule.governance = normalizeGovernance(rule.governance)
+    if (rule.governance && rule.governance.impact) {
+      const impact = String(rule.governance.impact).toLowerCase()
+      if (impact !== 'low' && impact !== 'medium' && impact !== 'high') {
+        rule.governance.impact = 'medium'
+      }
+    }
     rule.ruleFile = rule.__file
     return rule
   })

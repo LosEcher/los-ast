@@ -20,6 +20,14 @@ export declare const SCOPE_CONFIG: {
         development: readonly ["local", "service"];
     };
 };
+export declare const JWT_CONFIG: {
+    secret: string | null;
+    enforceJWT: boolean;
+};
+export declare const EVIDENCE_CONFIG: {
+    signingKey: string | null;
+    enableSignatures: boolean;
+};
 /**
  * 路由分层配置
  * 支持核心路由、实验性路由和内部路由的分离

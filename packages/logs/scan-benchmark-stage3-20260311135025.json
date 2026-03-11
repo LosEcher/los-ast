@@ -1,0 +1,39 @@
+{
+  "createdAt": "2026-03-11T05:50:46.515Z",
+  "run": {
+    "files": 2000,
+    "iterations": 120,
+    "concurrency": 3,
+    "source": "packages/api/src/routes/core/scan",
+    "fixture": {
+      "path": "/var/folders/p1/nvkt412d6vxgjw8__h7r34xw0000gn/T/los-ast-bench-t6uOeh",
+      "generated": true
+    },
+    "config": {
+      "maxScanDurationMs": "120000",
+      "maxFilesPerSyncScan": "20000"
+    }
+  },
+  "results": {
+    "total": 120,
+    "success": 120,
+    "fail": 0,
+    "failStatusCodes": [],
+    "latencyMs": {
+      "min": 280.41,
+      "p50": 298.7,
+      "p95": 364.55,
+      "p99": 454.6,
+      "max": 455.43,
+      "avg": 309.54
+    },
+    "throughputReqPerSec": 9.69,
+    "wallClockMs": 12388.51
+  },
+  "payload": {
+    "deterministic": true,
+    "includeStats": false,
+    "hasRules": false,
+    "rules": null
+  }
+}

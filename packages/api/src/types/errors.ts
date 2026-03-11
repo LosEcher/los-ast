@@ -79,6 +79,20 @@ export class ScanTooLargeError extends AppError {
   }
 }
 
+export class CoreNotReadyError extends AppError {
+  constructor(message = 'Core is not ready') {
+    super(
+      'SERVICE_UNAVAILABLE',
+      'CORE_NOT_READY',
+      message,
+      true,
+      {
+        reason: 'core_not_ready',
+      }
+    );
+  }
+}
+
 /**
  * 资源未找到错误
  */
@@ -91,5 +105,11 @@ export class NotFoundError extends AppError {
       false,
       id ? { resource, id } : { resource }
     );
+  }
+}
+
+export class AuthenticationError extends AppError {
+  constructor(code: string, message: string) {
+    super('AUTHENTICATION', code, message, false);
   }
 }

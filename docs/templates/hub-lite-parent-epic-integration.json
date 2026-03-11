@@ -1,0 +1,133 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Hub-Lite Parent Epic Integration",
+  "description": "Schema for recording child session execution results in hub-lite control plane",
+  "type": "object",
+  "required": ["traceId", "parentTaskId", "childTaskId", "sessionId", "targetProjectPath", "executionRecords"],
+  "properties": {
+    "traceId": {
+      "type": "string",
+      "description": "Shared trace ID across all child sessions"
+    },
+    "parentTaskId": {
+      "type": "string",
+      "description": "Parent epic task identifier"
+    },
+    "childTaskId": {
+      "type": "string",
+      "description": "Unique child task identifier"
+    },
+    "sessionId": {
+      "type": "string",
+      "description": "Child session identifier"
+    },
+    "targetProjectPath": {
+      "type": "string",
+      "description": "Absolute path to the target repository"
+    },
+    "executionRecords": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ExecutionRecord"
+      }
+    },
+    "verificationResults": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/VerificationResult"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Artifact"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Blocker"
+      }
+    }
+  },
+  "definitions": {
+    "ExecutionRecord": {
+      "type": "object",
+      "required": ["stage", "kind", "summary", "timestamp"],
+      "properties": {
+        "stage": {
+          "type": "string",
+          "enum": ["research", "planning", "implementation", "verification", "review", "complete"]
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["progress", "result", "blocker"]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    },
+    "VerificationResult": {
+      "type": "object",
+      "required": ["command", "status", "exitCode"],
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "skipped"]
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        }
+      }
+    },
+    "Artifact": {
+      "type": "object",
+      "required": ["path", "type"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["report", "log", "fixture", "test-output", "scan-result"]
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "Blocker": {
+      "type": "object",
+      "required": ["type", "description"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["contract", "dependency", "verification", "other"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "escalated": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

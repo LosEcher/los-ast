@@ -9,6 +9,7 @@ const PREFIX_MAP = {
     cfg: 'cfg', // config
     evd: 'evd', // evidence
     fct: 'fct', // fact
+    ana: 'ana', // analysis
 };
 /**
  * 生成唯一 ID

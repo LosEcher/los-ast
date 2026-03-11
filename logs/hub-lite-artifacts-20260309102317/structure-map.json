@@ -1,0 +1,150 @@
+{
+  "schema": "lsclaw.los-ast.structure-map.v1",
+  "version": "1.0.0",
+  "project": "lsclaw",
+  "rootDir": "/Users/echerlos/Downloads/projects/los-ast/fixtures/golden/lsclaw-sample",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "source": {
+    "tool": "los-ast",
+    "mode": "cli",
+    "scanArtifactPath": "scan-findings.jsonl",
+    "symbolsArtifactPath": "symbols.json"
+  },
+  "files": [
+    {
+      "path": "src/config.ts",
+      "language": "typescript",
+      "role": "source"
+    },
+    {
+      "path": "src/index.ts",
+      "language": "typescript",
+      "role": "source"
+    },
+    {
+      "path": "src/router.ts",
+      "language": "typescript",
+      "role": "source"
+    }
+  ],
+  "symbols": [
+    {
+      "name": "Config",
+      "kind": "interface",
+      "file": "src/config.ts",
+      "line": 5
+    },
+    {
+      "name": "ConfigManager",
+      "kind": "class",
+      "file": "src/config.ts",
+      "line": 11
+    },
+    {
+      "name": "content",
+      "kind": "variable",
+      "file": "src/config.ts",
+      "line": 22
+    },
+    {
+      "name": "app",
+      "kind": "variable",
+      "file": "src/index.ts",
+      "line": 29
+    },
+    {
+      "name": "LSClaw",
+      "kind": "class",
+      "file": "src/index.ts",
+      "line": 5
+    },
+    {
+      "name": "main",
+      "kind": "function",
+      "file": "src/index.ts",
+      "line": 28
+    },
+    {
+      "name": "handler",
+      "kind": "variable",
+      "file": "src/router.ts",
+      "line": 30
+    },
+    {
+      "name": "Router",
+      "kind": "class",
+      "file": "src/router.ts",
+      "line": 4
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/config.ts",
+      "to": "fs",
+      "kind": "import"
+    },
+    {
+      "from": "src/config.ts",
+      "to": "path",
+      "kind": "import"
+    },
+    {
+      "from": "src/index.ts",
+      "to": "./config",
+      "kind": "import"
+    },
+    {
+      "from": "src/index.ts",
+      "to": "./router",
+      "kind": "import"
+    },
+    {
+      "from": "src/router.ts",
+      "to": "./config",
+      "kind": "import"
+    }
+  ],
+  "declares": [
+    {
+      "file": "src/config.ts",
+      "symbol": "Config",
+      "kind": "interface"
+    },
+    {
+      "file": "src/config.ts",
+      "symbol": "ConfigManager",
+      "kind": "class"
+    },
+    {
+      "file": "src/config.ts",
+      "symbol": "content",
+      "kind": "variable"
+    },
+    {
+      "file": "src/index.ts",
+      "symbol": "app",
+      "kind": "variable"
+    },
+    {
+      "file": "src/index.ts",
+      "symbol": "LSClaw",
+      "kind": "class"
+    },
+    {
+      "file": "src/index.ts",
+      "symbol": "main",
+      "kind": "function"
+    },
+    {
+      "file": "src/router.ts",
+      "symbol": "handler",
+      "kind": "variable"
+    },
+    {
+      "file": "src/router.ts",
+      "symbol": "Router",
+      "kind": "class"
+    }
+  ],
+  "route_binds": []
+}

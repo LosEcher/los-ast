@@ -129,6 +129,20 @@ const TEXT_IMPORT_PATTERNS = [
   { kind: 'use', languages: ['rust'], regex: /^\s*use\s+([^;]+);/gm },
 ]
 
+function classifyFileRole(relativeFile) {
+  const normalized = String(relativeFile).split(path.sep).join('/')
+  if (/(^|\/)src\/admin\/app\/pages\//.test(normalized)) return 'page'
+  if (/(^|\/)src\/admin\/app\/chat\/api-client\./.test(normalized)) return 'api_client'
+  if (/(^|\/)src\/admin\/app\/utils\//.test(normalized)) return 'ui_helper'
+  if (/(^|\/)src\/shared\/contracts\//.test(normalized)) return 'contract'
+  if (/(^|\/)src\/routes\//.test(normalized)) return 'route'
+  if (/(^|\/)src\/state\//.test(normalized)) return 'state'
+  if (/(^|\/)src\/admin\/app\/components\//.test(normalized)) return 'component'
+  if (/(^|\/)scripts\//.test(normalized)) return 'script'
+  if (/(^|\/)test\//.test(normalized)) return 'test'
+  return 'source'
+}
+
 function indexToLine(source, index) {
   if (!Number.isFinite(index) || index <= 0) return 1
   let line = 1
@@ -168,7 +182,7 @@ async function extractFileFacts(file, rootDir) {
       file: {
         path: toPosixRelative(rootDir, file),
         language: null,
-        role: 'source',
+        role: classifyFileRole(toPosixRelative(rootDir, file)),
       },
       symbols: [],
       imports: [],
@@ -205,7 +219,7 @@ async function extractFileFacts(file, rootDir) {
     file: {
       path: relativeFile,
       language: normalizedLanguage,
-      role: 'source',
+      role: classifyFileRole(relativeFile),
     },
     symbols,
     imports,

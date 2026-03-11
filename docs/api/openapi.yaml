@@ -122,6 +122,26 @@ paths:
                     - "node_modules/**"
                     - "dist/**"
                   includeStats: true
+              withSchemaArtifacts:
+                summary: 合并数据库 Schema Findings
+                value:
+                  scope:
+                    tenant_id: "tenant-001"
+                    project_id: "project-001"
+                    actor_id: "actor-001"
+                    mode: "service"
+                  project: "my-project"
+                  rootDir: "/path/to/code"
+                  schemaArtifacts:
+                    - source: "schema/user-db.sql"
+                      ruleId: "schema/user-email-nullability"
+                      severity: "warning"
+                      message: "字段 email 未限制为非空"
+                      file: "schema/users.sql"
+                      line: 17
+                      column: 4
+                      governanceDomain: database
+                      impactHint: medium
       responses:
         '200':
           description: 扫描成功
@@ -208,6 +228,25 @@ paths:
                       details:
                         limit_bytes: 10485760
                         actual_bytes: 15242880
+        '503':
+          description: Core 未就绪（显式降级）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                coreNotReady:
+                  summary: Core not ready
+                  value:
+                    error:
+                      category: "SERVICE_UNAVAILABLE"
+                      code: "CORE_NOT_READY"
+                      message: "Core is not ready"
+                      requestId: "req-123"
+                      timestamp: "2026-03-07T12:00:00.000Z"
+                      retryable: true
+                      details:
+                        reason: "core_not_ready"
 
   /discover/symbols:
     post:
@@ -267,6 +306,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Core 未就绪（显式降级）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serviceUnavailable:
+                  summary: Core not ready
+                  value:
+                    error:
+                      category: "SERVICE_UNAVAILABLE"
+                      code: "CORE_NOT_READY"
+                      message: "Core is not ready"
+                      requestId: "req-123"
+                      timestamp: "2026-03-07T12:00:00.000Z"
+                      retryable: true
+                      details:
+                        reason: "core_not_ready"
 
   /vps-agent-web/approvals:
     get:
@@ -589,6 +647,177 @@ components:
           items:
             type: string
           description: 忽略模式（glob）
+        rules:
+          type: array
+          description: 规则文件 glob 列表；不传时不加载额外规则。
+          items:
+            type: string
+        rulePack:
+          type: string
+          enum: [lsclaw-governance]
+          description: 内置规则包标识。当前支持 `lsclaw-governance`（在未传 `rules` 时生效）。
+        contractArtifacts:
+          type: array
+          description: >
+            可选 contract 来源 findings 输入。每条记录会被转换为 `findingSource=contract` 的 finding。
+          items:
+            type: object
+            required:
+              - message
+            properties:
+              source:
+                type: string
+                description: contract 来源标识（用于 ruleFile 回填）
+              ruleId:
+                type: string
+                description: 规则标识
+              severity:
+                type: string
+                enum: [info, warning, error]
+                default: warning
+              message:
+                type: string
+              file:
+                type: string
+                description: 关联文件路径
+              language:
+                type: string
+                description: 来源语言标签（默认 contract）
+              line:
+                type: integer
+                minimum: 1
+                description: 未提供 range 时回退
+              column:
+                type: integer
+                minimum: 0
+                description: 列号
+              startIndex:
+                type: integer
+                minimum: 0
+              endIndex:
+                type: integer
+                minimum: 0
+              excerpt:
+                type: string
+                description: 摘要片段
+              governanceDomain:
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+                description: 治理域标签
+              impactHint:
+                type: string
+                enum: [low, medium, high]
+              range:
+                type: object
+                properties:
+                  start:
+                    type: object
+                    properties:
+                      line:
+                        type: integer
+                        minimum: 1
+                      column:
+                        type: integer
+                        minimum: 0
+                      index:
+                        type: integer
+                        minimum: 0
+                  end:
+                    type: object
+                    properties:
+                      line:
+                        type: integer
+                        minimum: 1
+                      column:
+                        type: integer
+                        minimum: 0
+                      index:
+                        type: integer
+                        minimum: 0
+        schemaArtifacts:
+          type: array
+          description: >
+            可选 schema 来源 findings 输入。每条记录会被转换为 `findingSource=schema` 的 finding。
+          items:
+            type: object
+            required:
+              - message
+            properties:
+              source:
+                type: string
+                description: schema 来源标识（用于 ruleFile 回填）
+              ruleId:
+                type: string
+                description: 规则标识
+              severity:
+                type: string
+                enum: [info, warning, error]
+                default: warning
+              message:
+                type: string
+              file:
+                type: string
+                description: 关联文件路径
+              language:
+                type: string
+                description: 来源语言标签（默认 schema）
+              line:
+                type: integer
+                minimum: 1
+                description: 未提供 range 时回退
+              column:
+                type: integer
+                minimum: 0
+                description: 列号
+              startIndex:
+                type: integer
+                minimum: 0
+              endIndex:
+                type: integer
+                minimum: 0
+              excerpt:
+                type: string
+                description: 摘要片段
+              governanceDomain:
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+                description: 治理域标签
+              impactHint:
+                type: string
+                enum: [low, medium, high]
+              range:
+                type: object
+                properties:
+                  start:
+                    type: object
+                    properties:
+                      line:
+                        type: integer
+                        minimum: 1
+                      column:
+                        type: integer
+                        minimum: 0
+                      index:
+                        type: integer
+                        minimum: 0
+                  end:
+                    type: object
+                    properties:
+                      line:
+                        type: integer
+                        minimum: 1
+                      column:
+                        type: integer
+                        minimum: 0
+                      index:
+                        type: integer
+                        minimum: 0
         includeStats:
           type: boolean
           description: 是否包含解析缓存统计
@@ -668,6 +897,10 @@ components:
           nullable: true
         fingerprint:
           type: string
+        findingSource:
+          type: string
+          enum: [ast, contract, schema]
+          description: finding 来源标签（ast=代码扫描，contract/schema=治理输入）
 
     Range:
       type: object
@@ -772,7 +1005,7 @@ components:
           properties:
             category:
               type: string
-              enum: [VALIDATION, SCOPE, TIMEOUT, SCAN_TOO_LARGE, NOT_FOUND, INTERNAL]
+              enum: [VALIDATION, SCOPE, TIMEOUT, SCAN_TOO_LARGE, NOT_FOUND, SERVICE_UNAVAILABLE, INTERNAL]
             code:
               type: string
             message:

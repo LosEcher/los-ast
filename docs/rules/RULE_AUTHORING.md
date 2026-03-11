@@ -39,6 +39,12 @@ constraints:
 - rule：ast-grep rule object（pattern/kind/inside/has/...）。
 - constraints：可选，捕获变量正则约束数组；`name` 为捕获名（不带 `$`），`.` 代表整个匹配节点文本。
 - fix：可选，定义如何生成 replacement。
+- governance（可选）：为接口治理/字段治理预留的元信息。
+  - `governance.domain`: `frontend`/`backend`/`database`/`interface`/`quality`/`security`
+  - `governance.owner`: 规则所有者
+  - `governance.impact`: `high`/`medium`/`low`
+  - `governance.rationale`: 规则存在原因
+- findingSource（可选）：规则归属来源标签（规划中），用于区分 `ast`、`contract`、`schema`
 ## 幂等性与可测试性
 
 - fix 规则必须在 `fixtures/` 下提供 `before` 与 `after`。

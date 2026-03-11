@@ -4,7 +4,8 @@ import fp from 'fastify-plugin';
  */
 const ERROR_STATUS_MAP = {
     VALIDATION: 400,
-    SCOPE: 403, // 使用 403 表示权限/Scope 问题
+    SCOPE: 403,
+    AUTHENTICATION: 401,
     TIMEOUT: 408,
     SCAN_TOO_LARGE: 413,
     NOT_FOUND: 404,

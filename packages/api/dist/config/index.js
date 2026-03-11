@@ -23,6 +23,14 @@ export const SCOPE_CONFIG = {
         development: ['local', 'service'],
     },
 };
+export const JWT_CONFIG = {
+    secret: process.env.JWT_SECRET || process.env.LSCLAW_JWT_SECRET || null,
+    enforceJWT: IS_PRODUCTION || process.env.ENFORCE_JWT === 'true',
+};
+export const EVIDENCE_CONFIG = {
+    signingKey: process.env.EVIDENCE_SIGNING_KEY || null,
+    enableSignatures: !!process.env.EVIDENCE_SIGNING_KEY || IS_PRODUCTION,
+};
 /**
  * 路由分层配置
  * 支持核心路由、实验性路由和内部路由的分离
