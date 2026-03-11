@@ -18,19 +18,65 @@ import type {
   CodeSymbolInfo,
   CodeImpactReport,
   CodeASTNode,
+  EvidenceActor,
+  EvidenceSignature,
+  VerifiedScope,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
-import { scan, explainAtPosition, loadRuleFiles } from '@los-ast/core';
+import { scan, explainAtPosition, loadRuleFiles, isReady } from '@los-ast/core';
+import { EVIDENCE_CONFIG } from '../../config/index.js';
+import { CoreNotReadyError } from '../../types/errors.js';
 
 // 内存存储
 const evidenceStore: Map<string, CodeEvidenceBundle> = new Map();
 const EVIDENCE_SCHEMA_VERSION = '1.0.0';
 const EVIDENCE_GENERATOR_VERSION = '1.0.0';
 
+function ensureCoreReady() {
+  if (!isReady()) {
+    throw new CoreNotReadyError();
+  }
+}
+
+async function generateSignature(bundle: Omit<CodeEvidenceBundle, 'signature'>, scope: VerifiedScope): Promise<EvidenceSignature | undefined> {
+  if (!EVIDENCE_CONFIG.enableSignatures || !EVIDENCE_CONFIG.signingKey) {
+    return undefined;
+  }
+
+  const crypto = await import('crypto');
+  const content = JSON.stringify({
+    bundle_id: bundle.bundle_id,
+    project: bundle.project,
+    created_at: bundle.created_at,
+    findings_count: bundle.findings.length,
+    actor_id: scope.actor_id,
+    tenant_id: scope.tenant_id,
+    project_id: scope.project_id,
+  });
+
+  const signature = crypto
+    .createHmac('sha256', EVIDENCE_CONFIG.signingKey)
+    .update(content)
+    .digest('base64url');
+
+  return {
+    algorithm: 'hmac-sha256',
+    value: signature,
+    key_id: EVIDENCE_CONFIG.signingKey.slice(0, 8),
+    signed_at: new Date().toISOString(),
+    signed_by: scope.actor_id,
+  };
+}
+
 /**
  * 生成证据包
  */
-export async function generateEvidence(request: GenerateEvidenceRequest): Promise<CodeEvidenceBundle> {
+export async function generateEvidence(
+  request: GenerateEvidenceRequest,
+  scope: VerifiedScope
+): Promise<CodeEvidenceBundle> {
+  ensureCoreReady();
+
   const bundleId = generateId('evd');
   const rules = request.rules && request.rules.length > 0
     ? await loadRuleFiles(request.rules)
@@ -84,11 +130,21 @@ export async function generateEvidence(request: GenerateEvidenceRequest): Promis
     });
   }
 
+  const actor: EvidenceActor = {
+    actor_id: scope.actor_id,
+    identity_source: scope.identity_source,
+    identity_verified: scope.identity_verified,
+  };
+
   const bundle: CodeEvidenceBundle = {
     bundle_id: bundleId,
     project: request.project,
     root_dir: request.root_dir,
     created_at: new Date().toISOString(),
+    scope: {
+      tenant_id: scope.tenant_id,
+      project_id: scope.project_id,
+    },
     schema_version: EVIDENCE_SCHEMA_VERSION,
     generator: {
       tool: 'los-ast',
@@ -104,10 +160,16 @@ export async function generateEvidence(request: GenerateEvidenceRequest): Promis
     code_snippets: codeSnippets,
     symbol_index: symbolIndex,
     impact_report: generateImpactReport(scanResult),
+    actor,
   };
 
+  const signature = await generateSignature(bundle, scope);
+  if (signature) {
+    bundle.signature = signature;
+  }
+
   evidenceStore.set(bundleId, bundle);
-  console.log(`[EvidenceService] Generated evidence bundle ${bundleId}`);
+  console.log(`[EvidenceService] Generated evidence bundle ${bundleId} by ${actor.actor_id}`);
 
   return bundle;
 }
@@ -224,6 +286,8 @@ export async function generateRewrite(request: GenerateRewriteRequest): Promise<
  * 解释代码
  */
 export async function explainCode(request: ExplainCodeRequest): Promise<ExplainCodeResponse> {
+  ensureCoreReady();
+
   // 使用 los-ast Core 的 explainAtPosition 功能
   try {
     const result = await explainAtPosition({
@@ -269,8 +333,24 @@ export async function explainCode(request: ExplainCodeRequest): Promise<ExplainC
 /**
  * 获取证据包
  */
-export async function getEvidenceBundle(bundleId: string): Promise<CodeEvidenceBundle | null> {
-  return evidenceStore.get(bundleId) || null;
+export async function getEvidenceBundle(
+  bundleId: string,
+  scope?: { tenant_id?: string; project_id?: string }
+): Promise<CodeEvidenceBundle | null> {
+  const bundle = evidenceStore.get(bundleId);
+  if (!bundle) {
+    return null;
+  }
+
+  if (
+    scope?.tenant_id &&
+    scope?.project_id &&
+    (bundle.scope.tenant_id !== scope.tenant_id || bundle.scope.project_id !== scope.project_id)
+  ) {
+    return null;
+  }
+
+  return bundle;
 }
 
 /**

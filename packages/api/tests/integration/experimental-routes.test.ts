@@ -5,7 +5,7 @@
  * 测试路由开关行为和基本功能
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { dirname, resolve } from 'node:path';
@@ -25,6 +25,7 @@ import {
   hotReloadRoutes,
   evidenceRoutes,
 } from '../../src/routes/experimental/index';
+import * as core from '@los-ast/core';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = resolve(__dirname, '../../../../fixtures/golden/lsclaw-sample');
@@ -217,6 +218,58 @@ describe('Experimental Routes Tests', () => {
         expect(body.data.generator.tool).toBe('los-ast');
         expect(body.data.generator.version).toBeDefined();
         expect(body.data.deterministic).toBe(true);
+      });
+
+      it('POST /experimental/evidence/generate should return 503 when core is not ready', async () => {
+        const readySpy = vi.spyOn(core, 'isReady').mockReturnValue(false);
+        try {
+          const response = await app.inject({
+            method: 'POST',
+            url: '/experimental/evidence/generate',
+            payload: {
+              scope: baseScope,
+              project: 'lsclaw',
+              root_dir: fixtureRoot,
+              findings: [],
+              deterministic: true,
+              include: ['src/**/*.ts'],
+            },
+          });
+
+          expect(response.statusCode).toBe(503);
+          const body = JSON.parse(response.body);
+          expect(body.error).toMatchObject({
+            category: 'SERVICE_UNAVAILABLE',
+            code: 'CORE_NOT_READY',
+          });
+        } finally {
+          readySpy.mockRestore();
+        }
+      });
+
+      it('POST /experimental/evidence/explain should return 503 when core is not ready', async () => {
+        const readySpy = vi.spyOn(core, 'isReady').mockReturnValue(false);
+        try {
+          const response = await app.inject({
+            method: 'POST',
+            url: '/experimental/evidence/explain',
+            payload: {
+              scope: baseScope,
+              file_path: `${fixtureRoot}/src/index.ts`,
+              line: 1,
+              column: 1,
+            },
+          });
+
+          expect(response.statusCode).toBe(503);
+          const body = JSON.parse(response.body);
+          expect(body.error).toMatchObject({
+            category: 'SERVICE_UNAVAILABLE',
+            code: 'CORE_NOT_READY',
+          });
+        } finally {
+          readySpy.mockRestore();
+        }
       });
     });
 
