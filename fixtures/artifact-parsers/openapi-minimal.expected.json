@@ -1,0 +1,9 @@
+{
+  "profile": "openapi-native",
+  "findingSource": "contract",
+  "expectedRuleIds": [
+    "contract/openapi-operation-id",
+    "contract/openapi-auth-required",
+    "contract/openapi-success-response"
+  ]
+}

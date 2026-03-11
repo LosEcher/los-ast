@@ -45,7 +45,8 @@
 - 已补 parser registry / profile 结构，后续新增输入源不必继续修改主 orchestration。
 - 已补 parser capability metadata 与 profile-level fixtures。
 - 已补 parser registry 的启停开关与 profile version/stability 元数据。
-- 下一步可继续补 profile 级 golden 用例与 parser-level release notes。
+- 已补 profile 级 golden 用例。
+- 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 3. 规则包治理
 - 为治理规则包增加版本、来源、更新时间、加载顺序约束。

@@ -1,0 +1,8 @@
+{
+  "profile": "schema-native",
+  "findingSource": "schema",
+  "expectedRuleIds": [
+    "schema/prisma-sensitive-nullable",
+    "schema/prisma-primary-key"
+  ]
+}

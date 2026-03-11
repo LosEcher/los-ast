@@ -26,6 +26,7 @@
   - 不做字段级兼容性分析
 - fixture：
   - `fixtures/artifact-parsers/openapi-minimal.yaml`
+  - `fixtures/artifact-parsers/openapi-minimal.expected.json`
 - enable flag：
   - `ENABLE_OPENAPI_NATIVE_PARSER=true|false`
 
@@ -45,6 +46,8 @@
 - fixture：
   - `fixtures/artifact-parsers/schema-minimal.sql`
   - `fixtures/artifact-parsers/schema-minimal.prisma`
+  - `fixtures/artifact-parsers/schema-minimal-sql.expected.json`
+  - `fixtures/artifact-parsers/schema-minimal-prisma.expected.json`
 - enable flag：
   - `ENABLE_SCHEMA_NATIVE_PARSER=true|false`
 
@@ -68,3 +71,9 @@
   - 新 parser 先以 `preview` 发布
   - 通过环境变量开关做灰度
   - 稳定后再提升为 `stable`
+
+## Golden Baseline
+
+- parser profile 的最小稳定基线位于：
+  - `packages/api/tests/golden/artifact-parser-golden.test.ts`
+- 这些 golden 只验证 parser 输出规则集是否稳定，不替代更高层的 API / core golden。

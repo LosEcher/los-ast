@@ -1,0 +1,8 @@
+{
+  "profile": "schema-native",
+  "findingSource": "schema",
+  "expectedRuleIds": [
+    "schema/sql-sensitive-nullable",
+    "schema/sql-primary-key"
+  ]
+}
