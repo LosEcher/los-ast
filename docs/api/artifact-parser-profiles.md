@@ -44,10 +44,12 @@
   - baseline/current 对比下的字段删除
   - baseline/current 对比下的类型变化
   - baseline/current 对比下的可空到必填收紧
+  - baseline/current 对比下的 enum 值删除
+  - baseline/current 对比下的默认值新增/删除/变化分级
 - 当前限制：
   - 仅做启发式解析
-  - 不做跨版本对比
-  - 不做 breaking change 分级
+  - enum 仅支持 inline SQL `enum(...)` 与 Prisma `enum` block
+  - 默认值比较不做跨方言函数等价判断
 - fixture：
   - `fixtures/artifact-parsers/schema-minimal.sql`
   - `fixtures/artifact-parsers/schema-minimal.prisma`

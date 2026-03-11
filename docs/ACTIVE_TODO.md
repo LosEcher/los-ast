@@ -38,8 +38,8 @@
 2. 原生 schema 输入源
 - 已完成 `schemaDocuments -> schema findings` 最小闭环。
 - 当前覆盖主键缺失、敏感字段可空、生命周期默认值、审计时间默认值 4 类基础检查。
-- 已完成最小 `schemaComparisons -> breaking findings` 闭环，当前覆盖字段删除、类型变化、可空性收紧。
-- 下一步扩展到 enum、默认值和更细的兼容性分级。
+- 已完成最小 `schemaComparisons -> compatibility findings` 闭环，当前覆盖字段删除、类型变化、可空性收紧、enum 值删除、默认值变化分级。
+- 下一步扩展到更细的兼容性等级与方言等价规则。
 
 3. 输入层结构收口
 - 已将原生 `contract/schema` 输入解析抽到独立 parser 层，避免继续堆积到 `scan-service`。

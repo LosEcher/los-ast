@@ -290,6 +290,52 @@ describe('ScanService', () => {
       ]);
     });
 
+    it('should grade enum and default compatibility drift from schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-prisma',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'enum UserStatus {',
+              '  ACTIVE',
+              '  DISABLED',
+              '}',
+              '',
+              'model User {',
+              '  id     String     @id',
+              '  status UserStatus @default(ACTIVE)',
+              '}',
+            ].join('\n'),
+            current: [
+              'enum UserStatus {',
+              '  ACTIVE',
+              '}',
+              '',
+              'model User {',
+              '  id     String     @id',
+              '  status UserStatus',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/prisma-breaking-enum-value-drop',
+        'schema/prisma-default-removed',
+      ]);
+    });
+
     it('should merge schema artifacts as schema findings', async () => {
       const mockResult = {
         filesScanned: 1,

@@ -14,7 +14,9 @@ type SchemaField = {
   type: string;
   nullable: boolean;
   hasDefault: boolean;
+  defaultValue?: string;
   primaryKey: boolean;
+  enumValues?: string[];
 };
 type SchemaEntity = {
   name: string;
@@ -48,6 +50,69 @@ function normalizeType(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function normalizeDefaultValue(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.trim().replace(/^["']|["']$/g, '').toLowerCase();
+}
+
+function extractSqlTypeToken(definition: string): string | undefined {
+  const trimmed = definition.trim();
+  if (/^enum\s*\(/i.test(trimmed)) {
+    const match = trimmed.match(/^(enum\s*\([^)]*\))/i);
+    return match ? match[1] : undefined;
+  }
+
+  const match = trimmed.match(/^([A-Za-z0-9_]+(?:\([^)]*\))?)/);
+  return match ? match[1] : undefined;
+}
+
+function parseSqlEnumValues(typeToken: string | undefined): string[] | undefined {
+  if (!typeToken || !/^enum\s*\(/i.test(typeToken)) {
+    return undefined;
+  }
+
+  const inner = typeToken.replace(/^enum\s*\(|\)$/gi, '');
+  const values = inner
+    .split(',')
+    .map((item) => item.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean);
+
+  return values.length > 0 ? values : undefined;
+}
+
+function extractSqlDefaultValue(definition: string): string | undefined {
+  const match = definition.match(/\bdefault\s+(.+?)(?:\s+(?:not null|null|primary key|unique|references)\b|$)/i);
+  return normalizeDefaultValue(match?.[1]);
+}
+
+function parsePrismaEnums(content: string): Map<string, string[]> {
+  const enums = new Map<string, string[]>();
+  const enumRegex = /enum\s+(\w+)\s*\{([\s\S]*?)\}/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = enumRegex.exec(content)) !== null) {
+    const values = match[2]
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item) => !item.startsWith('//'))
+      .map((item) => item.split(/\s+/)[0])
+      .filter(Boolean);
+
+    enums.set(match[1], values);
+  }
+
+  return enums;
+}
+
+function extractPrismaDefaultValue(rawLine: string): string | undefined {
+  const match = rawLine.match(/@default\s*\(([^)]+)\)/);
+  return normalizeDefaultValue(match?.[1]);
+}
+
 function parseSqlEntities(content: string): SchemaEntity[] {
   const entities: SchemaEntity[] = [];
   const tableRegex = /create\s+table\s+([^\s(]+)\s*\(([\s\S]*?)\);/gi;
@@ -75,17 +140,24 @@ function parseSqlEntities(content: string): SchemaEntity[] {
         continue;
       }
 
-      const columnMatch = normalizedLine.match(/^([`"\[\]\w]+)\s+([A-Za-z0-9()_]+)/);
+      const columnMatch = normalizedLine.match(/^([`"\[\]\w]+)\s+(.+)$/);
       if (!columnMatch) {
         continue;
       }
 
       const fieldName = cleanSqlIdentifier(columnMatch[1]);
+      const definition = columnMatch[2];
+      const typeToken = extractSqlTypeToken(definition);
+      if (!typeToken) {
+        continue;
+      }
       fields.set(fieldName, {
-        type: normalizeType(columnMatch[2]),
+        type: normalizeType(typeToken),
         nullable: !/\bnot\s+null\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine),
         hasDefault: /\bdefault\b/i.test(lowerLine),
+        defaultValue: extractSqlDefaultValue(definition),
         primaryKey: /\bprimary\s+key\b/i.test(lowerLine),
+        enumValues: parseSqlEnumValues(typeToken),
       });
     }
 
@@ -104,6 +176,7 @@ function parseSqlEntities(content: string): SchemaEntity[] {
 
 function parsePrismaEntities(content: string): SchemaEntity[] {
   const entities: SchemaEntity[] = [];
+  const enums = parsePrismaEnums(content);
   const modelRegex = /model\s+(\w+)\s*\{([\s\S]*?)\}/g;
   let match: RegExpExecArray | null;
 
@@ -124,11 +197,14 @@ function parsePrismaEntities(content: string): SchemaEntity[] {
       }
 
       const typeToken = fieldMatch[2];
+      const normalizedType = typeToken.replace(/\?$/, '');
       fields.set(fieldMatch[1], {
-        type: normalizeType(typeToken.replace(/\?$/, '')),
+        type: normalizeType(normalizedType),
         nullable: typeToken.endsWith('?'),
         hasDefault: /@default\s*\(/.test(rawLine) || /@updatedAt\b/.test(rawLine),
+        defaultValue: extractPrismaDefaultValue(rawLine) || (/@updatedAt\b/.test(rawLine) ? '@updatedat' : undefined),
         primaryKey: /@id\b/.test(rawLine),
+        enumValues: enums.get(normalizedType),
       });
     }
 
@@ -358,10 +434,23 @@ function buildBreakingFinding(
   message: string,
   excerpt: string
 ): SchemaArtifactFindingInput {
+  return buildComparisonFinding(sourceLabel, fileLabel, line, ruleId, 'error', message, excerpt, 'high');
+}
+
+function buildComparisonFinding(
+  sourceLabel: string,
+  fileLabel: string,
+  line: number,
+  ruleId: string,
+  severity: 'info' | 'warning' | 'error',
+  message: string,
+  excerpt: string,
+  impactHint: 'low' | 'medium' | 'high'
+): SchemaArtifactFindingInput {
   return {
     source: sourceLabel,
     ruleId,
-    severity: 'error',
+    severity,
     message,
     file: fileLabel,
     language: 'schema',
@@ -369,7 +458,20 @@ function buildBreakingFinding(
     column: 0,
     excerpt,
     governanceDomain: ['database', 'interface'],
-    impactHint: 'high',
+    impactHint,
+  };
+}
+
+function diffEnumValues(
+  baselineValues: string[] | undefined,
+  currentValues: string[] | undefined
+): { removed: string[]; added: string[] } {
+  const baselineSet = new Set(baselineValues || []);
+  const currentSet = new Set(currentValues || []);
+
+  return {
+    removed: Array.from(baselineSet).filter((value) => !currentSet.has(value)),
+    added: Array.from(currentSet).filter((value) => !baselineSet.has(value)),
   };
 }
 
@@ -433,6 +535,72 @@ function compareEntities(
           `schema/${prefix}-breaking-nullability-tighten`,
           `Field ${baselineEntity.name}.${fieldName} changed from nullable to required without default`,
           `${baselineEntity.name}.${fieldName}`,
+        ));
+      }
+
+      const enumDiff = diffEnumValues(baselineField.enumValues, currentField.enumValues);
+      if (enumDiff.removed.length > 0) {
+        artifacts.push(buildBreakingFinding(
+          sourceLabel,
+          fileLabel,
+          line,
+          `schema/${prefix}-breaking-enum-value-drop`,
+          `Field ${baselineEntity.name}.${fieldName} removed enum values: ${enumDiff.removed.join(', ')}`,
+          `${baselineEntity.name}.${fieldName}: -${enumDiff.removed.join(', -')}`,
+        ));
+      }
+
+      if (enumDiff.added.length > 0) {
+        artifacts.push(buildComparisonFinding(
+          sourceLabel,
+          fileLabel,
+          line,
+          `schema/${prefix}-enum-value-add`,
+          'info',
+          `Field ${baselineEntity.name}.${fieldName} added enum values: ${enumDiff.added.join(', ')}`,
+          `${baselineEntity.name}.${fieldName}: +${enumDiff.added.join(', +')}`,
+          'low',
+        ));
+      }
+
+      if (baselineField.hasDefault && !currentField.hasDefault) {
+        artifacts.push(buildComparisonFinding(
+          sourceLabel,
+          fileLabel,
+          line,
+          `schema/${prefix}-default-removed`,
+          'warning',
+          `Field ${baselineEntity.name}.${fieldName} removed default value ${baselineField.defaultValue || ''}`.trim(),
+          `${baselineEntity.name}.${fieldName}: default removed`,
+          'medium',
+        ));
+      } else if (!baselineField.hasDefault && currentField.hasDefault) {
+        artifacts.push(buildComparisonFinding(
+          sourceLabel,
+          fileLabel,
+          line,
+          `schema/${prefix}-default-added`,
+          'info',
+          `Field ${baselineEntity.name}.${fieldName} added default value ${currentField.defaultValue || ''}`.trim(),
+          `${baselineEntity.name}.${fieldName}: default added`,
+          'low',
+        ));
+      } else if (
+        baselineField.hasDefault &&
+        currentField.hasDefault &&
+        baselineField.defaultValue &&
+        currentField.defaultValue &&
+        baselineField.defaultValue !== currentField.defaultValue
+      ) {
+        artifacts.push(buildComparisonFinding(
+          sourceLabel,
+          fileLabel,
+          line,
+          `schema/${prefix}-default-changed`,
+          'warning',
+          `Field ${baselineEntity.name}.${fieldName} changed default value from ${baselineField.defaultValue} to ${currentField.defaultValue}`,
+          `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`,
+          'medium',
         ));
       }
 

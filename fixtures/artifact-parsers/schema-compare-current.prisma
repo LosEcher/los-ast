@@ -1,6 +1,10 @@
+enum UserStatus {
+  ACTIVE
+}
+
 model User {
   id        String @id
   email     String
-  status    Int
+  status    UserStatus
   createdAt DateTime
 }

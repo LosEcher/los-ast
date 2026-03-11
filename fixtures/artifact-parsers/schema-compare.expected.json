@@ -3,6 +3,7 @@
   "findingSource": "schema",
   "expectedRuleIds": [
     "schema/prisma-breaking-nullability-tighten",
-    "schema/prisma-breaking-type-change"
+    "schema/prisma-breaking-enum-value-drop",
+    "schema/prisma-default-removed"
   ]
 }

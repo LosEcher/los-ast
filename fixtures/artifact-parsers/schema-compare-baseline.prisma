@@ -1,6 +1,11 @@
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
 model User {
   id        String   @id
   email     String?
-  status    String
+  status    UserStatus @default(ACTIVE)
   createdAt DateTime
 }
