@@ -129,23 +129,123 @@ test('governance metadata is projected into scan findings', async () => {
   const rules = await loadRuleFiles(['rules/projects/lsclaw-governance/frontend-interface.yml'])
 
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'los-ast-'))
-  const file = path.join(tmpRoot, 'demo.js')
+  const file = path.join(tmpRoot, 'demo.ts')
   await fs.writeFile(
     file,
-    "const resp = await fetch('/api/v1/items', { method: 'GET' })\n",
+    "async function load() { const resp = await fetch('/api/v1/items', { method: 'GET' }) }\n",
     'utf8'
   )
 
   const scanRes = await scan({
     project: 'custom',
     rootDir: tmpRoot,
-    include: ['**/*.js'],
+    include: ['**/*.ts'],
     ignore: [],
     rules,
   })
 
   assert.equal(scanRes.findings.length, 1)
+  assert.equal(scanRes.findings[0].ruleId, 'lsclaw-governance.frontend-http-client')
   assert.equal(scanRes.findings[0].findingSource, 'ast')
   assert.deepEqual(scanRes.findings[0].governanceDomain, ['frontend'])
   assert.equal(scanRes.findings[0].impactHint, 'medium')
+})
+
+test('frontend governance rule matches axios methods and ignores non-http helpers', async () => {
+  const rules = await loadRuleFiles(['rules/projects/lsclaw-governance/frontend-interface.yml'])
+
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'los-ast-'))
+  await fs.writeFile(
+    path.join(tmpRoot, 'axios-positive.ts'),
+    "async function load() { return axios.get('/api/v1/items') }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'axios-negative.ts'),
+    "async function makeClient() { return axios.create({ baseURL: '/api' }) }\n",
+    'utf8'
+  )
+
+  const scanRes = await scan({
+    project: 'custom',
+    rootDir: tmpRoot,
+    include: ['**/*.ts'],
+    ignore: [],
+    rules,
+  })
+
+  assert.equal(scanRes.findings.length, 1)
+  assert.equal(scanRes.findings[0].ruleId, 'lsclaw-governance.frontend-http-client-axios')
+  assert.match(scanRes.findings[0].excerpt, /axios\.get/)
+})
+
+test('frontend governance rules cover common fetch and axios call shapes', async () => {
+  const rules = await loadRuleFiles(['rules/projects/lsclaw-governance/frontend-interface.yml'])
+
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'los-ast-'))
+  await fs.writeFile(
+    path.join(tmpRoot, 'fetch-basic.ts'),
+    "async function load() { return fetch('/health') }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'fetch-options.ts'),
+    "async function load() { return fetch('/items', { method: 'POST', body: payload }) }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'axios-get.ts'),
+    "async function load() { return axios.get('/items') }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'axios-delete.ts'),
+    "async function load() { return axios.delete('/items/1', { headers }) }\n",
+    'utf8'
+  )
+
+  const scanRes = await scan({
+    project: 'custom',
+    rootDir: tmpRoot,
+    include: ['**/*.ts'],
+    ignore: [],
+    rules,
+  })
+
+  assert.equal(scanRes.findings.length, 4)
+  assert.deepEqual(
+    scanRes.findings.map((finding) => finding.ruleId).sort(),
+    [
+      'lsclaw-governance.frontend-http-client',
+      'lsclaw-governance.frontend-http-client',
+      'lsclaw-governance.frontend-http-client-axios',
+      'lsclaw-governance.frontend-http-client-axios',
+    ]
+  )
+})
+
+test('frontend governance axios rule only matches configured HTTP methods', async () => {
+  const rules = await loadRuleFiles(['rules/projects/lsclaw-governance/frontend-interface.yml'])
+
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'los-ast-'))
+  await fs.writeFile(
+    path.join(tmpRoot, 'axios-head.ts'),
+    "async function load() { return axios.head('/health') }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'axios-options.ts'),
+    "async function load() { return axios.options('/health') }\n",
+    'utf8'
+  )
+
+  const scanRes = await scan({
+    project: 'custom',
+    rootDir: tmpRoot,
+    include: ['**/*.ts'],
+    ignore: [],
+    rules,
+  })
+
+  assert.equal(scanRes.findings.length, 0)
 })

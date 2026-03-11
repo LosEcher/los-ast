@@ -30,6 +30,8 @@ constraints:
     regex: "^log$"
 ```
 
+约束只会在对应 capture 存在时通过；如果一个 `any` 规则的不同分支并不共享同一组 capture，不要把只适用于某个分支的约束挂在整个规则上。此时应拆成多条规则，避免无关分支因为缺少 capture 而被整体过滤。
+
 ## 字段说明
 
 - id：全局唯一，建议使用 `scope.lang.category.intent`。

@@ -49,6 +49,23 @@ lsclaw-governance
 - `governance.domain` 用于标识治理域。
 - `governance.owner` 用于标识责任团队。
 - `governance.impact` 用于标识风险提示。
+- `frontend-interface.yml` 当前拆分为两条前端 HTTP 调用治理规则：
+  - `lsclaw-governance.frontend-http-client`：匹配直接 `fetch(...)` 调用。
+  - `lsclaw-governance.frontend-http-client-axios`：匹配直接 `axios.{get,post,put,patch,delete}(...)` 调用。
+- axios method 约束仅作用于 axios 规则，不再与 `fetch` 分支共享约束上下文。
+
+## Current Coverage Notes
+
+- 当前前端 HTTP 治理规则覆盖常见直接调用形态：
+  - `fetch(url)`
+  - `fetch(url, options)`
+  - `axios.get(url)`
+  - `axios.get(url, args)` 及其他已声明 method
+- 当前不覆盖以下场景：
+  - `window.fetch(...)`
+  - `client.get(...)` / `apiClient.post(...)`
+  - `const http = axios; http.get(...)`
+  - 更高层的自定义网络层封装识别
 
 ## Evolution
 

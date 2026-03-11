@@ -117,6 +117,13 @@
 5. 规则包治理
 - 为治理规则包增加版本、来源、更新时间、加载顺序约束。
 - 固定 `rules/projects/lsclaw-governance/` 的组织方式。
+- 已完成前端 HTTP 治理规则的第一阶段语义收口：
+  - `frontend-interface.yml` 已拆分为 `fetch` 与 `axios method` 两条规则，保留原 `id` 给 `fetch` 以维持兼容。
+  - 已补常见直接调用形态覆盖：`fetch(url)`、`fetch(url, options)`、`axios.{get,post,put,patch,delete}(url[, args])`。
+  - 已补针对性回归测试与负例保护，避免 helper 调用（如 `axios.create(...)`）误报。
+  - 已在规则文档中补充“不要在 capture 不共享的 `any` 规则上挂分支特有 constraint”的编写约束。
+- 下一步：
+  - 评估是否需要扩展到 `window.fetch(...)`、`apiClient.get(...)`、axios alias/client instance 等别名与封装场景。
 - 验收：规则来源可追溯，规则漂移可定位。
 
 ## P2 中期优先级

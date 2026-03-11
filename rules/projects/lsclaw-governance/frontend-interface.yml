@@ -1,18 +1,32 @@
-id: lsclaw-governance.frontend-http-client
-language: TypeScript
-severity: warning
-message: "前端建议统一通过封装网络层发起 HTTP 调用，避免散落的 fetch/axios 调用"
-rule:
-  any:
-    - pattern: fetch($URL, $OPTIONS)
-    - pattern: axios.$METHOD($URL, $ARGS)
-constraints:
-  - name: METHOD
-    regex: "^(get|post|put|patch|delete)$"
-    mode: any
-    flags: "i"
-governance:
-  domain: frontend
-  owner: platform
-  impact: medium
-  rationale: 保持接口调用一致性，便于 API 契约治理与审计
+- id: lsclaw-governance.frontend-http-client
+  language: TypeScript
+  severity: warning
+  message: "前端建议统一通过封装网络层发起 HTTP 调用，避免散落的 fetch/axios 调用"
+  rule:
+    any:
+      - pattern: fetch($URL)
+      - pattern: fetch($URL, $OPTIONS)
+  governance:
+    domain: frontend
+    owner: platform
+    impact: medium
+    rationale: 保持接口调用一致性，便于 API 契约治理与审计
+
+- id: lsclaw-governance.frontend-http-client-axios
+  language: TypeScript
+  severity: warning
+  message: "前端建议统一通过封装网络层发起 HTTP 调用，避免散落的 fetch/axios 调用"
+  rule:
+    any:
+      - pattern: axios.$METHOD($URL)
+      - pattern: axios.$METHOD($URL, $ARGS)
+  constraints:
+    - name: METHOD
+      regex: "^(get|post|put|patch|delete)$"
+      mode: any
+      flags: "i"
+  governance:
+    domain: frontend
+    owner: platform
+    impact: medium
+    rationale: 保持接口调用一致性，便于 API 契约治理与审计
