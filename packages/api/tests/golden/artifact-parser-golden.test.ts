@@ -77,4 +77,27 @@ describe('Artifact Parser Golden', () => {
     expect(result.schemaArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
     expect(expected.findingSource).toBe('schema');
   });
+
+  it('schema comparison fixture should stay stable', () => {
+    const baseline = fs.readFileSync(path.join(fixturesDir, 'schema-compare-baseline.prisma'), 'utf8');
+    const current = fs.readFileSync(path.join(fixturesDir, 'schema-compare-current.prisma'), 'utf8');
+    const expected = JSON.parse(
+      fs.readFileSync(path.join(fixturesDir, 'schema-compare.expected.json'), 'utf8')
+    ) as ExpectedFixture;
+
+    const result = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare',
+          file: 'fixtures/artifact-parsers/schema-compare.prisma',
+          baseline,
+          current,
+          format: 'prisma',
+        },
+      ],
+    });
+
+    expect(result.schemaArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
+    expect(expected.findingSource).toBe('schema');
+  });
 });

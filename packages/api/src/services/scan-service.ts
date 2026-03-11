@@ -10,6 +10,7 @@ import type {
   ContractArtifactFindingInput,
   SchemaArtifactFindingInput,
   OpenApiDocumentInput,
+  SchemaComparisonInput,
   SchemaDocumentInput,
 } from '@los-ast/shared/types';
 import { parseArtifactInputs } from './artifact-parsers/index.js';
@@ -37,6 +38,7 @@ export interface ScanServiceOptions {
   deterministic?: boolean;
   openApiDocuments?: OpenApiDocumentInput[];
   schemaDocuments?: SchemaDocumentInput[];
+  schemaComparisons?: SchemaComparisonInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
   schemaArtifacts?: SchemaArtifactFindingInput[];
   signal: AbortSignal;
@@ -227,6 +229,7 @@ export class ScanService {
       deterministic,
       openApiDocuments,
       schemaDocuments,
+      schemaComparisons,
       contractArtifacts,
       schemaArtifacts,
       signal,
@@ -270,6 +273,7 @@ export class ScanService {
     const parsedArtifacts = parseArtifactInputs({
       openApiDocuments,
       schemaDocuments,
+      schemaComparisons,
       contractArtifacts,
       schemaArtifacts,
       runtimeConfig: PARSER_CONFIG,

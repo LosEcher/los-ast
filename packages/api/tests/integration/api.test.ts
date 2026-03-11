@@ -294,6 +294,47 @@ describe('API Integration Tests', () => {
       }));
     });
 
+    it('POST /scan should forward schemaComparisons to scan service', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          schemaComparisons: [
+            {
+              source: 'schema-compare',
+              file: '/tmp/schema.sql',
+              baseline: 'CREATE TABLE users (email TEXT);',
+              current: 'CREATE TABLE users (status INTEGER NOT NULL);',
+              format: 'sql',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        schemaComparisons: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'schema-compare',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+          }),
+        ]),
+      }));
+    });
+
     it('POST /scan should resolve lsclaw-governance rulePack into built-in rule paths', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,

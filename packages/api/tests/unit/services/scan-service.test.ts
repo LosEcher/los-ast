@@ -251,6 +251,45 @@ describe('ScanService', () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
+    it('should derive breaking findings from schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  email TEXT,',
+              '  status TEXT,',
+              '  PRIMARY KEY (email)',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              '  status INTEGER NOT NULL,',
+              '  PRIMARY KEY (status)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/sql-breaking-drop-field',
+        'schema/sql-breaking-type-change',
+        'schema/sql-breaking-nullability-tighten',
+      ]);
+    });
+
     it('should merge schema artifacts as schema findings', async () => {
       const mockResult = {
         filesScanned: 1,

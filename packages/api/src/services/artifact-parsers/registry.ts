@@ -2,14 +2,16 @@ import type {
   ContractArtifactFindingInput,
   OpenApiDocumentInput,
   SchemaArtifactFindingInput,
+  SchemaComparisonInput,
   SchemaDocumentInput,
 } from '@los-ast/shared/types';
 import { buildContractArtifactsFromOpenApi } from '../openapi-artifacts.js';
-import { buildSchemaArtifactsFromDocuments } from '../schema-artifacts.js';
+import { buildSchemaArtifactsFromComparisons, buildSchemaArtifactsFromDocuments } from '../schema-artifacts.js';
 
 export interface ArtifactParserContext {
   openApiDocuments?: OpenApiDocumentInput[];
   schemaDocuments?: SchemaDocumentInput[];
+  schemaComparisons?: SchemaComparisonInput[];
 }
 
 export interface ArtifactParserCapabilities {
@@ -69,11 +71,14 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'nullable sensitive field',
         'missing lifecycle default',
         'missing audit timestamp default',
+        'breaking field drop',
+        'breaking type change',
+        'breaking nullability tighten',
       ],
       limitations: [
         'heuristic parsing only',
-        'does not yet compare versions',
-        'does not yet classify breaking schema changes',
+        'comparison requires caller-provided baseline/current pair',
+        'does not yet classify enum/default compatibility',
       ],
       fixtureFiles: [
         'fixtures/artifact-parsers/schema-minimal.sql',
@@ -81,7 +86,10 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
       ],
     },
     parse(context) {
-      return buildSchemaArtifactsFromDocuments(context.schemaDocuments);
+      return [
+        ...buildSchemaArtifactsFromDocuments(context.schemaDocuments),
+        ...buildSchemaArtifactsFromComparisons(context.schemaComparisons),
+      ];
     },
   },
 ];

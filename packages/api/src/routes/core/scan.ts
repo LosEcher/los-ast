@@ -86,6 +86,13 @@ interface ScanRequestBody {
     content: string;
     format?: 'sql' | 'prisma';
   }>;
+  schemaComparisons?: Array<{
+    source?: string;
+    file?: string;
+    baseline: string;
+    current: string;
+    format?: 'sql' | 'prisma';
+  }>;
   contractArtifacts?: Array<{
     source?: string;
     ruleId?: string;
@@ -180,6 +187,20 @@ export default async function scanRoutes(fastify: FastifyInstance) {
                   source: { type: 'string' },
                   file: { type: 'string' },
                   content: { type: 'string', minLength: 1 },
+                  format: { type: 'string', enum: ['sql', 'prisma'] },
+                },
+              },
+            },
+            schemaComparisons: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['baseline', 'current'],
+                properties: {
+                  source: { type: 'string' },
+                  file: { type: 'string' },
+                  baseline: { type: 'string', minLength: 1 },
+                  current: { type: 'string', minLength: 1 },
                   format: { type: 'string', enum: ['sql', 'prisma'] },
                 },
               },
@@ -317,6 +338,7 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         rulePack,
         openApiDocuments,
         schemaDocuments,
+        schemaComparisons,
       } = request.body as ScanRequestBody;
       const { contractArtifacts, schemaArtifacts } = request.body as ScanRequestBody;
       const resolvedRules = rules && rules.length > 0
@@ -343,6 +365,7 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         deterministic,
         openApiDocuments,
         schemaDocuments,
+        schemaComparisons,
         contractArtifacts,
         schemaArtifacts,
         signal,

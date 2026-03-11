@@ -2,6 +2,7 @@ import type {
   ContractArtifactFindingInput,
   OpenApiDocumentInput,
   SchemaArtifactFindingInput,
+  SchemaComparisonInput,
   SchemaDocumentInput,
 } from '@los-ast/shared/types';
 import { artifactParserProfiles } from './registry.js';
@@ -14,6 +15,7 @@ export interface ArtifactParserRuntimeConfig {
 export interface ArtifactParserInput {
   openApiDocuments?: OpenApiDocumentInput[];
   schemaDocuments?: SchemaDocumentInput[];
+  schemaComparisons?: SchemaComparisonInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
   schemaArtifacts?: SchemaArtifactFindingInput[];
   runtimeConfig?: ArtifactParserRuntimeConfig;
@@ -42,6 +44,7 @@ export function parseArtifactInputs(input: ArtifactParserInput): ParsedArtifactI
     const findings = profile.parse({
       openApiDocuments: input.openApiDocuments,
       schemaDocuments: input.schemaDocuments,
+      schemaComparisons: input.schemaComparisons,
     });
 
     if (profile.source === 'contract') {

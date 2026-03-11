@@ -1,0 +1,8 @@
+{
+  "profile": "schema-native",
+  "findingSource": "schema",
+  "expectedRuleIds": [
+    "schema/prisma-breaking-nullability-tighten",
+    "schema/prisma-breaking-type-change"
+  ]
+}

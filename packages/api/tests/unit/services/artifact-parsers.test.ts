@@ -30,7 +30,7 @@ describe('artifact parsers', () => {
         {
           source: 'schema-inline',
           file: '/tmp/schema.prisma',
-          content: 'model User { email String? }',
+          content: ['model User {', '  email String?', '}'].join('\n'),
           format: 'prisma',
         },
       ],
@@ -78,7 +78,7 @@ describe('artifact parsers', () => {
         {
           source: 'schema-inline',
           file: '/tmp/schema.prisma',
-          content: 'model User { email String? }',
+          content: ['model User {', '  email String?', '}'].join('\n'),
           format: 'prisma',
         },
       ],
@@ -90,5 +90,36 @@ describe('artifact parsers', () => {
 
     expect(parsed.contractArtifacts).toHaveLength(0);
     expect(parsed.schemaArtifacts).toHaveLength(0);
+  });
+
+  it('should derive breaking schema findings from schemaComparisons', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare',
+          file: '/tmp/schema.prisma',
+          format: 'prisma',
+          baseline: [
+            'model User {',
+            '  email String?',
+            '  status String',
+            '  createdAt DateTime',
+            '}',
+          ].join('\n'),
+          current: [
+            'model User {',
+            '  email String',
+            '  status Int',
+            '  createdAt DateTime',
+            '}',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts.map((item) => item.ruleId)).toEqual([
+      'schema/prisma-breaking-nullability-tighten',
+      'schema/prisma-breaking-type-change',
+    ]);
   });
 });

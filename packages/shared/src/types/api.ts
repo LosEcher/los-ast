@@ -31,6 +31,7 @@ export interface ScanParams {
   deterministic?: boolean;
   openApiDocuments?: OpenApiDocumentInput[];
   schemaDocuments?: SchemaDocumentInput[];
+  schemaComparisons?: SchemaComparisonInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
   schemaArtifacts?: SchemaArtifactFindingInput[];
 }
@@ -46,6 +47,14 @@ export interface SchemaDocumentInput {
   source?: string;
   file?: string;
   content: string;
+  format?: 'sql' | 'prisma';
+}
+
+export interface SchemaComparisonInput {
+  source?: string;
+  file?: string;
+  baseline: string;
+  current: string;
   format?: 'sql' | 'prisma';
 }
 

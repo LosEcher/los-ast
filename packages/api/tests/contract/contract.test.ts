@@ -504,6 +504,80 @@ describe('API Contract Tests', () => {
         language: 'schema',
       });
     });
+
+    it('POST /scan should accept schemaComparisons as native schema comparison input', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'schema-compare',
+            ruleId: 'schema/sql-breaking-drop-field',
+            findingSource: 'schema',
+            severity: 'error',
+            message: 'Field users.email was removed in current schema',
+            file: '/tmp/schema.sql',
+            language: 'schema',
+            range: {
+              start: { line: 1, column: 0, index: 0 },
+              end: { line: 1, column: 1, index: 1 },
+            },
+            excerpt: 'users.email',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'schema-compare-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          include: ['packages/core/src/**/*.mjs'],
+          schemaComparisons: [
+            {
+              source: 'schema-compare',
+              file: '/tmp/schema.sql',
+              baseline: 'CREATE TABLE users (email TEXT);',
+              current: 'CREATE TABLE users (status INTEGER NOT NULL);',
+              format: 'sql',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        schemaComparisons: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'schema-compare',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'schema',
+        ruleId: 'schema/sql-breaking-drop-field',
+        language: 'schema',
+      });
+    });
   });
 
   describe('Discover Symbols Endpoint', () => {

@@ -41,6 +41,9 @@
   - 敏感字段可空
   - 生命周期字段缺少默认值
   - 审计时间字段缺少默认值
+  - baseline/current 对比下的字段删除
+  - baseline/current 对比下的类型变化
+  - baseline/current 对比下的可空到必填收紧
 - 当前限制：
   - 仅做启发式解析
   - 不做跨版本对比
@@ -48,8 +51,11 @@
 - fixture：
   - `fixtures/artifact-parsers/schema-minimal.sql`
   - `fixtures/artifact-parsers/schema-minimal.prisma`
+  - `fixtures/artifact-parsers/schema-compare-baseline.prisma`
+  - `fixtures/artifact-parsers/schema-compare-current.prisma`
   - `fixtures/artifact-parsers/schema-minimal-sql.expected.json`
   - `fixtures/artifact-parsers/schema-minimal-prisma.expected.json`
+  - `fixtures/artifact-parsers/schema-compare.expected.json`
 - enable flag：
   - `ENABLE_SCHEMA_NATIVE_PARSER=true|false`
 
