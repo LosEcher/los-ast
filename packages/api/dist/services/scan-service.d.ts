@@ -1,4 +1,4 @@
-import type { ScanResult } from '@los-ast/shared/types';
+import type { ScanResult, ContractArtifactFindingInput, SchemaArtifactFindingInput, OpenApiComparisonInput, OpenApiDocumentInput, SchemaComparisonInput, SchemaDocumentInput } from '@los-ast/shared/types';
 export interface ScanServiceOptions {
     project: string;
     rootDir: string;
@@ -7,6 +7,12 @@ export interface ScanServiceOptions {
     rules?: string[];
     includeStats?: boolean;
     deterministic?: boolean;
+    openApiDocuments?: OpenApiDocumentInput[];
+    openApiComparisons?: OpenApiComparisonInput[];
+    schemaDocuments?: SchemaDocumentInput[];
+    schemaComparisons?: SchemaComparisonInput[];
+    contractArtifacts?: ContractArtifactFindingInput[];
+    schemaArtifacts?: SchemaArtifactFindingInput[];
     signal: AbortSignal;
 }
 export declare class ScanService {

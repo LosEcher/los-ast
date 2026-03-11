@@ -10,20 +10,34 @@
 - 稳定能力以 `core + cli + /healthz + /scan + /discover/symbols` 为主。
 - `incident / approval / memory / attribution / recovery / vps-agent-web` 仍属于预览能力，不作为长期稳定边界承诺。
 - `contractArtifacts / schemaArtifacts` 已能进入统一 finding 管道；OpenAPI 与 SQL/Prisma 原生输入已完成最小接入。
+- `structure-map.json` 当前适合做“结构盘点 / 热点排序 / 边界证据”。
+- `structure-map.json` 已支持最小 Fastify 静态证据提取，可覆盖字面量 `register(..., { prefix })`、`get/post/...` 注册链，以及部分 prefix alias / 模板字符串、同函数 control-flow guard、`else / else if` 分支、带外层括号的简单布尔组合，以及同文件单-return helper gate 转发。
+- `structure-map.json` 仍不适合作为完整“route truth 真源”：更复杂布尔表达式、helper 转发、多框架场景仍需依赖运行时注册、OpenAPI、集成测试或人工证据交叉验证。
+- 当前阶段验收说明：`docs/hub-lite-route-evidence-acceptance.md`
+- 当前阶段标记：`docs/status/hub-lite-route-evidence.phase.json`
 
 ## P0 本周优先级
 
-1. 边界收口
+1. route_binds 能力边界收口
+- 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
+- 下游使用说明中区分三类用途：
+  - 结构盘点：可直接使用。
+  - 热点排序：可直接使用。
+  - 路由绑定证据：可用于 Fastify 字面量注册链。
+  - 完整 route truth：当前仍标记为 `derived-only / partial`。
+- 验收：README、执行清单、集成说明对 `route_binds` 能力边界表述一致。
+
+2. 边界收口
 - 明确稳定面与预览面，避免 `los-ast` 被误用为执行编排平台。
 - README、配置文档、API 文档统一标注稳定/预览状态。
 - 验收：新接入方只依赖稳定面即可完成集成。
 
-2. 文档源头统一
+3. 文档源头统一
 - 以本文件作为当前执行源头。
 - README 只保留入口索引，不再让 dated TODO 成为默认阅读路径。
 - 验收：新读者 5 分钟内能判断“现在能做什么、不能做什么、下一步做什么”。
 
-3. 配置基线
+4. 配置基线
 - 提供 `packages/api/.env.example` 作为 API 运行配置基线。
 - 明确身份、scope、route flags、internal route 访问控制的最小配置。
 - 验收：本地启动与灰度部署有统一示例。
@@ -49,7 +63,58 @@
 - 已补 profile 级 golden 用例。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
-3. 规则包治理
+4. route_binds 补源计划
+- 已完成第一阶段最小闭环：
+  - 支持 Fastify 字面量 `register(..., { prefix })`
+  - 支持 Fastify 字面量 `get/post/...`
+  - 支持经本地 import / re-export 的最小挂载链解析
+- 已完成第二阶段主链收口：
+  - 支持 `ROUTE_CONFIG.prefixes.*` 这类 route prefix config alias
+  - 支持 `` `${exp}/evidence` `` 这类模板字符串 prefix
+  - `packages/api` 当前可导出 `85` 条 `route_binds`，覆盖 core / experimental / vps-agent-web 主链
+- 已完成第三阶段基础证据分层：
+  - 每条 `route_bind` 标记 `binding=runtime_like`
+  - 已补 `evidence.level / evidence.tier / evidence.activation / evidence.mountDepth`
+  - 已能区分 core、experimental、vps-agent-web bridge 的默认启用条件
+- 已完成第四阶段最小三层产物拆分：
+  - `route_declares`: 本地声明层
+  - `route_mounts`: 注册挂载层
+  - `route_binds`: 组合后的 `runtime_like` 绑定层
+- 已完成第五阶段受控 runtime 探针：
+  - 在 `los-ast` 自仓场景下可从 `packages/api/dist` 生成遵守默认 flag wiring 的 `route_runtime`
+  - `route_runtime` 不再强制挂载默认关闭的 experimental / vps 路由；如需验证启用态，需显式打开对应环境变量
+  - `route_runtime` 明确暴露了 Fastify 运行时附加结果，如 `HEAD` 自动路由与部分 trailing-slash 变体
+- 已完成第六阶段最小 runtime 差异归因：
+  - 新增 `route_runtime_deltas`
+  - 当前已区分 `exact_match`、`auto_head`、`trailing_slash_variant`
+  - `packages/api` 在默认 wiring 下当前可导出 `route_runtime=6`、`route_runtime_deltas=6`
+  - 显式启用 experimental / vps flag 时，当前可导出 `route_runtime=133`、`route_runtime_deltas=133`
+- 已完成第七阶段最小控制流提证：
+  - `route_mounts.activation` 与 `route_binds.evidence.activation` 已可直接标记 `source=control_flow_guard`
+  - 当前已能从 `if (!ROUTE_CONFIG.enableExperimental) return;` 这类门禁中提取 `guardExpression`
+  - `packages/api` 当前可直接提证 `!ROUTE_CONFIG.enableExperimental` 等 guard 来源
+- 已完成第八阶段控制流扩展第一步：
+  - 支持同函数内的 flag alias 转发，如 `const experimentalEnabled = ROUTE_CONFIG.enableExperimental`
+  - 支持正向 block guard，如 `if (experimentalEnabled) { await register(...) }`
+  - 支持经 alias 的 early-return guard，如 `const vpsDisabled = !ROUTE_CONFIG.enableVpsAgentWeb`
+  - 已收紧 early-return 识别，仅把 block 顶层 `return` 视为 gate，避免嵌套回调误判
+- 已完成第九阶段控制流扩展第二步：
+  - 支持 `else` 分支内的 route mount 归因
+  - 支持简单 `else if` 链，并继承前序分支的否定条件
+  - 支持简单 `&&` block guard 归因，并记录 `guardShape=compound_and`
+  - 支持简单 `||` early-return guard 归因，并记录 `guardShape=compound_or`
+  - 组合 guard 当前会保留 `additionalConditions`，明确还有额外门禁存在
+- 已完成第十阶段 helper gate 最小转发：
+  - 支持同文件、单一 `return`、参数与实参一一映射的 helper boolean gate
+  - 当前 helper 展开仅限静态可替换表达式，不处理多语句或有副作用函数
+- 第十一阶段优先补更复杂控制流：
+  - 非字面静态 helper 转发后的 gate 识别
+  - 更复杂 `else if` 链与布尔表达式归因
+  - 多 flag 组合场景下的保守分层策略
+- 第十二阶段再考虑 Express/前端 router 等其他框架。
+- 验收：`route_binds` 不只“有值”，还要能解释“为什么存在 / 受什么条件控制 / 与 runtime 真相还差哪一层证据”。
+
+5. 规则包治理
 - 为治理规则包增加版本、来源、更新时间、加载顺序约束。
 - 固定 `rules/projects/lsclaw-governance/` 的组织方式。
 - 验收：规则来源可追溯，规则漂移可定位。
@@ -74,6 +139,19 @@
 - 不承诺数据库字段治理已开箱即用。
 - 不承诺预览域的持久化与跨重启状态一致性。
 - 不承诺 `vps-agent-web` 路由组已达到长期稳定契约级别。
+- 不承诺 `structure-map.route_binds` 已能覆盖变量前缀、模板路径和多框架场景。
+- 不承诺 `structure-map.route_binds` 已能作为 route truth 的单一权威来源。
+
+## 下一步执行顺序
+
+1. 先收口文档与下游预期
+- 所有引用 `structure-map` 的说明统一写成“结构证据优先，Fastify route binds 已支持基础分层说明，完整 route truth 暂不承诺”。
+
+2. 再补 runtime 差异归因
+- 在现有 `route_runtime_deltas` 和 `control_flow_guard` 基础上，继续补更细的框架自动行为与更复杂 gate 模式，而不只停在 `HEAD` / slash 变体。
+
+3. 最后扩到更多框架
+- 在 Fastify 边界稳定后，再扩 Express、前端 router 或其他注册模型，避免再次回到“大而空”的 route truth 叙事。
 
 ## 参考文档
 

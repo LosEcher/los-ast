@@ -71,7 +71,7 @@ export default async function discoverRoutes(fastify) {
                 },
             },
         },
-    }, async (request, reply) => {
+    }, fastify.withCancellation(async (request, reply, signal) => {
         const { rootDir, include, ignore, limit } = request.body;
         // 验证必填字段
         if (!rootDir || typeof rootDir !== 'string') {
@@ -81,9 +81,6 @@ export default async function discoverRoutes(fastify) {
         if (limit !== undefined && (typeof limit !== 'number' || limit < 1 || limit > 1000)) {
             throw new ValidationError('INVALID_LIMIT', 'limit must be a number between 1 and 1000');
         }
-        // 获取取消信号
-        const abortController = request.abortController;
-        const signal = abortController?.signal || new AbortController().signal;
         // 执行符号发现
         const result = await symbolService.discoverSymbols({
             rootDir,
@@ -94,6 +91,6 @@ export default async function discoverRoutes(fastify) {
         });
         // 返回成功响应
         return reply.send({ data: result });
-    });
+    }));
 }
 //# sourceMappingURL=discover.js.map

@@ -6,7 +6,7 @@ import type { ApprovalItem, CreateApprovalRequest, ProcessApprovalRequest, Appro
 /**
  * 创建审批项
  */
-export declare function createApproval(request: CreateApprovalRequest): Promise<ApprovalItem>;
+export declare function createApproval(request: CreateApprovalRequest, actorId: string): Promise<ApprovalItem>;
 /**
  * 获取审批项
  */

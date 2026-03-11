@@ -54,7 +54,8 @@ npm run hub-lite:artifacts -- --root ./fixtures/golden/lsclaw-sample --project l
 - Route Binds: 0
 
 **Limitations:**
-- route_binds is emitted as an empty array in first-pass export
+- route_binds currently covers minimal Fastify literal-only route declarations and register prefixes
+- this fixture does not expose literal Fastify route registrations, so route_binds remains empty for this sample
 
 ---
 
@@ -83,10 +84,10 @@ node --test ./test/hub-lite-artifacts.test.mjs
 ```
 
 **Status:** ✅ PASS  
-**Tests:** 1/1 passed  
-**Duration:** ~208ms
+**Tests:** 4/4 passed  
+**Duration:** ~398ms
 
-Validates that artifact export produces scan, symbols, and structure-map outputs.
+Validates that artifact export produces scan, symbols, structure-map outputs, Fastify declare/mount/bind/runtime route layers, dynamic prefix resolution, control-flow guard attribution, and basic runtime delta attribution.
 
 ---
 
@@ -153,7 +154,11 @@ npm run typecheck
 | symbols | ✅ Present | 8 symbols (classes, interfaces, functions, variables) |
 | imports | ✅ Present | 5 import relationships |
 | declares | ✅ Present | 8 declarations |
-| route_binds | ✅ Present | Empty array (documented limitation) |
+| route_declares | ✅ Present | Empty for this sample; fixture does not expose Fastify literal route declarations |
+| route_mounts | ✅ Present | Empty for this sample; fixture does not expose Fastify register-chain mounts |
+| route_binds | ✅ Present | Empty for this sample; non-Fastify fixture does not expose literal register-chain evidence |
+| route_runtime | ✅ Present | Empty for this sample; runtime probe only activates for supported dist-based Fastify targets |
+| route_runtime_deltas | ✅ Present | Empty for this sample; runtime delta attribution depends on runtime probe activation |
 
 ---
 
@@ -202,7 +207,7 @@ All verification commands passed successfully:
 **Next-Step Recommendations:**
 1. Child session baseline is frozen and ready for parent epic integration
 2. No cross-repo contract changes required
-3. route_binds limitation documented; may be addressed in future iterations
+3. route declare/mount/bind/runtime minimal Fastify layering is in place; control-flow guards and runtime deltas such as HEAD auto routes and slash variants now have baseline attribution
 4. Ready for sibling repo child sessions to complete
 
 ---

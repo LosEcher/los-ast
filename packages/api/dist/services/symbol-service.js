@@ -1,4 +1,5 @@
 import { discoverFiles, isReady, languageFromFilePath, defaultParseCache } from '@los-ast/core';
+import { CoreNotReadyError } from '../types/errors.js';
 // AST-grep 规则定义 - 符号发现模式
 const SYMBOL_RULES = [
     {
@@ -72,7 +73,7 @@ export class SymbolService {
         const { rootDir, include, ignore, limit = 100, signal } = options;
         // 验证 Core 是否已初始化
         if (!isReady()) {
-            throw new Error('Core is not ready');
+            throw new CoreNotReadyError();
         }
         // 验证 limit 参数
         const effectiveLimit = Math.min(Math.max(1, limit), 1000);

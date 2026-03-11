@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { getProjectAdapter, listProjects } from '@los-ast/adapters'
 import {
@@ -129,6 +130,1803 @@ const TEXT_IMPORT_PATTERNS = [
   { kind: 'use', languages: ['rust'], regex: /^\s*use\s+([^;]+);/gm },
 ]
 
+const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'all']
+const STATIC_STRING_TOKEN = "(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|`([^`$\\r\\n]*)`)"
+const STATIC_STRING_OR_EXPR_TOKEN = "(`(?:[^`\\\\]|\\\\.|\\$\\{[^}]+\\})*`|\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'|[A-Za-z_$][\\w$.]*)"
+
+function readStaticStringMatch(match, startIndex = 1) {
+  for (let offset = 0; offset < 3; offset += 1) {
+    const value = match[startIndex + offset]
+    if (value !== undefined) {
+      return value
+    }
+  }
+  return ''
+}
+
+function normalizeRoutePath(prefix = '', routePath = '') {
+  const rawPrefix = String(prefix || '').trim()
+  const rawRoute = String(routePath || '').trim()
+
+  if (!rawPrefix && !rawRoute) return '/'
+  if (!rawPrefix) return rawRoute.startsWith('/') ? rawRoute : `/${rawRoute}`
+  if (!rawRoute || rawRoute === '/') return rawPrefix || '/'
+
+  const normalizedPrefix = rawPrefix === '/' ? '' : rawPrefix.replace(/\/+$/, '')
+  const normalizedRoute = rawRoute.replace(/^\/+/, '')
+  const combined = `${normalizedPrefix}/${normalizedRoute}`.replace(/\/{2,}/g, '/')
+  return combined.startsWith('/') ? combined : `/${combined}`
+}
+
+function parseNamedSpecifiers(segment) {
+  return String(segment || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const cleaned = part.replace(/^type\s+/, '').trim()
+      const [importedName, localName] = cleaned.split(/\s+as\s+/).map((value) => value.trim()).filter(Boolean)
+      return {
+        importedName: importedName || cleaned,
+        localName: localName || importedName || cleaned,
+        importKind: 'named',
+      }
+    })
+}
+
+function extractDetailedImports(source) {
+  const results = []
+  const importRegex = /^\s*import\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/gm
+
+  let match
+  while ((match = importRegex.exec(source)) !== null) {
+    const clause = String(match[1] || '').trim()
+    const specifier = String(match[2] || '').trim()
+    const line = indexToLine(source, match.index)
+    const normalizedClause = clause.replace(/^type\s+/, '').trim()
+
+    if (!normalizedClause) continue
+
+    if (normalizedClause.startsWith('{')) {
+      for (const item of parseNamedSpecifiers(normalizedClause.slice(1, -1))) {
+        results.push({ ...item, specifier, line })
+      }
+      continue
+    }
+
+    if (normalizedClause.includes('{')) {
+      const braceIndex = normalizedClause.indexOf('{')
+      const defaultSegment = normalizedClause.slice(0, braceIndex).replace(/,$/, '').trim()
+      const namedSegment = normalizedClause.slice(braceIndex + 1, normalizedClause.lastIndexOf('}'))
+
+      if (defaultSegment) {
+        results.push({
+          importedName: 'default',
+          localName: defaultSegment,
+          importKind: 'default',
+          specifier,
+          line,
+        })
+      }
+
+      for (const item of parseNamedSpecifiers(namedSegment)) {
+        results.push({ ...item, specifier, line })
+      }
+      continue
+    }
+
+    results.push({
+      importedName: 'default',
+      localName: normalizedClause,
+      importKind: 'default',
+      specifier,
+      line,
+    })
+  }
+
+  return results
+}
+
+function extractDetailedReexports(source) {
+  const results = []
+  const reexportRegex = /^\s*export\s+\{\s*default\s+as\s+([A-Za-z_$][\w$]*)\s*\}\s+from\s+['"]([^'"]+)['"]/gm
+
+  let match
+  while ((match = reexportRegex.exec(source)) !== null) {
+    results.push({
+      exportName: String(match[1] || '').trim(),
+      source: String(match[2] || '').trim(),
+      exportKind: 'default',
+      line: indexToLine(source, match.index),
+    })
+  }
+
+  return results
+}
+
+function extractConstBindings(source) {
+  const results = []
+  const constRegex = /^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?/gm
+
+  let match
+  while ((match = constRegex.exec(source)) !== null) {
+    results.push({
+      name: String(match[1] || '').trim(),
+      expression: String(match[2] || '').trim(),
+      line: indexToLine(source, match.index),
+    })
+  }
+
+  return results
+}
+
+function extractRoutePrefixDefaults(source) {
+  const results = {}
+  const routePrefixRegex = /ROUTE_PREFIX_(EXPERIMENTAL|INTERNAL|VPS_AGENT_WEB)\s*:\s*routePrefixSchema\.default\((`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\)/gm
+
+  let match
+  while ((match = routePrefixRegex.exec(source)) !== null) {
+    const key = String(match[1] || '').trim().toLowerCase()
+    const normalizedKey = key === 'vps_agent_web'
+      ? 'vpsAgentWeb'
+      : key.toLowerCase()
+    results[normalizedKey] = parseStaticLiteral(String(match[2] || '').trim())
+  }
+
+  return results
+}
+
+function parseStaticLiteral(expression) {
+  const trimmed = String(expression || '').trim()
+  if (!trimmed) return null
+
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    || (trimmed.startsWith('"') && trimmed.endsWith('"'))
+  ) {
+    return trimmed.slice(1, -1)
+  }
+
+  if (trimmed.startsWith('`') && trimmed.endsWith('`') && !trimmed.includes('${')) {
+    return trimmed.slice(1, -1)
+  }
+
+  return null
+}
+
+function findMatchingBrace(source, openBraceIndex) {
+  if (openBraceIndex < 0 || source[openBraceIndex] !== '{') return -1
+  let depth = 0
+  for (let index = openBraceIndex; index < source.length; index += 1) {
+    const char = source[index]
+    if (char === '{') depth += 1
+    if (char === '}') {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+  return -1
+}
+
+function stripWrappingParens(expression) {
+  let normalized = String(expression || '').trim()
+  while (normalized.startsWith('(') && normalized.endsWith(')')) {
+    let depth = 0
+    let balanced = true
+    for (let index = 0; index < normalized.length; index += 1) {
+      const char = normalized[index]
+      if (char === '(') depth += 1
+      if (char === ')') {
+        depth -= 1
+        if (depth === 0 && index < normalized.length - 1) {
+          balanced = false
+          break
+        }
+      }
+    }
+    if (!balanced || depth !== 0) break
+    normalized = normalized.slice(1, -1).trim()
+  }
+  return normalized
+}
+
+function invertBooleanExpression(expression) {
+  const normalized = stripWrappingParens(expression)
+  if (!normalized) return ''
+  if (normalized.startsWith('!')) {
+    return stripWrappingParens(normalized.slice(1))
+  }
+  if (normalized.includes('&&') || normalized.includes('||')) {
+    return `!(${normalized})`
+  }
+  return `!${normalized}`
+}
+
+function extractFunctionScopes(source) {
+  const scopes = []
+  const functionRegex = /(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*(?::\s*[^{]+)?\{/gm
+
+  let match
+  while ((match = functionRegex.exec(source)) !== null) {
+    const openBraceIndex = functionRegex.lastIndex - 1
+    const endIndex = findMatchingBrace(source, openBraceIndex)
+    if (endIndex === -1) continue
+
+    scopes.push({
+      name: String(match[1] || '').trim(),
+      paramsRaw: String(match[2] || '').trim(),
+      start: match.index,
+      bodyStart: openBraceIndex,
+      end: endIndex,
+      line: indexToLine(source, match.index),
+    })
+  }
+
+  return scopes
+}
+
+function splitTopLevelArguments(segment) {
+  const input = String(segment || '').trim()
+  if (!input) return []
+
+  const parts = []
+  let current = ''
+  let depth = 0
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inTemplate = false
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index]
+    const next = input[index + 1]
+    const prev = input[index - 1]
+
+    if (inSingleQuote) {
+      current += char
+      if (char === "'" && prev !== '\\') inSingleQuote = false
+      continue
+    }
+
+    if (inDoubleQuote) {
+      current += char
+      if (char === '"' && prev !== '\\') inDoubleQuote = false
+      continue
+    }
+
+    if (inTemplate) {
+      current += char
+      if (char === '`' && prev !== '\\') {
+        inTemplate = false
+        continue
+      }
+      if (char === '$' && next === '{') {
+        depth += 1
+        current += next
+        index += 1
+        continue
+      }
+      if (char === '{' && depth > 0) {
+        depth += 1
+        continue
+      }
+      if (char === '}' && depth > 0) {
+        depth -= 1
+      }
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      current += char
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      current += char
+      continue
+    }
+
+    if (char === '`') {
+      inTemplate = true
+      current += char
+      continue
+    }
+
+    if (char === '(' || char === '{' || char === '[') {
+      depth += 1
+      current += char
+      continue
+    }
+
+    if (char === ')' || char === '}' || char === ']') {
+      depth = Math.max(0, depth - 1)
+      current += char
+      continue
+    }
+
+    if (depth === 0 && char === ',') {
+      parts.push(current.trim())
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  if (current.trim()) parts.push(current.trim())
+  return parts
+}
+
+function parseParameterNames(paramsRaw) {
+  return splitTopLevelArguments(paramsRaw)
+    .map((param) => String(param || '').trim())
+    .filter(Boolean)
+    .map((param) => {
+      const withoutDefault = param.split('=').map((part) => part.trim())[0]
+      const withoutType = withoutDefault.split(':').map((part) => part.trim())[0]
+      const cleaned = withoutType.replace(/^\.{3}/, '').trim()
+      return /^[A-Za-z_$][\w$]*$/.test(cleaned) ? cleaned : null
+    })
+    .filter(Boolean)
+}
+
+function stripComments(source) {
+  return String(source || '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+}
+
+function isSafeBooleanHelperExpression(expression, params) {
+  const sanitized = stripComments(expression)
+    .replace(/'(?:[^'\\]|\\.)*'/g, ' ')
+    .replace(/"(?:[^"\\]|\\.)*"/g, ' ')
+    .replace(/`(?:[^`\\]|\\.)*`/g, ' ')
+    .trim()
+
+  if (!sanitized) return false
+  if (/\b(?:await|new|function)\b/.test(sanitized)) return false
+  if (/=>/.test(sanitized)) return false
+  if (/\?\s*[^:]+:/.test(sanitized)) return false
+  if (/\b[A-Za-z_$][\w$]*\s*\(/.test(sanitized)) return false
+
+  const normalized = sanitized
+    .replace(/ROUTE_CONFIG\.(enableExperimental|enableInternal|enableVpsAgentWeb)\b/g, ' ')
+    .replace(/\b(?:true|false|null|undefined)\b/g, ' ')
+
+  const identifiers = normalized.match(/[A-Za-z_$][\w$]*/g) || []
+  return identifiers.every((identifier) => params.includes(identifier))
+}
+
+function extractBooleanHelperFunctions(source, functionScopes) {
+  const helpers = new Map()
+
+  for (const scope of functionScopes) {
+    const params = parseParameterNames(scope.paramsRaw)
+    if (params.length === 0) continue
+
+    const body = stripComments(source.slice(scope.bodyStart + 1, scope.end)).trim()
+    const returnMatch = /^return\s+([\s\S]*?);?\s*$/.exec(body)
+    if (!returnMatch) continue
+
+    const expression = String(returnMatch[1] || '').trim()
+    if (!expression) continue
+    if (!isSafeBooleanHelperExpression(expression, params)) continue
+
+    helpers.set(scope.name, {
+      params,
+      expression,
+    })
+  }
+
+  return helpers
+}
+
+function replaceParameterReferences(expression, params, args) {
+  let substituted = String(expression || '')
+
+  for (let index = 0; index < params.length; index += 1) {
+    const param = params[index]
+    const arg = String(args[index] || '').trim()
+    if (!param || !arg) return null
+
+    const replacement = /^(?:[A-Za-z_$][\w$]*|ROUTE_CONFIG\.[A-Za-z_$][\w$]*|\([^)]*\))$/.test(arg)
+      ? arg
+      : `(${arg})`
+    substituted = substituted.replace(new RegExp(`\\b${param}\\b`, 'g'), replacement)
+  }
+
+  return substituted
+}
+
+function parseSimpleCallExpression(expression) {
+  const trimmed = stripWrappingParens(expression)
+  const callMatch = /^([A-Za-z_$][\w$]*)\(([\s\S]*)\)$/.exec(trimmed)
+  if (!callMatch) return null
+
+  return {
+    callee: String(callMatch[1] || '').trim(),
+    args: splitTopLevelArguments(String(callMatch[2] || '').trim()),
+  }
+}
+
+function resolveGuardCondition(condition, aliases, helperFunctions = new Map()) {
+  let resolved = stripWrappingParens(condition)
+  const aliasMap = aliases instanceof Map ? aliases : new Map()
+  const helperMap = helperFunctions instanceof Map ? helperFunctions : new Map()
+
+  for (let step = 0; step < 8; step += 1) {
+    const previous = resolved
+    const normalized = stripWrappingParens(resolved).replace(/\s+/g, '')
+    const negatedAliasMatch = /^!([A-Za-z_$][\w$]*)$/.exec(normalized)
+    if (negatedAliasMatch) {
+      const aliasValue = aliasMap.get(negatedAliasMatch[1])
+      if (aliasValue) {
+        resolved = invertBooleanExpression(aliasValue)
+        if (resolved !== previous) continue
+      }
+    }
+
+    const aliasMatch = /^([A-Za-z_$][\w$]*)$/.exec(normalized)
+    if (aliasMatch) {
+      const aliasValue = aliasMap.get(aliasMatch[1])
+      if (aliasValue) {
+        resolved = stripWrappingParens(aliasValue)
+      }
+    }
+
+    const negatedCallMatch = /^!([\s\S]+)$/.exec(stripWrappingParens(resolved))
+    if (negatedCallMatch) {
+      const parsedCall = parseSimpleCallExpression(negatedCallMatch[1])
+      const helper = parsedCall ? helperMap.get(parsedCall.callee) : null
+      if (helper && helper.params.length === parsedCall.args.length) {
+        const substituted = replaceParameterReferences(helper.expression, helper.params, parsedCall.args)
+        if (substituted) {
+          resolved = invertBooleanExpression(substituted)
+          if (resolved !== previous) continue
+        }
+      }
+    }
+
+    const parsedCall = parseSimpleCallExpression(resolved)
+    const helper = parsedCall ? helperMap.get(parsedCall.callee) : null
+    if (helper && helper.params.length === parsedCall.args.length) {
+      const substituted = replaceParameterReferences(helper.expression, helper.params, parsedCall.args)
+      if (substituted) {
+        resolved = stripWrappingParens(substituted)
+      }
+    }
+
+    if (resolved === previous) break
+  }
+
+  return stripWrappingParens(resolved)
+}
+
+function extractFunctionFlagAliases(source, functionScopes) {
+  const aliasesByFunction = new Map()
+  const helperFunctions = extractBooleanHelperFunctions(source, functionScopes)
+
+  for (const scope of functionScopes) {
+    const aliasMap = new Map()
+    const scopeSource = source.slice(scope.bodyStart + 1, scope.end)
+    const aliasRegex = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+);?/gm
+
+    let match
+    while ((match = aliasRegex.exec(scopeSource)) !== null) {
+      const aliasName = String(match[1] || '').trim()
+      const expression = String(match[2] || '').trim()
+      const resolvedExpression = resolveGuardCondition(expression, aliasMap, helperFunctions)
+      const normalizedExpression = resolvedExpression.replace(/\s+/g, '')
+      if (!/^!?ROUTE_CONFIG\.(enableExperimental|enableInternal|enableVpsAgentWeb)$/.test(normalizedExpression)) {
+        continue
+      }
+      aliasMap.set(aliasName, resolvedExpression)
+    }
+
+    aliasesByFunction.set(scope.name, aliasMap)
+  }
+
+  return aliasesByFunction
+}
+
+function extractControlFlowGuards(source, functionScopes) {
+  const guards = []
+  const helperFunctions = extractBooleanHelperFunctions(source, functionScopes)
+  const aliasesByFunction = extractFunctionFlagAliases(source, functionScopes)
+
+  for (const scope of functionScopes) {
+    const aliases = aliasesByFunction.get(scope.name) || new Map()
+    const inheritedConditionsByIfStart = new Map()
+
+    for (const statement of extractIfStatements(source, scope.bodyStart + 1, scope.end)) {
+      const ifStart = statement.ifStart
+      const openBraceIndex = statement.blockStart
+      const endIndex = findMatchingBrace(source, openBraceIndex)
+      if (endIndex === -1 || endIndex > scope.end) continue
+
+      const condition = statement.condition
+      const resolvedCondition = resolveGuardCondition(condition, aliases, helperFunctions)
+      const inheritedConditions = inheritedConditionsByIfStart.get(ifStart) || []
+      const blockEffectiveCondition = joinGuardConditions([...inheritedConditions, resolvedCondition])
+      const hasReturn = hasTopLevelReturnInBlock(source, openBraceIndex, endIndex)
+      const elseContinuation = findElseContinuation(source, endIndex, scope.end)
+      const elseHasReturn = elseContinuation?.kind === 'else_block'
+        ? hasTopLevelReturnInBlock(source, elseContinuation.blockStart, elseContinuation.end)
+        : false
+
+      guards.push({
+        functionName: scope.name,
+        guardKind: 'block',
+        branch: 'if',
+        condition,
+        resolvedCondition,
+        effectiveCondition: blockEffectiveCondition,
+        start: ifStart,
+        blockStart: openBraceIndex,
+        end: endIndex,
+        line: indexToLine(source, ifStart),
+      })
+
+      if (elseContinuation?.kind === 'else_block') {
+        guards.push({
+          functionName: scope.name,
+          guardKind: 'block',
+          branch: 'else',
+          condition,
+          resolvedCondition,
+          effectiveCondition: joinGuardConditions([...inheritedConditions, invertBooleanExpression(resolvedCondition)]),
+          start: ifStart,
+          blockStart: elseContinuation.blockStart,
+          end: elseContinuation.end,
+          line: elseContinuation.line,
+        })
+      }
+
+      if (elseContinuation?.kind === 'else_if') {
+        inheritedConditionsByIfStart.set(
+          elseContinuation.ifStart,
+          [...inheritedConditions, invertBooleanExpression(resolvedCondition)]
+        )
+      }
+
+      if (!elseContinuation && hasReturn) {
+        guards.push({
+          functionName: scope.name,
+          guardKind: 'early_return',
+          branch: 'after_if',
+          condition,
+          resolvedCondition,
+          effectiveCondition: joinGuardConditions([...inheritedConditions, invertBooleanExpression(resolvedCondition)]),
+          start: ifStart,
+          blockStart: openBraceIndex,
+          end: endIndex,
+          line: indexToLine(source, ifStart),
+        })
+      }
+
+      if (elseContinuation?.kind === 'else_block' && hasReturn && !elseHasReturn) {
+        guards.push({
+          functionName: scope.name,
+          guardKind: 'early_return',
+          branch: 'after_if_else',
+          condition,
+          resolvedCondition,
+          effectiveCondition: joinGuardConditions([...inheritedConditions, invertBooleanExpression(resolvedCondition)]),
+          start: ifStart,
+          blockStart: openBraceIndex,
+          end: elseContinuation.end,
+          line: elseContinuation.line,
+        })
+      }
+
+      if (elseContinuation?.kind === 'else_block' && !hasReturn && elseHasReturn) {
+        guards.push({
+          functionName: scope.name,
+          guardKind: 'early_return',
+          branch: 'after_if_else',
+          condition,
+          resolvedCondition,
+          effectiveCondition: joinGuardConditions([...inheritedConditions, resolvedCondition]),
+          start: ifStart,
+          blockStart: openBraceIndex,
+          end: elseContinuation.end,
+          line: elseContinuation.line,
+        })
+      }
+    }
+  }
+
+  return guards
+}
+
+function extractIfStatements(source, startIndex, endIndex) {
+  const statements = []
+  let index = startIndex
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inTemplate = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  while (index < endIndex) {
+    const char = source[index]
+    const next = source[index + 1]
+    const prev = source[index - 1]
+
+    if (inLineComment) {
+      if (char === '\n') inLineComment = false
+      index += 1
+      continue
+    }
+
+    if (inBlockComment) {
+      if (prev === '*' && char === '/') inBlockComment = false
+      index += 1
+      continue
+    }
+
+    if (inSingleQuote) {
+      if (char === "'" && prev !== '\\') inSingleQuote = false
+      index += 1
+      continue
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"' && prev !== '\\') inDoubleQuote = false
+      index += 1
+      continue
+    }
+
+    if (inTemplate) {
+      if (char === '`' && prev !== '\\') {
+        inTemplate = false
+      }
+      index += 1
+      continue
+    }
+
+    if (char === '/' && next === '/') {
+      inLineComment = true
+      index += 2
+      continue
+    }
+
+    if (char === '/' && next === '*') {
+      inBlockComment = true
+      index += 2
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      index += 1
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      index += 1
+      continue
+    }
+
+    if (char === '`') {
+      inTemplate = true
+      index += 1
+      continue
+    }
+
+    if (
+      char === 'i'
+      && next === 'f'
+      && !(prev && /[A-Za-z0-9_$]/.test(prev))
+      && !(source[index + 2] && /[A-Za-z0-9_$]/.test(source[index + 2]))
+    ) {
+      const openParenIndex = skipWhitespaceAndComments(source, index + 2, endIndex)
+      if (source[openParenIndex] !== '(') {
+        index += 1
+        continue
+      }
+
+      const closeParenIndex = findMatchingParen(source, openParenIndex, endIndex)
+      if (closeParenIndex === -1) {
+        index += 1
+        continue
+      }
+
+      const blockStart = skipWhitespaceAndComments(source, closeParenIndex + 1, endIndex)
+      if (source[blockStart] !== '{') {
+        index = closeParenIndex + 1
+        continue
+      }
+
+      statements.push({
+        ifStart: index,
+        condition: source.slice(openParenIndex + 1, closeParenIndex).trim(),
+        blockStart,
+        line: indexToLine(source, index),
+      })
+
+      index = blockStart + 1
+      continue
+    }
+
+    index += 1
+  }
+
+  return statements
+}
+
+function findMatchingParen(source, openParenIndex, endIndex = source.length) {
+  if (openParenIndex < 0 || source[openParenIndex] !== '(') return -1
+
+  let depth = 0
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inTemplate = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  for (let index = openParenIndex; index < endIndex; index += 1) {
+    const char = source[index]
+    const next = source[index + 1]
+    const prev = source[index - 1]
+
+    if (inLineComment) {
+      if (char === '\n') inLineComment = false
+      continue
+    }
+
+    if (inBlockComment) {
+      if (prev === '*' && char === '/') inBlockComment = false
+      continue
+    }
+
+    if (inSingleQuote) {
+      if (char === "'" && prev !== '\\') inSingleQuote = false
+      continue
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"' && prev !== '\\') inDoubleQuote = false
+      continue
+    }
+
+    if (inTemplate) {
+      if (char === '`' && prev !== '\\') inTemplate = false
+      continue
+    }
+
+    if (char === '/' && next === '/') {
+      inLineComment = true
+      index += 1
+      continue
+    }
+
+    if (char === '/' && next === '*') {
+      inBlockComment = true
+      index += 1
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      continue
+    }
+
+    if (char === '`') {
+      inTemplate = true
+      continue
+    }
+
+    if (char === '(') depth += 1
+    if (char === ')') {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+
+  return -1
+}
+
+function skipWhitespaceAndComments(source, startIndex, endIndex = source.length) {
+  let index = startIndex
+  while (index < endIndex) {
+    const char = source[index]
+    const next = source[index + 1]
+    if (/\s/.test(char)) {
+      index += 1
+      continue
+    }
+    if (char === '/' && next === '/') {
+      index += 2
+      while (index < endIndex && source[index] !== '\n') index += 1
+      continue
+    }
+    if (char === '/' && next === '*') {
+      index += 2
+      while (index + 1 < endIndex && !(source[index] === '*' && source[index + 1] === '/')) {
+        index += 1
+      }
+      index = Math.min(endIndex, index + 2)
+      continue
+    }
+    break
+  }
+  return index
+}
+
+function findElseContinuation(source, ifEndIndex, scopeEnd) {
+  let cursor = skipWhitespaceAndComments(source, ifEndIndex + 1, scopeEnd + 1)
+  if (!source.startsWith('else', cursor)) return null
+
+  const before = source[cursor - 1] || ''
+  const after = source[cursor + 4] || ''
+  if ((before && /[A-Za-z0-9_$]/.test(before)) || (after && /[A-Za-z0-9_$]/.test(after))) {
+    return null
+  }
+
+  cursor = skipWhitespaceAndComments(source, cursor + 4, scopeEnd + 1)
+  if (source.startsWith('if', cursor)) {
+    return {
+      kind: 'else_if',
+      ifStart: cursor,
+      line: indexToLine(source, cursor),
+    }
+  }
+  if (source[cursor] !== '{') return null
+
+  const end = findMatchingBrace(source, cursor)
+  if (end === -1 || end > scopeEnd) return null
+
+  return {
+    kind: 'else_block',
+    blockStart: cursor,
+    end,
+    line: indexToLine(source, cursor),
+  }
+}
+
+function joinGuardConditions(conditions) {
+  const normalizedParts = conditions
+    .map((condition) => normalizeGuardExpression(condition))
+    .filter(Boolean)
+
+  if (normalizedParts.length === 0) return ''
+  if (normalizedParts.length === 1) return normalizedParts[0]
+
+  return normalizedParts
+    .map((part) => {
+      if (part.includes('&&') || part.includes('||')) return `(${part})`
+      return part
+    })
+    .join(' && ')
+}
+
+function normalizeGuardExpression(expression) {
+  const normalized = stripWrappingParens(expression)
+  if (!normalized) return ''
+
+  const andTerms = splitTopLevelLogical(normalized, '&&')
+  if (andTerms.length > 1) {
+    return andTerms.map((term) => stripWrappingParens(term)).join(' && ')
+  }
+
+  const orTerms = splitTopLevelLogical(normalized, '||')
+  if (orTerms.length > 1) {
+    return orTerms.map((term) => stripWrappingParens(term)).join(' || ')
+  }
+
+  return normalized
+}
+
+function hasTopLevelReturnInBlock(source, openBraceIndex, endIndex) {
+  const blockSource = source.slice(openBraceIndex + 1, endIndex)
+  let depth = 0
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inTemplate = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  for (let index = 0; index < blockSource.length; index += 1) {
+    const char = blockSource[index]
+    const next = blockSource[index + 1]
+    const prev = blockSource[index - 1]
+
+    if (inLineComment) {
+      if (char === '\n') inLineComment = false
+      continue
+    }
+
+    if (inBlockComment) {
+      if (prev === '*' && char === '/') inBlockComment = false
+      continue
+    }
+
+    if (inSingleQuote) {
+      if (char === "'" && prev !== '\\') inSingleQuote = false
+      continue
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"' && prev !== '\\') inDoubleQuote = false
+      continue
+    }
+
+    if (inTemplate) {
+      if (char === '`' && prev !== '\\') {
+        inTemplate = false
+        continue
+      }
+      if (char === '$' && next === '{') {
+        depth += 1
+        index += 1
+        continue
+      }
+      if (char === '}' && depth > 0) {
+        depth -= 1
+      }
+      continue
+    }
+
+    if (char === '/' && next === '/') {
+      inLineComment = true
+      index += 1
+      continue
+    }
+
+    if (char === '/' && next === '*') {
+      inBlockComment = true
+      index += 1
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      continue
+    }
+
+    if (char === '`') {
+      inTemplate = true
+      continue
+    }
+
+    if (char === '{') {
+      depth += 1
+      continue
+    }
+
+    if (char === '}') {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+
+    if (depth !== 0) continue
+
+    if (/\s/.test(char)) continue
+
+    if (/[A-Za-z_$]/.test(char)) {
+      const wordMatch = /^[A-Za-z_$][\w$]*/.exec(blockSource.slice(index))
+      const word = wordMatch ? wordMatch[0] : ''
+      if (word === 'return') return true
+      index += Math.max(0, word.length - 1)
+    }
+  }
+
+  return false
+}
+
+function findEnclosingFunction(functionScopes, index) {
+  const scope = functionScopes
+    .filter((item) => item.start <= index && index <= item.end)
+    .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0]
+  return scope || null
+}
+
+function findGuardForIndex(guards, functionName, index) {
+  return guards
+    .filter((guard) => {
+      if (guard.functionName !== functionName) return false
+      if (guard.guardKind === 'block') {
+        return guard.blockStart <= index && index <= guard.end
+      }
+      return guard.end < index
+    })
+    .sort((a, b) => {
+      if (b.start !== a.start) return b.start - a.start
+      if (a.guardKind === b.guardKind) return 0
+      return a.guardKind === 'block' ? -1 : 1
+    })[0] || null
+}
+
+function splitTopLevelLogical(expression, operator) {
+  const normalized = String(expression || '').trim()
+  if (!normalized) return []
+
+  const parts = []
+  let current = ''
+  let depth = 0
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inTemplate = false
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index]
+    const next = normalized[index + 1]
+    const prev = normalized[index - 1]
+
+    if (inSingleQuote) {
+      current += char
+      if (char === "'" && prev !== '\\') inSingleQuote = false
+      continue
+    }
+
+    if (inDoubleQuote) {
+      current += char
+      if (char === '"' && prev !== '\\') inDoubleQuote = false
+      continue
+    }
+
+    if (inTemplate) {
+      current += char
+      if (char === '`' && prev !== '\\' && depth === 0) {
+        inTemplate = false
+        continue
+      }
+      if (char === '$' && next === '{') {
+        depth += 1
+        current += next
+        index += 1
+        continue
+      }
+      if (char === '{' && depth > 0) {
+        depth += 1
+        continue
+      }
+      if (char === '}' && depth > 0) {
+        depth -= 1
+      }
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      current += char
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      current += char
+      continue
+    }
+
+    if (char === '`') {
+      inTemplate = true
+      current += char
+      continue
+    }
+
+    if (char === '(') {
+      depth += 1
+      current += char
+      continue
+    }
+
+    if (char === ')') {
+      depth = Math.max(0, depth - 1)
+      current += char
+      continue
+    }
+
+    if (depth === 0 && char === operator[0] && next === operator[1]) {
+      parts.push(current.trim())
+      current = ''
+      index += 1
+      continue
+    }
+
+    current += char
+  }
+
+  if (current.trim()) parts.push(current.trim())
+  return parts
+}
+
+function getRouteFlagActivation(normalizedCondition, guardExpression, extras = [], guardShape = null) {
+  const normalized = stripWrappingParens(normalizedCondition).replace(/\s+/g, '')
+  if (!normalized) return null
+
+  let activation = null
+  if (normalized === 'ROUTE_CONFIG.enableExperimental') {
+    activation = {
+      mode: 'flag',
+      flag: 'ENABLE_EXPERIMENTAL_ROUTES',
+      default: false,
+    }
+  } else if (normalized === 'ROUTE_CONFIG.enableInternal') {
+    activation = {
+      mode: 'flag',
+      flag: 'ENABLE_INTERNAL_ROUTES',
+      default: false,
+    }
+  } else if (normalized === 'ROUTE_CONFIG.enableVpsAgentWeb') {
+    activation = {
+      mode: 'flag',
+      flag: 'ENABLE_VPS_AGENT_WEB_ROUTES',
+      default: false,
+      exposure: 'bridge',
+    }
+  }
+
+  if (!activation) return null
+
+  return {
+    ...activation,
+    source: 'control_flow_guard',
+    guardExpression,
+    ...(guardShape ? { guardShape } : {}),
+    ...(extras.length > 0 ? { additionalConditions: extras } : {}),
+  }
+}
+
+function classifyActivationFromGuard(controlFlowGuard) {
+  if (!controlFlowGuard) return null
+
+  const effectiveCondition = stripWrappingParens(controlFlowGuard.effectiveCondition || '')
+  const resolvedCondition = stripWrappingParens(controlFlowGuard.resolvedCondition || effectiveCondition)
+  const guardExpression = controlFlowGuard.condition || controlFlowGuard.effectiveCondition || ''
+
+  const directActivation = getRouteFlagActivation(effectiveCondition, guardExpression)
+  if (directActivation) return directActivation
+
+  if (controlFlowGuard.kind === 'block') {
+    const andTerms = splitTopLevelLogical(effectiveCondition, '&&')
+    if (andTerms.length > 1) {
+      for (const term of andTerms) {
+        const activation = getRouteFlagActivation(term, guardExpression)
+        if (activation) {
+          return {
+            ...activation,
+            guardShape: 'compound_and',
+            additionalConditions: andTerms
+              .filter((item) => stripWrappingParens(item).replace(/\s+/g, '') !== stripWrappingParens(term).replace(/\s+/g, ''))
+              .map((item) => stripWrappingParens(item)),
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  if (controlFlowGuard.kind === 'early_return') {
+    const orTerms = splitTopLevelLogical(resolvedCondition, '||')
+    if (orTerms.length > 1) {
+      for (const term of orTerms) {
+        const normalizedTerm = stripWrappingParens(term)
+        const positiveTerm = normalizedTerm.startsWith('!')
+          ? stripWrappingParens(normalizedTerm.slice(1))
+          : ''
+        const activation = positiveTerm
+          ? getRouteFlagActivation(positiveTerm, guardExpression)
+          : null
+        if (activation) {
+          return {
+            ...activation,
+            guardShape: 'compound_or',
+            additionalConditions: orTerms
+              .filter((item) => stripWrappingParens(item).replace(/\s+/g, '') !== normalizedTerm.replace(/\s+/g, ''))
+              .map((item) => invertBooleanExpression(stripWrappingParens(item))),
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+function resolveStaticExpression(expression, info, moduleInfos, availableFiles, cache = new Map()) {
+  const trimmed = String(expression || '').trim()
+  if (!trimmed) return null
+  if (cache.has(trimmed)) return cache.get(trimmed)
+
+  const literalValue = parseStaticLiteral(trimmed)
+  if (literalValue !== null) {
+    cache.set(trimmed, literalValue)
+    return literalValue
+  }
+
+  if (trimmed.startsWith('`') && trimmed.endsWith('`')) {
+    const inner = trimmed.slice(1, -1)
+    const resolved = inner.replace(/\$\{([^}]+)\}/g, (_, expr) => {
+      const value = resolveStaticExpression(expr, info, moduleInfos, availableFiles, cache)
+      return value === null ? '__UNRESOLVED__' : value
+    })
+    if (resolved.includes('__UNRESOLVED__')) {
+      cache.set(trimmed, null)
+      return null
+    }
+    cache.set(trimmed, resolved)
+    return resolved
+  }
+
+  const binding = info.constBindings.find((item) => item.name === trimmed)
+  if (binding) {
+    const value = resolveStaticExpression(binding.expression, info, moduleInfos, availableFiles, cache)
+    cache.set(trimmed, value)
+    return value
+  }
+
+  const memberMatch = /^([A-Za-z_$][\w$]*)\.prefixes\.(experimental|internal|vpsAgentWeb)$/.exec(trimmed)
+  if (memberMatch) {
+    const importedIdentifier = memberMatch[1]
+    const prefixKey = memberMatch[2]
+    const importEntry = info.imports.find((item) => item.localName === importedIdentifier)
+    if (!importEntry) {
+      cache.set(trimmed, null)
+      return null
+    }
+
+    const targetFile = resolveLocalModule(info.file.path, importEntry.specifier, availableFiles)
+    const targetInfo = targetFile ? moduleInfos.get(targetFile) : null
+    const value = targetInfo?.routePrefixDefaults?.[prefixKey] || null
+    cache.set(trimmed, value)
+    return value
+  }
+
+  cache.set(trimmed, null)
+  return null
+}
+
+function extractDeclaredRoutes(source, relativeFile) {
+  const results = []
+  const routeRegex = new RegExp(
+    `\\b([A-Za-z_$][\\w$]*)\\.(${ROUTE_METHODS.join('|')})\\(\\s*${STATIC_STRING_TOKEN}`,
+    'gm'
+  )
+
+  let match
+  while ((match = routeRegex.exec(source)) !== null) {
+    const declaredPath = readStaticStringMatch(match, 3)
+    if (!declaredPath) continue
+
+    results.push({
+      framework: 'fastify',
+      method: String(match[2] || '').toUpperCase(),
+      path: declaredPath,
+      file: relativeFile,
+      line: indexToLine(source, match.index),
+    })
+  }
+
+  return results
+}
+
+function extractRouteRegistrations(source) {
+  const results = []
+  const functionScopes = extractFunctionScopes(source)
+  const guards = extractControlFlowGuards(source, functionScopes)
+  const withPrefixRegex = new RegExp(
+    `\\b([A-Za-z_$][\\w$]*)\\.register\\(\\s*([A-Za-z_$][\\w$]*)\\s*,\\s*\\{[\\s\\S]*?prefix\\s*:\\s*(${STATIC_STRING_OR_EXPR_TOKEN})[\\s\\S]*?\\}\\s*\\)`,
+    'gm'
+  )
+  const withoutPrefixRegex = /\b([A-Za-z_$][\w$]*)\.register\(\s*([A-Za-z_$][\w$]*)\s*\)/gm
+  const seen = new Set()
+
+  let match
+  while ((match = withPrefixRegex.exec(source)) !== null) {
+    const prefixExpression = String(match[3] || '').trim()
+    const key = `${match.index}:${match[2]}:${prefixExpression}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const enclosingFunction = findEnclosingFunction(functionScopes, match.index)
+    const guard = enclosingFunction ? findGuardForIndex(guards, enclosingFunction.name, match.index) : null
+    results.push({
+      target: String(match[2] || '').trim(),
+      prefixExpression,
+      line: indexToLine(source, match.index),
+      functionName: enclosingFunction?.name || null,
+      controlFlowGuard: guard ? {
+        kind: guard.guardKind,
+        branch: guard.branch,
+        condition: guard.condition,
+        resolvedCondition: guard.resolvedCondition,
+        effectiveCondition: guard.effectiveCondition,
+        line: guard.line,
+      } : null,
+    })
+  }
+
+  while ((match = withoutPrefixRegex.exec(source)) !== null) {
+    const key = `${match.index}:${match[2]}:`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const enclosingFunction = findEnclosingFunction(functionScopes, match.index)
+    const guard = enclosingFunction ? findGuardForIndex(guards, enclosingFunction.name, match.index) : null
+    results.push({
+      target: String(match[2] || '').trim(),
+      prefixExpression: '',
+      line: indexToLine(source, match.index),
+      functionName: enclosingFunction?.name || null,
+      controlFlowGuard: guard ? {
+        kind: guard.guardKind,
+        branch: guard.branch,
+        condition: guard.condition,
+        resolvedCondition: guard.resolvedCondition,
+        effectiveCondition: guard.effectiveCondition,
+        line: guard.line,
+      } : null,
+    })
+  }
+
+  return results
+}
+
+function resolveLocalModule(fromFile, specifier, availableFiles) {
+  if (!specifier || !specifier.startsWith('.')) return null
+
+  const fromDir = path.posix.dirname(String(fromFile).split(path.sep).join('/'))
+  const base = path.posix.normalize(path.posix.join(fromDir, specifier))
+  const extensionlessBase = base.replace(/\.(?:[cm]?js|jsx|tsx?|mts|cts)$/i, '')
+  const candidates = [
+    base,
+    extensionlessBase,
+    `${base}.ts`,
+    `${base}.tsx`,
+    `${base}.js`,
+    `${base}.jsx`,
+    `${base}.mjs`,
+    `${base}.cjs`,
+    `${extensionlessBase}.ts`,
+    `${extensionlessBase}.tsx`,
+    `${extensionlessBase}.js`,
+    `${extensionlessBase}.jsx`,
+    `${extensionlessBase}.mjs`,
+    `${extensionlessBase}.cjs`,
+    path.posix.join(base, 'index.ts'),
+    path.posix.join(base, 'index.tsx'),
+    path.posix.join(base, 'index.js'),
+    path.posix.join(base, 'index.jsx'),
+    path.posix.join(base, 'index.mjs'),
+    path.posix.join(base, 'index.cjs'),
+    path.posix.join(extensionlessBase, 'index.ts'),
+    path.posix.join(extensionlessBase, 'index.tsx'),
+    path.posix.join(extensionlessBase, 'index.js'),
+    path.posix.join(extensionlessBase, 'index.jsx'),
+    path.posix.join(extensionlessBase, 'index.mjs'),
+    path.posix.join(extensionlessBase, 'index.cjs'),
+  ]
+
+  return candidates
+    .map((candidate) => candidate.replace(/\/{2,}/g, '/'))
+    .find((candidate) => availableFiles.has(candidate)) || null
+}
+
+function resolveExportedModule(moduleFile, exportName, moduleInfos, availableFiles, seen = new Set()) {
+  const visitKey = `${moduleFile}:${exportName}`
+  if (seen.has(visitKey)) return null
+  seen.add(visitKey)
+
+  const info = moduleInfos.get(moduleFile)
+  if (!info) return null
+
+  const reexport = info.reexports.find((item) => item.exportName === exportName)
+  if (!reexport) return moduleFile
+
+  const nextFile = resolveLocalModule(moduleFile, reexport.source, availableFiles)
+  if (!nextFile) return null
+  if (reexport.exportKind === 'default') return nextFile
+  return resolveExportedModule(nextFile, exportName, moduleInfos, availableFiles, seen) || nextFile
+}
+
+function resolveImportedModule(info, symbol, moduleInfos, availableFiles) {
+  const importEntry = info.imports.find((item) => item.localName === symbol)
+  if (!importEntry) return null
+
+  const targetFile = resolveLocalModule(info.file.path, importEntry.specifier, availableFiles)
+  if (!targetFile) return null
+  if (importEntry.importKind === 'default') return targetFile
+
+  return resolveExportedModule(targetFile, importEntry.importedName, moduleInfos, availableFiles) || targetFile
+}
+
+function classifyRouteTier(routePath) {
+  const normalizedPath = normalizeRoutePath('', routePath)
+  if (normalizedPath.startsWith('/experimental')) return 'experimental'
+  if (normalizedPath.startsWith('/internal')) return 'internal'
+  if (normalizedPath.startsWith('/vps-agent-web')) return 'vps_agent_web'
+  return 'core'
+}
+
+function inferRouteSourceTier(filePath) {
+  const normalizedPath = String(filePath || '').split(path.sep).join('/')
+  if (normalizedPath.includes('/routes/experimental/')) return 'experimental'
+  if (normalizedPath.includes('/routes/vps-agent-web/')) return 'vps_agent_web'
+  if (normalizedPath.includes('/routes/core/') || normalizedPath.includes('/plugins/health-check')) return 'core'
+  return 'unknown'
+}
+
+function classifyRouteActivation(routePath) {
+  const tier = classifyRouteTier(routePath)
+  if (tier === 'experimental') {
+    return {
+      mode: 'flag',
+      flag: 'ENABLE_EXPERIMENTAL_ROUTES',
+      default: false,
+    }
+  }
+
+  if (tier === 'internal') {
+    return {
+      mode: 'flag',
+      flag: 'ENABLE_INTERNAL_ROUTES',
+      default: false,
+    }
+  }
+
+  if (tier === 'vps_agent_web') {
+    return {
+      mode: 'flag',
+      flag: 'ENABLE_VPS_AGENT_WEB_ROUTES',
+      default: false,
+      exposure: 'bridge',
+    }
+  }
+
+  return {
+    mode: 'always',
+    default: true,
+  }
+}
+
+function buildRouteEvidence(routePath, mountChain) {
+  const lastMount = Array.isArray(mountChain) && mountChain.length > 0
+    ? mountChain[mountChain.length - 1]
+    : null
+  return {
+    level: 'runtime_like',
+    sources: [
+      'declared_route_literal',
+      'register_chain_bound',
+    ],
+    tier: classifyRouteTier(routePath),
+    activation: lastMount?.activation || classifyRouteActivation(routePath),
+    mountDepth: Array.isArray(mountChain) ? mountChain.length : 0,
+  }
+}
+
+function normalizeComparableRoutePath(routePath) {
+  const normalizedPath = normalizeRoutePath('', routePath)
+  if (normalizedPath.length > 1) {
+    return normalizedPath.replace(/\/+$/, '')
+  }
+  return normalizedPath
+}
+
+function buildRouteRuntimeDeltas(routeBinds, routeRuntime, deterministic) {
+  const bindByKey = new Map()
+  const bindByNormalizedKey = new Map()
+
+  for (const bind of routeBinds) {
+    const key = `${bind.method}:${bind.path}`
+    if (!bindByKey.has(key)) {
+      bindByKey.set(key, bind)
+    }
+
+    const normalizedKey = `${bind.method}:${normalizeComparableRoutePath(bind.path)}`
+    if (!bindByNormalizedKey.has(normalizedKey)) {
+      bindByNormalizedKey.set(normalizedKey, bind)
+    }
+  }
+
+  const runtimeDeltas = routeRuntime.map((runtimeRoute) => {
+    const reasons = []
+    const exactKey = `${runtimeRoute.method}:${runtimeRoute.path}`
+    const normalizedPath = normalizeComparableRoutePath(runtimeRoute.path)
+    const normalizedKey = `${runtimeRoute.method}:${normalizedPath}`
+
+    const exactBind = bindByKey.get(exactKey) || null
+    const normalizedBind = bindByNormalizedKey.get(normalizedKey) || null
+    let matchedBind = exactBind || normalizedBind
+
+    if (exactBind) {
+      return {
+        method: runtimeRoute.method,
+        path: runtimeRoute.path,
+        relation: 'exact_match',
+        reasons,
+        matchedBind: {
+          method: exactBind.method,
+          path: exactBind.path,
+          file: exactBind.file,
+        },
+      }
+    }
+
+    if (normalizedBind && normalizedBind.path !== runtimeRoute.path) {
+      reasons.push('trailing_slash_variant')
+    }
+
+    if (runtimeRoute.method === 'HEAD') {
+      const getBind = bindByNormalizedKey.get(`GET:${normalizedPath}`) || bindByKey.get(`GET:${runtimeRoute.path}`) || null
+      if (getBind) {
+        matchedBind = matchedBind || getBind
+        reasons.push('auto_head')
+        if (runtimeRoute.path !== normalizedPath && !reasons.includes('trailing_slash_variant')) {
+          reasons.push('trailing_slash_variant')
+        }
+      }
+    }
+
+    return {
+      method: runtimeRoute.method,
+      path: runtimeRoute.path,
+      relation: reasons.length > 0 ? 'runtime_variant' : 'runtime_only',
+      reasons,
+      matchedBind: matchedBind ? {
+        method: matchedBind.method,
+        path: matchedBind.path,
+        file: matchedBind.file,
+      } : null,
+    }
+  })
+
+  if (deterministic) {
+    runtimeDeltas.sort((a, b) => `${a.path}:${a.method}`.localeCompare(`${b.path}:${b.method}`))
+  }
+
+  return runtimeDeltas
+}
+
+async function probeLosAstApiRuntimeRoutes(rootDir, deterministic) {
+  const distServer = path.join(rootDir, 'packages', 'api', 'dist', 'server.js')
+  const distCoreIndex = path.join(rootDir, 'packages', 'api', 'dist', 'routes', 'core', 'index.js')
+  const distExperimentalIndex = path.join(rootDir, 'packages', 'api', 'dist', 'routes', 'experimental', 'index.js')
+  const distVpsIndex = path.join(rootDir, 'packages', 'api', 'dist', 'routes', 'vps-agent-web', 'index.js')
+  const distHealthCheck = path.join(rootDir, 'packages', 'api', 'dist', 'plugins', 'health-check.js')
+  const distConfig = path.join(rootDir, 'packages', 'api', 'dist', 'config', 'index.js')
+
+  const requiredFiles = [distServer, distCoreIndex, distExperimentalIndex, distVpsIndex, distHealthCheck, distConfig]
+  for (const file of requiredFiles) {
+    try {
+      await fs.access(file)
+    } catch {
+      return []
+    }
+  }
+
+  const FastifyModule = await import('fastify')
+  const Fastify = FastifyModule.default
+  const [{ default: healthCheckPlugin }, coreIndex, experimentalIndex, { default: vpsAgentWebRoutes }, configModule] = await Promise.all([
+    import(pathToFileURL(distHealthCheck).href),
+    import(pathToFileURL(distCoreIndex).href),
+    import(pathToFileURL(distExperimentalIndex).href),
+    import(pathToFileURL(distVpsIndex).href),
+    import(pathToFileURL(distConfig).href),
+  ])
+
+  const runtimeRoutes = []
+  const app = Fastify({ logger: false })
+  app.addHook('onRoute', (routeOptions) => {
+    const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
+    for (const method of methods) {
+      runtimeRoutes.push({
+        framework: 'fastify',
+        level: 'runtime',
+        probe: 'los_ast_api_dist_wiring_onRoute',
+        method: String(method || '').toUpperCase(),
+        path: routeOptions.url,
+        routePath: routeOptions.routePath,
+        prefix: routeOptions.prefix,
+        tier: classifyRouteTier(routeOptions.url),
+        activation: classifyRouteActivation(routeOptions.url),
+      })
+    }
+  })
+
+  try {
+    await app.register(healthCheckPlugin)
+    await app.register(coreIndex.scanRoutes, { prefix: '/scan' })
+    await app.register(coreIndex.discoverRoutes, { prefix: '/discover' })
+
+    const routeConfig = configModule.ROUTE_CONFIG || {}
+    if (routeConfig.enableExperimental) {
+      const experimentalPrefix = routeConfig.prefixes?.experimental || '/experimental'
+      await app.register(experimentalIndex.memoryProposalsRoutes, { prefix: `${experimentalPrefix}/memory-proposals` })
+      await app.register(experimentalIndex.incidentRoutes, { prefix: `${experimentalPrefix}/incidents` })
+      await app.register(experimentalIndex.attributionRoutes, { prefix: `${experimentalPrefix}/attribution` })
+      await app.register(experimentalIndex.recoveryRoutes, { prefix: `${experimentalPrefix}/recovery` })
+      await app.register(experimentalIndex.approvalRoutes, { prefix: `${experimentalPrefix}/approvals` })
+      await app.register(experimentalIndex.hotReloadRoutes, { prefix: `${experimentalPrefix}/hotreload` })
+      await app.register(experimentalIndex.evidenceRoutes, { prefix: `${experimentalPrefix}/evidence` })
+    }
+
+    if (routeConfig.enableVpsAgentWeb) {
+      const vpsPrefix = routeConfig.prefixes?.vpsAgentWeb || '/vps-agent-web'
+      await app.register(vpsAgentWebRoutes, { prefix: vpsPrefix })
+    }
+    await app.ready()
+  } finally {
+    await app.close().catch(() => {})
+  }
+
+  const uniqueRoutes = []
+  const seen = new Set()
+  for (const route of runtimeRoutes) {
+    const key = `${route.method}:${route.path}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    uniqueRoutes.push(route)
+  }
+
+  if (deterministic) {
+    uniqueRoutes.sort((a, b) => `${a.path}:${a.method}`.localeCompare(`${b.path}:${b.method}`))
+  }
+
+  return uniqueRoutes
+}
+
+function buildRouteDeclares(moduleInfos, deterministic) {
+  const routeDeclares = []
+
+  for (const info of moduleInfos.values()) {
+    for (const declaredRoute of info.declaredRoutes) {
+      routeDeclares.push({
+        framework: 'fastify',
+        level: 'declared',
+        method: declaredRoute.method,
+        path: declaredRoute.path,
+        file: declaredRoute.file,
+        line: declaredRoute.line,
+        sourceTierHint: inferRouteSourceTier(declaredRoute.file),
+      })
+    }
+  }
+
+  if (deterministic) {
+    routeDeclares.sort((a, b) => `${a.path}:${a.method}:${a.file}:${a.line}`.localeCompare(`${b.path}:${b.method}:${b.file}:${b.line}`))
+  }
+
+  return routeDeclares
+}
+
+function buildRouteMounts(moduleInfos, deterministic) {
+  const availableFiles = new Set(moduleInfos.keys())
+  const routeMounts = []
+
+  for (const info of moduleInfos.values()) {
+    for (const registration of info.registers) {
+      const resolvedPrefix = resolveStaticExpression(
+        registration.prefixExpression,
+        info,
+        moduleInfos,
+        availableFiles
+      )
+      const targetFile = resolveImportedModule(info, registration.target, moduleInfos, availableFiles)
+      const tierSource = resolvedPrefix || registration.prefixExpression || ''
+      const guardActivation = classifyActivationFromGuard(registration.controlFlowGuard)
+      const activation = guardActivation || classifyRouteActivation(tierSource)
+
+      routeMounts.push({
+        framework: 'fastify',
+        level: 'bound',
+        file: info.file.path,
+        line: registration.line,
+        target: registration.target,
+        targetFile,
+        prefixExpression: registration.prefixExpression || '',
+        resolvedPrefix: resolvedPrefix || null,
+        sourceTierHint: inferRouteSourceTier(info.file.path),
+        tierHint: classifyRouteTier(tierSource),
+        activation,
+        controlFlowGuard: registration.controlFlowGuard,
+      })
+    }
+  }
+
+  if (deterministic) {
+    routeMounts.sort((a, b) => `${a.file}:${a.target}:${a.resolvedPrefix || a.prefixExpression}:${a.line}`.localeCompare(`${b.file}:${b.target}:${b.resolvedPrefix || b.prefixExpression}:${b.line}`))
+  }
+
+  return routeMounts
+}
+
+function buildRouteBinds(moduleInfos, deterministic) {
+  const availableFiles = new Set(moduleInfos.keys())
+  const importedByCounts = new Map()
+
+  for (const [moduleFile, info] of moduleInfos.entries()) {
+    importedByCounts.set(moduleFile, importedByCounts.get(moduleFile) || 0)
+    for (const importEntry of info.imports) {
+      const targetFile = resolveLocalModule(moduleFile, importEntry.specifier, availableFiles)
+      if (!targetFile) continue
+      importedByCounts.set(targetFile, (importedByCounts.get(targetFile) || 0) + 1)
+    }
+  }
+
+  const rootModules = [...moduleInfos.values()]
+    .filter((info) => info.registers.length > 0 && (importedByCounts.get(info.file.path) || 0) === 0)
+    .map((info) => info.file.path)
+
+  const routeBinds = []
+  const seen = new Set()
+
+  function visit(moduleFile, prefix = '', mountChain = []) {
+    const visitKey = `${moduleFile}|${prefix}|${mountChain.map((step) => `${step.file}:${step.target}:${step.prefix}`).join('>')}`
+    if (seen.has(`visit:${visitKey}`)) return
+    seen.add(`visit:${visitKey}`)
+
+    const info = moduleInfos.get(moduleFile)
+    if (!info) return
+
+    for (const declaredRoute of info.declaredRoutes) {
+      const resolvedPath = normalizeRoutePath(prefix, declaredRoute.path)
+      const bind = {
+        framework: 'fastify',
+        binding: 'runtime_like',
+        method: declaredRoute.method,
+        path: resolvedPath,
+        declaredPath: declaredRoute.path,
+        file: declaredRoute.file,
+        line: declaredRoute.line,
+        via: mountChain,
+        evidence: buildRouteEvidence(resolvedPath, mountChain),
+      }
+      const bindKey = `${bind.method}|${bind.path}|${bind.file}|${bind.line}|${JSON.stringify(bind.via)}`
+      if (seen.has(bindKey)) continue
+      seen.add(bindKey)
+      routeBinds.push(bind)
+    }
+
+    for (const registration of info.registers) {
+      const resolvedPrefix = resolveStaticExpression(
+        registration.prefixExpression,
+        info,
+        moduleInfos,
+        availableFiles
+      )
+      const targetFile = resolveImportedModule(info, registration.target, moduleInfos, availableFiles)
+      if (!targetFile) continue
+      const guardActivation = classifyActivationFromGuard(registration.controlFlowGuard)
+      const activation = guardActivation || classifyRouteActivation(resolvedPrefix || registration.prefixExpression || '')
+      visit(
+        targetFile,
+        normalizeRoutePath(prefix, resolvedPrefix || registration.prefixExpression || ''),
+        [...mountChain, {
+          file: info.file.path,
+          target: registration.target,
+          prefix: resolvedPrefix || registration.prefixExpression || '/',
+          line: registration.line,
+          activation,
+          controlFlowGuard: registration.controlFlowGuard,
+        }]
+      )
+    }
+  }
+
+  for (const rootModule of rootModules) {
+    visit(rootModule, '', [])
+  }
+
+  if (deterministic) {
+    routeBinds.sort((a, b) => `${a.path}:${a.method}:${a.file}:${a.line}`.localeCompare(`${b.path}:${b.method}:${b.file}:${b.line}`))
+  }
+
+  return routeBinds
+}
+
 function classifyFileRole(relativeFile) {
   const normalized = String(relativeFile).split(path.sep).join('/')
   if (/(^|\/)src\/admin\/app\/pages\//.test(normalized)) return 'page'
@@ -187,6 +1985,7 @@ async function extractFileFacts(file, rootDir) {
       symbols: [],
       imports: [],
       declares: [],
+      module: null,
     }
   }
 
@@ -215,6 +2014,20 @@ async function extractFileFacts(file, rootDir) {
     kind: item.kind,
   }))
 
+  const module = ['typescript', 'javascript', 'tsx', 'jsx'].includes(normalizedLanguage)
+    ? {
+      file: {
+        path: relativeFile,
+      },
+      imports: extractDetailedImports(source),
+      reexports: extractDetailedReexports(source),
+      constBindings: extractConstBindings(source),
+      routePrefixDefaults: extractRoutePrefixDefaults(source),
+      declaredRoutes: extractDeclaredRoutes(source, relativeFile),
+      registers: extractRouteRegistrations(source),
+    }
+    : null
+
   return {
     file: {
       path: relativeFile,
@@ -224,6 +2037,7 @@ async function extractFileFacts(file, rootDir) {
     symbols,
     imports,
     declares,
+    module,
   }
 }
 
@@ -252,13 +2066,27 @@ async function exportArtifacts(options) {
   const structureSymbols = []
   const structureImports = []
   const structureDeclares = []
+  const moduleInfos = new Map()
   for (const file of files) {
     const facts = await extractFileFacts(file, ws.rootDir)
     structureFiles.push(facts.file)
     structureSymbols.push(...facts.symbols)
     structureImports.push(...facts.imports)
     structureDeclares.push(...facts.declares)
+    if (facts.module) {
+      moduleInfos.set(facts.module.file.path, facts.module)
+    }
   }
+
+  const routeDeclares = buildRouteDeclares(moduleInfos, deterministic)
+  const routeMounts = buildRouteMounts(moduleInfos, deterministic)
+  const routeBinds = buildRouteBinds(moduleInfos, deterministic)
+  const routeRuntime = await probeLosAstApiRuntimeRoutes(ws.rootDir, deterministic)
+  const routeRuntimeDeltas = buildRouteRuntimeDeltas(routeBinds, routeRuntime, deterministic)
+  const routeRuntimeWithDeltas = routeRuntime.map((runtimeRoute) => ({
+    ...runtimeRoute,
+    delta: routeRuntimeDeltas.find((item) => item.method === runtimeRoute.method && item.path === runtimeRoute.path) || null,
+  }))
 
   if (deterministic) {
     structureFiles.sort((a, b) => String(a.path).localeCompare(String(b.path)))
@@ -283,7 +2111,11 @@ async function exportArtifacts(options) {
     symbols: structureSymbols,
     imports: structureImports,
     declares: structureDeclares,
-    route_binds: [],
+    route_declares: routeDeclares,
+    route_mounts: routeMounts,
+    route_binds: routeBinds,
+    route_runtime: routeRuntimeWithDeltas,
+    route_runtime_deltas: routeRuntimeDeltas,
   }
 
   await fs.mkdir(outputDir, { recursive: true })
@@ -307,11 +2139,20 @@ async function exportArtifacts(options) {
       symbols: structureSymbols.length,
       imports: structureImports.length,
       declares: structureDeclares.length,
-      routeBinds: 0,
+      routeDeclares: routeDeclares.length,
+      routeMounts: routeMounts.length,
+      routeBinds: routeBinds.length,
+      routeRuntime: routeRuntimeWithDeltas.length,
+      routeRuntimeDeltas: routeRuntimeDeltas.length,
     },
-    limitations: [
-      'route_binds is emitted as an empty array in first-pass export',
-    ],
+    limitations: routeBinds.length > 0
+      ? [
+        'route_binds currently covers minimal Fastify literal-only route declarations and register prefixes',
+      ]
+      : [
+        'route_binds currently covers minimal Fastify literal-only route declarations and register prefixes',
+        'route_binds may remain empty when the workspace does not expose literal Fastify route registrations',
+      ],
   }
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`)
 }

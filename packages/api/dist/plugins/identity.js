@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import { ScopeError, AuthenticationError } from '../types/errors.js';
-import { IS_PRODUCTION, JWT_CONFIG } from '../config/index.js';
+import { DEV_ALLOW_UNVERIFIED_IDENTITY, IS_PRODUCTION, JWT_CONFIG, } from '../config/index.js';
 async function verifyJWTSignature(token, secret) {
     try {
         const crypto = await import('crypto');
@@ -37,6 +37,25 @@ function extractAuthHeader(request) {
     }
     return auth;
 }
+function getStringClaim(payload, claim) {
+    const value = payload[claim];
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+function assertClientScopeNotTampered(clientScope, verified) {
+    const mismatches = [];
+    if (clientScope.tenant_id && clientScope.tenant_id !== verified.tenant_id) {
+        mismatches.push('tenant_id');
+    }
+    if (clientScope.project_id && clientScope.project_id !== verified.project_id) {
+        mismatches.push('project_id');
+    }
+    if (clientScope.actor_id && clientScope.actor_id !== verified.actor_id) {
+        mismatches.push('actor_id');
+    }
+    if (mismatches.length > 0) {
+        throw new ScopeError('SCOPE_TAMPERED', `Client scope does not match verified identity claims: ${mismatches.join(', ')}`);
+    }
+}
 async function verifyIdentity(request, scope) {
     const token = extractAuthHeader(request);
     if (IS_PRODUCTION && JWT_CONFIG.enforceJWT) {
@@ -53,7 +72,7 @@ async function verifyIdentity(request, scope) {
         if (!payload) {
             throw new AuthenticationError('INVALID_JWT_PAYLOAD', 'JWT payload is missing or invalid');
         }
-        const actorId = payload.sub;
+        const actorId = getStringClaim(payload, 'sub');
         if (!actorId) {
             throw new AuthenticationError('MISSING_JWT_SUB', 'JWT missing required "sub" (subject/actor) claim');
         }
@@ -61,17 +80,28 @@ async function verifyIdentity(request, scope) {
         if (exp && Date.now() >= exp * 1000) {
             throw new AuthenticationError('JWT_EXPIRED', 'JWT token has expired');
         }
+        const tenantId = getStringClaim(payload, 'tenant_id');
+        const projectId = getStringClaim(payload, 'project_id');
+        if (!tenantId || !projectId) {
+            const missing = [
+                !tenantId ? 'tenant_id' : null,
+                !projectId ? 'project_id' : null,
+            ].filter(Boolean).join(', ');
+            throw new ScopeError('INCOMPLETE_SCOPE', `JWT missing required scope claims: ${missing}`);
+        }
+        assertClientScopeNotTampered(scope, {
+            tenant_id: tenantId,
+            project_id: projectId,
+            actor_id: actorId,
+        });
         const verifiedScope = {
-            tenant_id: scope.tenant_id || payload.tenant_id,
-            project_id: scope.project_id || payload.project_id,
+            tenant_id: tenantId,
+            project_id: projectId,
             actor_id: actorId,
             mode: 'service',
             identity_verified: true,
             identity_source: 'jwt',
         };
-        if (!verifiedScope.tenant_id || !verifiedScope.project_id) {
-            throw new ScopeError('INCOMPLETE_SCOPE', `Verified scope missing: ${!verifiedScope.tenant_id ? 'tenant_id' : 'project_id'}`);
-        }
         return {
             actor_id: actorId,
             identity_source: 'jwt',
@@ -83,15 +113,17 @@ async function verifyIdentity(request, scope) {
     if (token && JWT_CONFIG.secret) {
         const { valid, payload } = await verifyJWTSignature(token, JWT_CONFIG.secret);
         if (valid && payload) {
-            const actorId = payload.sub || scope.actor_id || 'unknown';
+            const actorId = getStringClaim(payload, 'sub') || scope.actor_id || 'unknown';
+            const tenantId = getStringClaim(payload, 'tenant_id') || scope.tenant_id || 'dev';
+            const projectId = getStringClaim(payload, 'project_id') || scope.project_id || 'dev';
             return {
                 actor_id: actorId,
                 identity_source: 'jwt',
                 claims: payload,
                 original_scope: scope,
                 verified_scope: {
-                    tenant_id: scope.tenant_id || payload.tenant_id || 'dev',
-                    project_id: scope.project_id || payload.project_id || 'dev',
+                    tenant_id: tenantId,
+                    project_id: projectId,
                     actor_id: actorId,
                     mode: scope.mode || 'local',
                     identity_verified: true,
@@ -101,6 +133,9 @@ async function verifyIdentity(request, scope) {
         }
     }
     if (!IS_PRODUCTION) {
+        if (!DEV_ALLOW_UNVERIFIED_IDENTITY) {
+            throw new AuthenticationError('UNVERIFIED_IDENTITY_DISABLED', 'Unverified identity is disabled in development environment. Set DEV_ALLOW_UNVERIFIED_IDENTITY=true to allow local scope-based identity.');
+        }
         console.warn('[IdentityPlugin] Development mode: allowing unverified identity');
         return {
             actor_id: scope.actor_id || 'dev-user',

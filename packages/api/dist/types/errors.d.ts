@@ -34,6 +34,9 @@ export declare class TimeoutError extends AppError {
 export declare class ScanTooLargeError extends AppError {
     constructor(limit: number, estimated: number);
 }
+export declare class CoreNotReadyError extends AppError {
+    constructor(message?: string);
+}
 /**
  * 资源未找到错误
  */

@@ -22,7 +22,10 @@ export declare function explainCode(request: ExplainCodeRequest): Promise<Explai
 /**
  * 获取证据包
  */
-export declare function getEvidenceBundle(bundleId: string): Promise<CodeEvidenceBundle | null>;
+export declare function getEvidenceBundle(bundleId: string, scope?: {
+    tenant_id?: string;
+    project_id?: string;
+}): Promise<CodeEvidenceBundle | null>;
 /**
  * 获取代码统计
  */

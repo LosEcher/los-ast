@@ -20,7 +20,8 @@ export default async function evidenceRoutes(fastify) {
     // GET /experimental/evidence/:id - 获取证据包
     fastify.get('/:id', async (request, reply) => {
         const { id } = request.params;
-        const bundle = await getEvidenceBundle(id);
+        const scope = request.scope;
+        const bundle = await getEvidenceBundle(id, scope);
         if (!bundle)
             return notFound(reply, 'Evidence bundle');
         return ok(bundle);

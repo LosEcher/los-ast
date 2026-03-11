@@ -58,6 +58,13 @@ export class ScanTooLargeError extends AppError {
         super('SCAN_TOO_LARGE', 'SCAN_TOO_LARGE', `Estimated ${estimated} files exceeds limit ${limit}. Use smaller include patterns or async task mode.`, false, { limit, estimated });
     }
 }
+export class CoreNotReadyError extends AppError {
+    constructor(message = 'Core is not ready') {
+        super('SERVICE_UNAVAILABLE', 'CORE_NOT_READY', message, true, {
+            reason: 'core_not_ready',
+        });
+    }
+}
 /**
  * 资源未找到错误
  */

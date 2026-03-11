@@ -3,12 +3,18 @@
  * Phase 1.7: los-ast 证据生成
  */
 import { generateId } from '../../utils/id-generator.js';
-import { scan, explainAtPosition, loadRuleFiles } from '@los-ast/core';
+import { scan, explainAtPosition, loadRuleFiles, isReady } from '@los-ast/core';
 import { EVIDENCE_CONFIG } from '../../config/index.js';
+import { CoreNotReadyError } from '../../types/errors.js';
 // 内存存储
 const evidenceStore = new Map();
 const EVIDENCE_SCHEMA_VERSION = '1.0.0';
 const EVIDENCE_GENERATOR_VERSION = '1.0.0';
+function ensureCoreReady() {
+    if (!isReady()) {
+        throw new CoreNotReadyError();
+    }
+}
 async function generateSignature(bundle, scope) {
     if (!EVIDENCE_CONFIG.enableSignatures || !EVIDENCE_CONFIG.signingKey) {
         return undefined;
@@ -39,6 +45,7 @@ async function generateSignature(bundle, scope) {
  * 生成证据包
  */
 export async function generateEvidence(request, scope) {
+    ensureCoreReady();
     const bundleId = generateId('evd');
     const rules = request.rules && request.rules.length > 0
         ? await loadRuleFiles(request.rules)
@@ -98,6 +105,10 @@ export async function generateEvidence(request, scope) {
         project: request.project,
         root_dir: request.root_dir,
         created_at: new Date().toISOString(),
+        scope: {
+            tenant_id: scope.tenant_id,
+            project_id: scope.project_id,
+        },
         schema_version: EVIDENCE_SCHEMA_VERSION,
         generator: {
             tool: 'los-ast',
@@ -222,6 +233,7 @@ export async function generateRewrite(request) {
  * 解释代码
  */
 export async function explainCode(request) {
+    ensureCoreReady();
     // 使用 los-ast Core 的 explainAtPosition 功能
     try {
         const result = await explainAtPosition({
@@ -264,8 +276,17 @@ export async function explainCode(request) {
 /**
  * 获取证据包
  */
-export async function getEvidenceBundle(bundleId) {
-    return evidenceStore.get(bundleId) || null;
+export async function getEvidenceBundle(bundleId, scope) {
+    const bundle = evidenceStore.get(bundleId);
+    if (!bundle) {
+        return null;
+    }
+    if (scope?.tenant_id &&
+        scope?.project_id &&
+        (bundle.scope.tenant_id !== scope.tenant_id || bundle.scope.project_id !== scope.project_id)) {
+        return null;
+    }
+    return bundle;
 }
 /**
  * 获取代码统计

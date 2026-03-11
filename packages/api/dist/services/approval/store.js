@@ -8,7 +8,7 @@ const approvalStore = new Map();
 /**
  * 创建审批项
  */
-export async function createApproval(request) {
+export async function createApproval(request, actorId) {
     const now = new Date().toISOString();
     const approvalId = generateId('apr');
     // 计算超时时间
@@ -22,7 +22,7 @@ export async function createApproval(request) {
         risk_level: request.risk_level,
         status: 'pending',
         requester: {
-            actor_id: 'system', // 实际应该从上下文获取
+            actor_id: actorId,
             timestamp: now,
         },
         timeout_at: timeoutAt,
