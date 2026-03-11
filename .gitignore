@@ -2,4 +2,7 @@ node_modules/
 .DS_Store
 reports/
 *.log
-
+control-plane/
+logs/
+packages/api/logs/
+packages/logs/
