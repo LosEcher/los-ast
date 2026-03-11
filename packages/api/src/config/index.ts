@@ -100,6 +100,8 @@ const configSchema = z
     LSCLAW_JWT_SECRET: stringOrUndefined,
     DEV_ALLOW_UNVERIFIED_IDENTITY: boolFromEnvSchema.default(false),
     EVIDENCE_SIGNING_KEY: stringOrUndefined,
+    ENABLE_OPENAPI_NATIVE_PARSER: boolFromEnvSchema.default(true),
+    ENABLE_SCHEMA_NATIVE_PARSER: boolFromEnvSchema.default(true),
     ENABLE_EXPERIMENTAL_ROUTES: boolFromEnvSchema.default(false),
     ENABLE_INTERNAL_ROUTES: boolFromEnvSchema.default(false),
     ENABLE_VPS_AGENT_WEB_ROUTES: boolFromEnvSchema.default(false),
@@ -196,6 +198,8 @@ function normalizeAndValidateConfig(env: NodeJS.ProcessEnv): ParsedConfigResult 
     LSCLAW_JWT_SECRET: env.LSCLAW_JWT_SECRET,
     DEV_ALLOW_UNVERIFIED_IDENTITY: env.DEV_ALLOW_UNVERIFIED_IDENTITY,
     EVIDENCE_SIGNING_KEY: env.EVIDENCE_SIGNING_KEY,
+    ENABLE_OPENAPI_NATIVE_PARSER: env.ENABLE_OPENAPI_NATIVE_PARSER,
+    ENABLE_SCHEMA_NATIVE_PARSER: env.ENABLE_SCHEMA_NATIVE_PARSER,
     ENABLE_EXPERIMENTAL_ROUTES: env.ENABLE_EXPERIMENTAL_ROUTES,
     ENABLE_INTERNAL_ROUTES: env.ENABLE_INTERNAL_ROUTES,
     ENABLE_VPS_AGENT_WEB_ROUTES: env.ENABLE_VPS_AGENT_WEB_ROUTES,
@@ -276,6 +280,11 @@ export const EVIDENCE_CONFIG = {
   enableSignatures: !!parsedConfig.values.EVIDENCE_SIGNING_KEY || IS_PRODUCTION,
 };
 
+export const PARSER_CONFIG = {
+  enableOpenApiNativeParser: parsedConfig.values.ENABLE_OPENAPI_NATIVE_PARSER,
+  enableSchemaNativeParser: parsedConfig.values.ENABLE_SCHEMA_NATIVE_PARSER,
+};
+
 export const ROUTE_CONFIG = {
   enableExperimental: parsedConfig.values.ENABLE_EXPERIMENTAL_ROUTES,
   enableInternal: parsedConfig.values.ENABLE_INTERNAL_ROUTES,
@@ -343,6 +352,9 @@ export function logStartupConfig(): void {
   console.log(`[STARTUP]   - JWT secret configured: ${!!JWT_CONFIG.secret}`);
   console.log(`[STARTUP]   - Dev allow unverified identity: ${DEV_ALLOW_UNVERIFIED_IDENTITY}`);
   console.log(`[STARTUP]   - Evidence signing: ${EVIDENCE_CONFIG.enableSignatures ? 'ENABLED' : 'DISABLED'}`);
+  console.log('[STARTUP] Parser configuration:');
+  console.log(`[STARTUP]   - OpenAPI native parser: ${PARSER_CONFIG.enableOpenApiNativeParser ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`[STARTUP]   - Schema native parser: ${PARSER_CONFIG.enableSchemaNativeParser ? 'ENABLED' : 'DISABLED'}`);
 
   console.log('[STARTUP] Route configuration:');
   console.log(`[STARTUP]   - Experimental routes: ${ROUTE_CONFIG.enableExperimental ? 'ENABLED' : 'DISABLED'}`);

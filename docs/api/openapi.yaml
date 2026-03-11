@@ -656,6 +656,50 @@ components:
           type: string
           enum: [lsclaw-governance]
           description: 内置规则包标识。当前支持 `lsclaw-governance`（在未传 `rules` 时生效）。
+        openApiDocuments:
+          type: array
+          description: >
+            可选 OpenAPI 原生输入。每条文档会被解析为 `findingSource=contract` 的 findings。
+          items:
+            type: object
+            required:
+              - content
+            properties:
+              source:
+                type: string
+                description: OpenAPI 来源标识
+              file:
+                type: string
+                description: 逻辑文件名
+              content:
+                type: string
+                description: OpenAPI YAML/JSON 文本
+              format:
+                type: string
+                enum: [yaml, json]
+                description: 可选格式提示
+        schemaDocuments:
+          type: array
+          description: >
+            可选 schema 原生输入。每条文档会被解析为 `findingSource=schema` 的 findings。
+          items:
+            type: object
+            required:
+              - content
+            properties:
+              source:
+                type: string
+                description: schema 来源标识
+              file:
+                type: string
+                description: 逻辑文件名
+              content:
+                type: string
+                description: SQL/Prisma 文本
+              format:
+                type: string
+                enum: [sql, prisma]
+                description: 可选格式提示
         contractArtifacts:
           type: array
           description: >

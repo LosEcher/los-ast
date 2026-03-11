@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 import { scan, discoverFiles, isReady, loadRuleFiles } from '@los-ast/core';
-import { SCAN_LIMITS } from '../config/index.js';
+import { PARSER_CONFIG, SCAN_LIMITS } from '../config/index.js';
 import { CoreNotReadyError, ScanTooLargeError } from '../types/errors.js';
 import type {
   Finding,
@@ -9,7 +9,10 @@ import type {
   FindingSource,
   ContractArtifactFindingInput,
   SchemaArtifactFindingInput,
+  OpenApiDocumentInput,
+  SchemaDocumentInput,
 } from '@los-ast/shared/types';
+import { parseArtifactInputs } from './artifact-parsers/index.js';
 
 interface ContractFindingRange {
   start: { line: number; column: number; index: number };
@@ -32,6 +35,8 @@ export interface ScanServiceOptions {
   rules?: string[];  // 规则文件 glob 模式数组
   includeStats?: boolean;
   deterministic?: boolean;
+  openApiDocuments?: OpenApiDocumentInput[];
+  schemaDocuments?: SchemaDocumentInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
   schemaArtifacts?: SchemaArtifactFindingInput[];
   signal: AbortSignal;
@@ -220,6 +225,8 @@ export class ScanService {
       rules: rulePatterns,
       includeStats,
       deterministic,
+      openApiDocuments,
+      schemaDocuments,
       contractArtifacts,
       schemaArtifacts,
       signal,
@@ -260,17 +267,25 @@ export class ScanService {
       signal,
     });
 
-    const contractFindings = buildFindingsFromArtifacts({
-      project,
+    const parsedArtifacts = parseArtifactInputs({
+      openApiDocuments,
+      schemaDocuments,
       contractArtifacts,
       schemaArtifacts,
+      runtimeConfig: PARSER_CONFIG,
+    });
+
+    const contractFindings = buildFindingsFromArtifacts({
+      project,
+      contractArtifacts: parsedArtifacts.contractArtifacts,
+      schemaArtifacts: parsedArtifacts.schemaArtifacts,
       deterministic: deterministic ?? false,
       defaultFindingSource: 'contract',
     });
     const schemaFindings = buildFindingsFromArtifacts({
       project,
-      contractArtifacts,
-      schemaArtifacts,
+      contractArtifacts: parsedArtifacts.contractArtifacts,
+      schemaArtifacts: parsedArtifacts.schemaArtifacts,
       deterministic: deterministic ?? false,
       defaultFindingSource: 'schema',
     });

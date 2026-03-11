@@ -29,8 +29,24 @@ export interface ScanParams {
   ignore?: string[];
   includeStats?: boolean;
   deterministic?: boolean;
+  openApiDocuments?: OpenApiDocumentInput[];
+  schemaDocuments?: SchemaDocumentInput[];
   contractArtifacts?: ContractArtifactFindingInput[];
   schemaArtifacts?: SchemaArtifactFindingInput[];
+}
+
+export interface OpenApiDocumentInput {
+  source?: string;
+  file?: string;
+  content: string;
+  format?: 'yaml' | 'json';
+}
+
+export interface SchemaDocumentInput {
+  source?: string;
+  file?: string;
+  content: string;
+  format?: 'sql' | 'prisma';
 }
 
 export interface ContractArtifactFindingInput {

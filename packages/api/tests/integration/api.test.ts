@@ -214,6 +214,86 @@ describe('API Integration Tests', () => {
       expect(body.data.findings[0].ruleId).toBe('schema/email-nullability');
     });
 
+    it('POST /scan should forward openApiDocuments to scan service', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        openApiDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
+      }));
+    });
+
+    it('POST /scan should forward schemaDocuments to scan service', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          schemaDocuments: [
+            {
+              source: 'schema-inline',
+              file: '/tmp/schema.prisma',
+              content: 'model User { id String @id email String? }',
+              format: 'prisma',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        schemaDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'schema-inline',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+          }),
+        ]),
+      }));
+    });
+
     it('POST /scan should resolve lsclaw-governance rulePack into built-in rule paths', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,

@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { scanService } from '../../../src/services/scan-service';
 import { SCAN_LIMITS } from '../../../src/config';
-import { CoreNotReadyError } from '../../../src/types/errors.js';
+import { CoreNotReadyError, ValidationError } from '../../../src/types/errors.js';
 import * as core from '@los-ast/core';
 
 // Mock Core 模块
@@ -133,6 +133,118 @@ describe('ScanService', () => {
         governanceDomain: ['backend'],
         impactHint: 'high',
       });
+    });
+
+    it('should derive contract findings from openApiDocuments', async () => {
+      const mockResult = {
+        filesScanned: 1,
+        findings: [],
+      };
+      vi.mocked(core.scan).mockResolvedValue(mockResult as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiDocuments: [
+          {
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            content: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      responses:',
+              "        '400':",
+              "          description: bad request",
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(3);
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-operation-id',
+        'contract/openapi-auth-required',
+        'contract/openapi-success-response',
+      ]);
+      expect(result.findings.every((finding) => finding.findingSource === 'contract')).toBe(true);
+    });
+
+    it('should reject invalid openApiDocuments', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      await expect(
+        scanService.execute({
+          project: 'test-project',
+          rootDir: '/test/path',
+          openApiDocuments: [
+            {
+              source: 'broken-openapi',
+              content: 'openapi: 3.0.3\npaths: [\n',
+            },
+          ],
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('should derive schema findings from schemaDocuments', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaDocuments: [
+          {
+            source: 'schema-inline',
+            file: '/tmp/schema.sql',
+            content: [
+              'CREATE TABLE users (',
+              '  email TEXT,',
+              '  password TEXT NOT NULL',
+              ');',
+            ].join('\n'),
+            format: 'sql',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(2);
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/sql-sensitive-nullable',
+        'schema/sql-primary-key',
+      ]);
+      expect(result.findings.every((finding) => finding.findingSource === 'schema')).toBe(true);
+    });
+
+    it('should reject schemaDocuments with unknown format', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      await expect(
+        scanService.execute({
+          project: 'test-project',
+          rootDir: '/test/path',
+          schemaDocuments: [
+            {
+              source: 'broken-schema',
+              content: 'not a sql or prisma document',
+            },
+          ],
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it('should merge schema artifacts as schema findings', async () => {

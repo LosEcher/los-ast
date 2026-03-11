@@ -26,6 +26,7 @@ describe('Config Validation', () => {
       const {
         NODE_ENV,
         PORT,
+        PARSER_CONFIG,
         SCAN_LIMITS,
         ROUTE_CONFIG,
         validateConfig,
@@ -36,6 +37,8 @@ describe('Config Validation', () => {
       expect(SCAN_LIMITS.maxFilesPerSyncScan).toBe(1000);
       expect(SCAN_LIMITS.maxResponseBytes).toBe(10485760);
       expect(SCAN_LIMITS.maxDurationMs).toBe(30000);
+      expect(PARSER_CONFIG.enableOpenApiNativeParser).toBe(true);
+      expect(PARSER_CONFIG.enableSchemaNativeParser).toBe(true);
       expect(ROUTE_CONFIG.enableExperimental).toBe(false);
       expect(ROUTE_CONFIG.prefixes.experimental).toBe('/experimental');
 
@@ -122,13 +125,15 @@ describe('Config Validation', () => {
     it('should parse boolean env as expected', async () => {
       process.env.ENABLE_EXPERIMENTAL_ROUTES = 'true';
       process.env.ENABLE_INTERNAL_ROUTES = 'false';
+      process.env.ENABLE_OPENAPI_NATIVE_PARSER = 'false';
       process.env.DEV_ALLOW_UNVERIFIED_IDENTITY = '1';
       vi.resetModules();
 
-      const { ROUTE_CONFIG, DEV_ALLOW_UNVERIFIED_IDENTITY } = await import('../../../src/config/index.js');
+      const { ROUTE_CONFIG, PARSER_CONFIG, DEV_ALLOW_UNVERIFIED_IDENTITY } = await import('../../../src/config/index.js');
 
       expect(ROUTE_CONFIG.enableExperimental).toBe(true);
       expect(ROUTE_CONFIG.enableInternal).toBe(false);
+      expect(PARSER_CONFIG.enableOpenApiNativeParser).toBe(false);
       expect(DEV_ALLOW_UNVERIFIED_IDENTITY).toBe(true);
     });
 

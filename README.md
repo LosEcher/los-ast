@@ -60,11 +60,13 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 
 ## 文档
 
+- 当前执行清单：[ACTIVE_TODO.md](docs/ACTIVE_TODO.md)
 - 架构说明：[architecture.md](docs/architecture.md)
 - 生态调研：[tooling-landscape.md](docs/research/tooling-landscape.md)
 - AI 使用手册：[AI_USAGE_GUIDE.md](docs/ai/AI_USAGE_GUIDE.md)
 - API 使用示例：[API_USAGE.md](API_USAGE.md)
 - API 契约入口：[API_CONTRACT.md](docs/API_CONTRACT.md)
+- Parser Profiles：[artifact-parser-profiles.md](docs/api/artifact-parser-profiles.md)
 - 两周优化计划：[optimization-plan-2weeks.md](docs/optimization-plan-2weeks.md)
 - lsclaw 集成执行方案：[lsclaw-integration-execution-plan.md](docs/lsclaw-integration-execution-plan.md)
 - 四项目协同待办：[four-project-collaboration-todo.md](docs/four-project-collaboration-todo.md)
@@ -81,6 +83,22 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
   - [cantool.md](docs/adapters/cantool.md)
   - [lsclaw.md](docs/adapters/lsclaw.md)
   - [fullstackframe.md](docs/adapters/fullstackframe.md)
+
+## 稳定面与预览面
+
+- 稳定面：
+  - `packages/core`
+  - `packages/cli`
+  - `GET /healthz/live`
+  - `GET /healthz/ready`
+  - `POST /scan`
+  - `POST /discover/symbols`
+- 预览面：
+  - `packages/api/src/routes/experimental/*`
+  - `packages/api/src/routes/vps-agent-web/*`
+  - incident / approval / attribution / recovery / memory proposal 相关能力
+
+当前建议把本项目作为“代码治理与证据输出内核”接入；对于接口治理、字段治理、执行编排，不应按已完全产品化能力理解。
 
 ## 部署入口
 

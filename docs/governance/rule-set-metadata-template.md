@@ -21,3 +21,22 @@ governance:
   impact: high | medium | low
   rationale: <why rule exists>
 ```
+
+## 建议同时提供规则集级说明文件
+
+建议在规则目录下增加一个不参与扫描加载的说明文件，例如：
+
+```text
+rules/projects/lsclaw-governance/RULESET.md
+```
+
+推荐字段：
+
+- `Version`
+- `Status`
+- `Last Updated`
+- `Owner`
+- `Purpose`
+- `Files`
+- `Load Path`
+- `Evolution`

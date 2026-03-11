@@ -40,6 +40,18 @@ interface ScanRequest {
   rules?: string[];        // Rule file glob patterns (default: auto-resolve)
   includeStats?: boolean;  // Include parse cache statistics
   deterministic?: boolean; // Default: true (stable sorting, fixed timestamps)
+  openApiDocuments?: Array<{
+    source?: string;                 // 来源标签
+    file?: string;                   // 逻辑文件名
+    content: string;                 // OpenAPI YAML/JSON 文本
+    format?: 'yaml' | 'json';        // 可选格式提示
+  }>;
+  schemaDocuments?: Array<{
+    source?: string;                 // 来源标签
+    file?: string;                   // 逻辑文件名
+    content: string;                 // SQL/Prisma 文本
+    format?: 'sql' | 'prisma';       // 可选格式提示
+  }>;
   contractArtifacts?: Array<{
     source?: string;                 // 契约来源标签
     ruleId?: string;                 // 规则标识
@@ -77,6 +89,8 @@ interface ScanRequest {
 | `ignore` | string[] | No | Glob patterns to exclude |
 | `includeStats` | boolean | No | Include `parseCache` in response (default: false) |
 | `deterministic` | boolean | No | Produce deterministic output (default: true). When true: sorted keys, fixed epoch timestamp, truncated fingerprints |
+| `openApiDocuments` | object[] | No | Optional native OpenAPI inputs. Each document is parsed into `findingSource='contract'` findings before merge |
+| `schemaDocuments` | object[] | No | Optional native SQL/Prisma inputs. Each document is parsed into `findingSource='schema'` findings before merge |
 | `contractArtifacts` | object[] | No | Optional contract/scheme findings input. Each entry is normalized into `findingSource='contract'` findings |
 
 ### Example Request
@@ -255,12 +269,13 @@ type ErrorCategory =
 
 ## Governance Scope Note (March 2026)
 
-`/scan` 当前已补齐代码层扫描能力，并支持最小化 `contractArtifacts` 直通，默认输出的 `findingSource` 为 `ast`，并可与 `contract` findings 并行返回。  
+`/scan` 当前已补齐代码层扫描能力，并支持最小化 `contractArtifacts/schemaArtifacts` 直通，以及 `openApiDocuments/schemaDocuments` 的原生输入。默认输出的 `findingSource` 为 `ast`，并可与 `contract/schema` findings 并行返回。  
 
 | 维度 | 当前状态 | 说明 |
 |------|----------|------|
 | 前端/后端接口治理 | 代码层可扫描（如调用方式、错误处理、网络层封装） | 可通过规则包持续补齐 |
-| 接口契约治理 | `contract` 域已支持最小接入 | 通过 `contractArtifacts` 字段输入轻量条目，后续将对接 OpenAPI/IDL/Schema 提取器 |
+| 接口契约治理 | `contract` 域已支持最小接入 | 支持 `contractArtifacts` 直通和 `openApiDocuments` 原生输入；更完整的 OpenAPI/IDL/Schema 提取器仍在后续阶段 |
+| 字段治理 | `schema` 域已支持最小接入 | 支持 `schemaArtifacts` 直通和 `schemaDocuments` 原生输入；当前先覆盖主键与敏感字段可空类问题 |
 | 数据库字段治理 | `schema` 域未内置 | 需要 schema/DDL 侧解析与字段变更语义模型 |
 
 `findingSource='contract'|'schema'` 是后续演进预留字段，与现有 `findingSource='ast'` 兼容。

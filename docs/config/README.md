@@ -36,6 +36,30 @@ export LOS_AST_PROJECT_MYPROJECT_ROOT=/path/to/project
 los-ast scan --project myproject
 ```
 
+## API 服务配置基线
+
+`packages/api/.env.example` 提供了 API 服务的最小环境变量示例，建议作为本地启动和灰度部署的基线。
+
+关键项：
+
+- `PORT`
+- `MAX_FILES_PER_SYNC_SCAN`
+- `MAX_RESPONSE_BYTES`
+- `MAX_SCAN_DURATION_MS`
+- `ENFORCE_JWT`
+- `JWT_SECRET` / `LSCLAW_JWT_SECRET`
+- `DEV_ALLOW_UNVERIFIED_IDENTITY`
+- `ENABLE_EXPERIMENTAL_ROUTES`
+- `ENABLE_INTERNAL_ROUTES`
+- `ENABLE_VPS_AGENT_WEB_ROUTES`
+
+说明：
+
+- 稳定面默认只需要 `healthz`、`scan`、`discover/symbols`。
+- `experimental`、`internal`、`vps-agent-web` 均应按显式开关启用。
+- 生产环境不应开启 `DEV_ALLOW_UNVERIFIED_IDENTITY=true`。
+- `internal routes` 需要同时配置 IP 白名单或 token。
+
 ## 规则包组合策略
 
 规则按以下顺序解析（后加载的覆盖先加载的）：

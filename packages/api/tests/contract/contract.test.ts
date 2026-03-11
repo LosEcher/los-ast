@@ -342,6 +342,168 @@ describe('API Contract Tests', () => {
         language: 'schema',
       });
     });
+
+    it('POST /scan should accept openApiDocuments as native contract input', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'openapi-inline',
+            ruleId: 'contract/openapi-operation-id',
+            findingSource: 'contract',
+            severity: 'warning',
+            message: 'OpenAPI operation POST /users is missing operationId',
+            file: '/tmp/openapi.yaml',
+            language: 'contract',
+            range: {
+              start: {
+                line: 1,
+                column: 0,
+                index: 0,
+              },
+              end: {
+                line: 1,
+                column: 1,
+                index: 1,
+              },
+            },
+            excerpt: 'POST /users',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'openapi-contract-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          include: ['packages/core/src/**/*.mjs'],
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        openApiDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'contract',
+        ruleId: 'contract/openapi-operation-id',
+        language: 'contract',
+      });
+    });
+
+    it('POST /scan should accept schemaDocuments as native schema input', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'schema-inline',
+            ruleId: 'schema/prisma-sensitive-nullable',
+            findingSource: 'schema',
+            severity: 'warning',
+            message: 'Sensitive field User.email should not be optional',
+            file: '/tmp/schema.prisma',
+            language: 'schema',
+            range: {
+              start: {
+                line: 1,
+                column: 0,
+                index: 0,
+              },
+              end: {
+                line: 1,
+                column: 1,
+                index: 1,
+              },
+            },
+            excerpt: 'email String?',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'schema-native-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          include: ['packages/core/src/**/*.mjs'],
+          schemaDocuments: [
+            {
+              source: 'schema-inline',
+              file: '/tmp/schema.prisma',
+              content: 'model User { id String @id email String? }',
+              format: 'prisma',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        schemaDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'schema-inline',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'schema',
+        ruleId: 'schema/prisma-sensitive-nullable',
+        language: 'schema',
+      });
+    });
   });
 
   describe('Discover Symbols Endpoint', () => {

@@ -74,6 +74,18 @@ interface ScanRequestBody {
   rulePack?: BuiltInRulePack;
   includeStats?: boolean;
   deterministic?: boolean;
+  openApiDocuments?: Array<{
+    source?: string;
+    file?: string;
+    content: string;
+    format?: 'yaml' | 'json';
+  }>;
+  schemaDocuments?: Array<{
+    source?: string;
+    file?: string;
+    content: string;
+    format?: 'sql' | 'prisma';
+  }>;
   contractArtifacts?: Array<{
     source?: string;
     ruleId?: string;
@@ -146,6 +158,32 @@ export default async function scanRoutes(fastify: FastifyInstance) {
             },
             includeStats: { type: 'boolean' },
             deterministic: { type: 'boolean' },
+            openApiDocuments: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['content'],
+                properties: {
+                  source: { type: 'string' },
+                  file: { type: 'string' },
+                  content: { type: 'string', minLength: 1 },
+                  format: { type: 'string', enum: ['yaml', 'json'] },
+                },
+              },
+            },
+            schemaDocuments: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['content'],
+                properties: {
+                  source: { type: 'string' },
+                  file: { type: 'string' },
+                  content: { type: 'string', minLength: 1 },
+                  format: { type: 'string', enum: ['sql', 'prisma'] },
+                },
+              },
+            },
             contractArtifacts: {
               type: 'array',
               items: {
@@ -277,6 +315,8 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         includeStats,
         deterministic,
         rulePack,
+        openApiDocuments,
+        schemaDocuments,
       } = request.body as ScanRequestBody;
       const { contractArtifacts, schemaArtifacts } = request.body as ScanRequestBody;
       const resolvedRules = rules && rules.length > 0
@@ -301,6 +341,8 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         rules: resolvedRules,
         includeStats: includeStats ?? false,
         deterministic,
+        openApiDocuments,
+        schemaDocuments,
         contractArtifacts,
         schemaArtifacts,
         signal,
