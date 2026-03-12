@@ -13,6 +13,8 @@
     "check:scan-contract-reference": "tsx scripts/generate-scan-contract-reference.ts --check",
     "generate:scan-openapi-components": "tsx scripts/sync-scan-openapi-components.ts",
     "check:scan-openapi-components": "tsx scripts/sync-scan-openapi-components.ts --check",
+    "generate:scan-api-contract-sections": "tsx scripts/sync-scan-api-contract-sections.ts",
+    "check:scan-api-contract-sections": "tsx scripts/sync-scan-api-contract-sections.ts --check",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:smoke": "vitest run tests/smoke",

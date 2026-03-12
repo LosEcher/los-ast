@@ -23,6 +23,7 @@ POST /scan
 > 本文档保留对外契约说明，但不再作为新增字段的首个定义来源。
 > 机器可读参考产物见 [scan-contract-reference.json](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-contract-reference.json)。
 > OpenAPI 生成片段见 [scan-openapi-components.yaml](/Users/echerlos/Downloads/projects/los-ast/docs/api/generated/scan-openapi-components.yaml)。
+> API_CONTRACT 生成片段见 [scan-api-contract-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-sections.md)。
 
 ### Headers
 
@@ -31,93 +32,75 @@ POST /scan
 | `Content-Type` | Yes | Must be `application/json` |
 | `X-Request-ID` | No | Client-provided request identifier (UUID v4 recommended) |
 
+<!-- @generated scan-api-contract:begin -->
 ### Body
 
 ```typescript
 interface ScanRequest {
-  scope?: {
-    tenant_id?: string;    // Multi-tenant isolation
-    project_id?: string;   // Project context
-    actor_id?: string;     // Actor performing the scan
-    mode?: 'local' | 'service';  // Execution mode
-  };
-  project: string;         // Project identifier (non-empty)
-  rootDir?: string;        // Required for AST/code scanning; optional for native-only contract/schema inputs
-  include?: string[];      // Glob patterns for file inclusion
-  ignore?: string[];       // Glob patterns for file exclusion
-  rules?: string[];        // Rule file glob patterns (default: auto-resolve)
-  includeStats?: boolean;  // Include parse cache/failure statistics
-  deterministic?: boolean; // Default: false (opt-in stable sorting and fixed timestamps)
-  openApiDocuments?: Array<{
-    source?: string;                 // 来源标签
-    file?: string;                   // 逻辑文件名
-    content: string;                 // OpenAPI YAML/JSON 文本
-    format?: 'yaml' | 'json';        // 可选格式提示
-  }>;
-  openApiComparisons?: Array<{
-    source?: string;                 // 来源标签
-    file?: string;                   // 逻辑文件名
-    baseline: string;                // 基线 OpenAPI YAML/JSON 文本
-    current: string;                 // 当前 OpenAPI YAML/JSON 文本
-    format?: 'yaml' | 'json';        // 可选格式提示
-  }>;
-  schemaDocuments?: Array<{
-    source?: string;                 // 来源标签
-    file?: string;                   // 逻辑文件名
-    content: string;                 // SQL/Prisma 文本
-    format?: 'sql' | 'prisma';       // 可选格式提示
-  }>;
-  schemaComparisons?: Array<{
-    source?: string;                 // 来源标签
-    file?: string;                   // 逻辑文件名
-    baseline: string;                // 基线 SQL/Prisma 文本
-    current: string;                 // 当前 SQL/Prisma 文本
-    format?: 'sql' | 'prisma';       // 可选格式提示
-  }>;
-  contractArtifacts?: Array<{
-    source?: string;                 // 契约来源标签
-    ruleId?: string;                 // 规则标识
-    severity?: 'info' | 'warning' | 'error';
-    message?: string;                // 规则内容（required if ruleId missing）
-    file?: string;                   // 关联文件路径
-    language?: string;               // 默认 contract
-    line?: number;                   // 未提供 range 时回退
-    column?: number;                 // 未提供 range 时回退
-    startIndex?: number;             // 未提供 range 时回退
-    endIndex?: number;               // 未提供 range 时回退
-    excerpt?: string;                // 可选摘录
-    governanceDomain?: string | string[]; // 可选治理域
-    impactHint?: 'low' | 'medium' | 'high';
-    range?: {                        // 可选精确定位
-      start: { line: number; column: number; index: number };
-      end: { line: number; column: number; index: number };
-    };
-  }>;
+  scope?: Scope;
+  project: string;
+  rootDir?: string;
+  include?: string[];
+  ignore?: string[];
+  rules?: string[];
+  rulePack?: string;
+  includeStats?: boolean;
+  deterministic?: boolean;
+  openApiDocuments?: unknown[];
+  openApiComparisons?: unknown[];
+  schemaDocuments?: unknown[];
+  schemaComparisons?: unknown[];
+  contractArtifacts?: unknown[];
+  schemaArtifacts?: unknown[];
 }
 ```
 
 #### Field Descriptions
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `scope` | object | No | Scope context for multi-tenant isolation |
-| `scope.tenant_id` | string | No | Tenant identifier for isolation boundaries |
-| `scope.project_id` | string | No | Project identifier within tenant |
-| `scope.actor_id` | string | No | Actor ID for audit logging |
-| `scope.mode` | enum | No | `'local'` for development, `'service'` for production |
-| `project` | string | Yes | Project name identifier (1-128 chars) |
-| `rootDir` | string | Conditional | Required for AST/code scanning. Optional when the request only contains native contract/schema inputs |
-| `include` | string[] | No | Glob patterns (fast-glob syntax), default: `['**/*']` |
-| `ignore` | string[] | No | Glob patterns to exclude |
-| `includeStats` | boolean | No | Include parse statistics in response (`parseCache` / `parseFailures` / `scanTelemetry`, default: false). Native-only requests may set this without providing `rootDir` |
-| `deterministic` | boolean | No | Produce deterministic output (default: false). When true: sorted keys, fixed epoch timestamp, truncated fingerprints |
-| `openApiDocuments` | object[] | No | Optional native OpenAPI inputs. Each document is parsed into `findingSource='contract'` findings before merge |
-| `openApiComparisons` | object[] | No | Optional baseline/current OpenAPI comparisons. Each pair is parsed into `findingSource='contract'` compatibility findings before merge |
-| `schemaDocuments` | object[] | No | Optional native SQL/Prisma inputs. Each document is parsed into `findingSource='schema'` findings before merge |
-| `schemaComparisons` | object[] | No | Optional baseline/current schema comparisons. Each pair is parsed into `findingSource='schema'` breaking-risk findings before merge |
-| `contractArtifacts` | object[] | No | Optional contract/scheme findings input. Each entry is normalized into `findingSource='contract'` findings |
+| Field | Required | Notes |
+|-------|----------|-------|
+| `scope` | No | Compatibility context object; production identity should be derived from verified auth, not trusted as the sole source |
+| `project` | Yes | Stable request identifier for the scan target |
+| `rootDir` | Conditional | Required only when the request implies AST/code scanning; native-only inputs may omit it |
+| `include` | No | Optional scan request field |
+| `ignore` | No | Optional scan request field |
+| `rules` | No | Optional scan request field |
+| `rulePack` | No | Optional scan request field |
+| `includeStats` | No | Enables `parseCache`, `parseFailures`, and `scanTelemetry` in the response |
+| `deterministic` | No | Optional stable output mode; current default is `false` |
+| `openApiDocuments` | No | Native governance input channel; may be supplied without `rootDir` |
+| `openApiComparisons` | No | Native governance input channel; may be supplied without `rootDir` |
+| `schemaDocuments` | No | Native governance input channel; may be supplied without `rootDir` |
+| `schemaComparisons` | No | Native governance input channel; may be supplied without `rootDir` |
+| `contractArtifacts` | No | Native governance input channel; may be supplied without `rootDir` |
+| `schemaArtifacts` | No | Native governance input channel; may be supplied without `rootDir` |
 
-When `rootDir` is omitted, the request must provide at least one native input set: `openApiDocuments`, `openApiComparisons`, `schemaDocuments`, `schemaComparisons`, `contractArtifacts`, or `schemaArtifacts`. Native-only requests skip repository scanning and return `filesScanned: 0`; `includeStats=true` only affects emitted stats and does not force AST scanning.
+When `rootDir` is omitted, the request must provide at least one native input set: `openApiDocuments`, `openApiComparisons`, `schemaDocuments`, `schemaComparisons`, `contractArtifacts`, `schemaArtifacts`.
+
+## Response Schema
+
+### Success (200 OK)
+
+```typescript
+interface ScanResponse {
+  data: {
+    filesScanned: number;
+    findings: Finding[];
+    parseCache?: unknown;
+    parseFailures?: unknown;
+    scanTelemetry?: unknown;
+  };
+}
+```
+
+Current `data` properties:
+
+- `filesScanned`
+- `findings`
+- `parseCache`
+- `parseFailures`
+- `scanTelemetry`
+<!-- @generated scan-api-contract:end -->
 
 ### Example Request
 
@@ -134,77 +117,6 @@ When `rootDir` is omitted, the request must provide at least one native input se
   "include": ["src/**/*.ts"],
   "ignore": ["**/*.spec.ts", "node_modules/**"],
   "includeStats": true
-}
-```
-
-## Response Schema
-
-### Success (200 OK)
-
-```typescript
-interface ScanResponse {
-  data: {
-    filesScanned: number;    // Total files processed
-    findings: Finding[];     // Detected rule violations
-    parseCache?: {           // Present if includeStats=true
-      hits: number;          // Cache hit count
-      misses: number;        // Cache miss count
-      entries: number;       // Current cache entries
-      maxEntries: number;    // Maximum cache capacity
-    };
-    parseFailures?: {        // Present if includeStats=true and some files failed to parse
-      count: number;         // Total parse failures
-      sampleLimit: number;   // Maximum number of samples returned
-      truncated: boolean;    // Whether additional samples were omitted
-      byLanguage: Record<string, number>; // Aggregated parse failures by language
-      samples: Array<{
-        file: string;        // Failed file path
-        language: string;    // Parser language label
-        error: string;       // Parser error message
-      }>;
-    };
-    scanTelemetry?: {        // Present if includeStats=true
-      durationMs: number;    // End-to-end scan service duration
-      mode: 'ast' | 'native_only' | 'hybrid';
-      explicitRulePatterns: number;
-      loadedRules: number;
-      estimatedFiles?: number;
-      nativeInputs: {
-        openApiDocuments: number;
-        openApiComparisons: number;
-        schemaDocuments: number;
-        schemaComparisons: number;
-        contractArtifacts: number;
-        schemaArtifacts: number;
-      };
-    };
-  };
-}
-
-interface Finding {
-  tool: 'los-ast';                      // Tool identifier
-  version: number;                      // Schema version (0)
-  timestamp: string;                    // ISO 8601 timestamp
-  project: string;                      // Project name
-  ruleFile: string | null;              // Source rule file path
-  ruleId: string;                       // Rule identifier
-  severity: 'info' | 'warning' | 'error'; // Violation severity
-  message: string;                      // Human-readable message
-  file: string;                         // Absolute file path
-  language: string;                     // Detected language
-  range: {                              // Location in file
-    start: { line: number; column: number; index: number };
-    end: { line: number; column: number; index: number };
-  };
-  excerpt: string;                      // Code snippet (max 240 chars)
-  hasFix: boolean;                      // Auto-fix available
-  proposedReplacement: string | null;   // Suggested fix
-  fingerprint: string;                  // SHA-256 hash for deduplication
-  findingSource?: 'ast' | 'contract' | 'schema'; // Result source tag
-  governanceDomain?: string[] | null;   // 可选治理域标签；未命中治理元信息时可能为 null
-  impactHint?: 'low' | 'medium' | 'high' | null; // 可选风险提示；未命中治理元信息时可能为 null
-  diff?: string | null;                 // Applied fix diff when present
-  applied?: boolean;                    // Whether a fix was written
 }
 ```
 

@@ -30,7 +30,8 @@
 - [x] `/scan` 已完成第二阶段防漂移校验：OpenAPI 与 API_CONTRACT 的关键字段集合已有契约测试保护。
 - [x] `/scan` 已完成第三阶段机器参考产物：新增可生成/校验的 `scan-contract-reference.json`，给后续自动生成文档打底。
 - [x] `/scan` 已完成第四阶段 OpenAPI 片段半自动同步：新增 `scan-openapi-components.yaml` 生成片段与同步脚本，主 `openapi.yaml` 已由生成块嵌入。
-- [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；当前已进入“代码真源 + 参考产物 + OpenAPI 片段同步”的半自动阶段。
+- [x] `/scan` 已完成第五阶段 API_CONTRACT 半自动同步：请求/响应字段总览已改为生成片段，并由校验脚本守护。
+- [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；当前已进入“代码真源 + 参考产物 + OpenAPI/API_CONTRACT 片段同步”的半自动阶段。
 - [ ] `export-artifacts.mjs` 与 `evidence/service.ts` 仍属于大文件热点，本轮不做结构拆分，只保留治理项。
 
 1. route_binds 能力边界收口
@@ -113,8 +114,13 @@
   - 新增 `docs/api/generated/scan-openapi-components.yaml`。
   - `docs/api/openapi.yaml` 中 `ScanRequest / ScanResponse` 已切到 `@generated` block，同步来源为 `scan-contract`。
   - 契约测试已校验主 OpenAPI 文档实际嵌入的生成片段与生成文件一致。
+- 已完成 `/scan` 第五阶段 API_CONTRACT 半自动同步：
+  - 新增 `packages/api/scripts/sync-scan-api-contract-sections.ts`。
+  - 新增 `packages/api/docs/api/generated/scan-api-contract-sections.md`。
+  - `packages/api/docs/api/API_CONTRACT.md` 中请求/响应字段总览已切到 `@generated` block。
+  - 已补 `generate:scan-api-contract-sections` / `check:scan-api-contract-sections` 脚本与契约测试守护。
 - 下一步新增：
-  - 评估是否将 `API_CONTRACT.md` 的请求/响应字段表也改成由参考产物直接产出，进一步减少最后一份人工说明的漂移面。
+  - 评估是否把 Example Request / Example Success Response 也转成生成或快照校验，继续减少手写示例漂移。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划

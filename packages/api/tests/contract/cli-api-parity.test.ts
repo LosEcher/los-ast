@@ -277,6 +277,10 @@ describe('CLI/API Parity', () => {
         path.join(testRootDir, 'packages/api/docs/api/API_CONTRACT.md'),
         'utf8'
       );
+      const generatedApiContractSections = await fs.readFile(
+        path.join(testRootDir, 'packages/api/docs/api/generated/scan-api-contract-sections.md'),
+        'utf8'
+      );
       const openApiDoc = await fs.readFile(
         path.join(testRootDir, 'docs/api/openapi.yaml'),
         'utf8'
@@ -349,14 +353,16 @@ describe('CLI/API Parity', () => {
       expect(sharedTypes).toMatch(/applied\?: boolean;/);
 
       expect(apiContract).toMatch(/rootDir\?: string;/);
-      expect(apiContract).toMatch(/parseFailures\?: \{/);
-      expect(apiContract).toMatch(/scanTelemetry\?: \{/);
-      expect(apiContract).toMatch(/deterministic\?: boolean; \/\/ Default: false/);
-      expect(apiContract).toMatch(/findingSource\?: 'ast' \| 'contract' \| 'schema';|findingSource\?: FindingSource;/);
-      expect(apiContract).toMatch(/governanceDomain\?: string\[\] \| null;/);
-      expect(apiContract).toMatch(/impactHint\?: 'low' \| 'medium' \| 'high' \| null;/);
-      expect(apiContract).toMatch(/diff\?: string \| null;/);
-      expect(apiContract).toMatch(/applied\?: boolean;/);
+      expect(apiContract).toMatch(/Current `data` properties:/);
+      expect(apiContract).toMatch(/- `parseFailures`/);
+      expect(apiContract).toMatch(/- `scanTelemetry`/);
+      expect(apiContract).toMatch(/current default is `false`/);
+      expect(apiContract).toMatch(/findingSource/);
+      expect(generatedApiContractSections).toMatch(/@generated scan-api-contract:begin/);
+      expect(generatedApiContractSections).toMatch(/interface ScanRequest/);
+      expect(generatedApiContractSections).toMatch(/Current `data` properties:/);
+      expect(apiContract).toContain('<!-- @generated scan-api-contract:begin -->');
+      expect(apiContract).toContain('<!-- @generated scan-api-contract:end -->');
 
       expect(scanContractReference.request.required).toEqual(['project']);
       expect(scanContractReference.request.baseProperties).toEqual([...SCAN_REQUEST_BASE_PROPERTY_KEYS]);
