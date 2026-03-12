@@ -9,6 +9,8 @@
     "start": "node dist/server.js",
     "test": "vitest",
     "benchmark:scan": "tsx scripts/scan-benchmark.ts",
+    "generate:scan-contract-reference": "tsx scripts/generate-scan-contract-reference.ts",
+    "check:scan-contract-reference": "tsx scripts/generate-scan-contract-reference.ts --check",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:smoke": "vitest run tests/smoke",

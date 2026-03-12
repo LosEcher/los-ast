@@ -21,6 +21,8 @@ import cancellationPlugin from '../../src/plugins/cancellation';
 import healthCheckPlugin from '../../src/plugins/health-check';
 import { scanRoutes } from '../../src/routes/core';
 import {
+  SCAN_REQUEST_BASE_PROPERTY_KEYS,
+  SCAN_NATIVE_INPUT_KEYS,
   SCAN_REQUEST_PROPERTY_KEYS,
   scanResponseDataSchema,
 } from '../../src/routes/core/scan-contract.js';
@@ -291,6 +293,26 @@ describe('CLI/API Parity', () => {
         path.join(testRootDir, 'docs/api/ARTIFACT_PARSER_CAPABILITIES.md'),
         'utf8'
       );
+      const scanContractReference = JSON.parse(await fs.readFile(
+        path.join(testRootDir, 'packages/api/docs/api/generated/scan-contract-reference.json'),
+        'utf8'
+      )) as {
+        request: {
+          required: string[];
+          baseProperties: string[];
+          nativeInputProperties: string[];
+          allProperties: string[];
+          notes: {
+            scopeOptional: boolean;
+            rootDirConditional: boolean;
+            deterministicDefault: boolean;
+          };
+        };
+        response: {
+          rootProperties: string[];
+          dataProperties: string[];
+        };
+      };
       const generatedOutputSchema = buildOutputSchema();
       const openApi = YAML.parse(openApiDoc) as {
         components?: {
@@ -331,6 +353,18 @@ describe('CLI/API Parity', () => {
       expect(apiContract).toMatch(/impactHint\?: 'low' \| 'medium' \| 'high' \| null;/);
       expect(apiContract).toMatch(/diff\?: string \| null;/);
       expect(apiContract).toMatch(/applied\?: boolean;/);
+
+      expect(scanContractReference.request.required).toEqual(['project']);
+      expect(scanContractReference.request.baseProperties).toEqual([...SCAN_REQUEST_BASE_PROPERTY_KEYS]);
+      expect(scanContractReference.request.nativeInputProperties).toEqual([...SCAN_NATIVE_INPUT_KEYS]);
+      expect(scanContractReference.request.allProperties).toEqual([...SCAN_REQUEST_PROPERTY_KEYS]);
+      expect(scanContractReference.request.notes).toEqual({
+        scopeOptional: true,
+        rootDirConditional: true,
+        deterministicDefault: false,
+      });
+      expect(scanContractReference.response.rootProperties).toEqual(['data']);
+      expect(scanContractReference.response.dataProperties).toEqual(Object.keys(scanResponseDataSchema.properties));
 
       expect(openApiScanRequest).toBeDefined();
       expect(openApiScanRequest?.required).toEqual(['project']);

@@ -27,6 +27,8 @@
 - [x] 修复 `memory proposal -> activate` 链路中“规范化入库后又用原始 content 回写”的一致性问题，避免 `lesson_id/recipe_id` 缺失时写入 `undefined` 键。
 - [x] 为 `packages/api` 补齐显式 workspace 依赖声明，避免当前依赖根仓环境兜底。
 - [x] `/scan` 已完成第一阶段定义收口：代码内请求体类型与 Fastify schema 已汇总到统一 `scan-contract` 模块，文档改为引用代码真源。
+- [x] `/scan` 已完成第二阶段防漂移校验：OpenAPI 与 API_CONTRACT 的关键字段集合已有契约测试保护。
+- [x] `/scan` 已完成第三阶段机器参考产物：新增可生成/校验的 `scan-contract-reference.json`，给后续自动生成文档打底。
 - [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；本轮先完成代码内双份定义收口。
 - [ ] `export-artifacts.mjs` 与 `evidence/service.ts` 仍属于大文件热点，本轮不做结构拆分，只保留治理项。
 
@@ -98,8 +100,15 @@
   - `scan.ts` 不再维护独立 `ScanRequestBody` 副本。
   - `scan-schema.ts` 改为复用统一 `scan-contract` 结构定义。
   - API 文档已补“代码真源”说明，避免文档继续成为首个定义来源。
+- 已完成 `/scan` 第二阶段防漂移基线：
+  - `docs/api/openapi.yaml` 已修正 `scope/rootDir/deterministic` 的实际契约漂移。
+  - `packages/api/tests/contract/cli-api-parity.test.ts` 已直接校验 OpenAPI 与 `scan-contract` 的关键字段集合一致。
+- 已完成 `/scan` 第三阶段机器参考产物：
+  - 新增 `packages/api/scripts/generate-scan-contract-reference.ts`。
+  - 新增 `packages/api/docs/api/generated/scan-contract-reference.json`。
+  - 已补 `generate:scan-contract-reference` / `check:scan-contract-reference` 脚本。
 - 下一步新增：
-  - 收口 `packages/shared/src/types/api.ts`、`docs/api/openapi.yaml`、`packages/api/docs/api/API_CONTRACT.md` 之间的重复字段定义，推进到真正单一生成源。
+  - 评估是否将 `docs/api/openapi.yaml` 中的 `ScanRequest/ScanResponse` 改成由参考产物或生成脚本直接产出，而不是继续人工维护。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划

@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "sourceOfTruth": [
+    "packages/api/src/routes/core/scan-contract.ts",
+    "packages/api/src/routes/core/scan-schema.ts",
+    "packages/shared/src/types/api.ts"
+  ],
+  "request": {
+    "required": [
+      "project"
+    ],
+    "baseProperties": [
+      "scope",
+      "project",
+      "rootDir",
+      "include",
+      "ignore",
+      "rules",
+      "rulePack",
+      "includeStats",
+      "deterministic"
+    ],
+    "nativeInputProperties": [
+      "openApiDocuments",
+      "openApiComparisons",
+      "schemaDocuments",
+      "schemaComparisons",
+      "contractArtifacts",
+      "schemaArtifacts"
+    ],
+    "allProperties": [
+      "scope",
+      "project",
+      "rootDir",
+      "include",
+      "ignore",
+      "rules",
+      "rulePack",
+      "includeStats",
+      "deterministic",
+      "openApiDocuments",
+      "openApiComparisons",
+      "schemaDocuments",
+      "schemaComparisons",
+      "contractArtifacts",
+      "schemaArtifacts"
+    ],
+    "notes": {
+      "scopeOptional": true,
+      "rootDirConditional": true,
+      "deterministicDefault": false
+    }
+  },
+  "response": {
+    "rootProperties": [
+      "data"
+    ],
+    "dataProperties": [
+      "filesScanned",
+      "findings",
+      "parseCache",
+      "parseFailures",
+      "scanTelemetry"
+    ]
+  }
+}
