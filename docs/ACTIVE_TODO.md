@@ -34,6 +34,7 @@
 - [x] `/scan` 已完成第六阶段 API_CONTRACT 示例半自动同步：Example Request / Example Success Response 已切到生成片段，并补齐 finding 治理字段示例。
 - [x] `/scan` 已完成第七阶段运行约束收口：ErrorCategory、错误码表、限制说明已切到生成片段，并修正 OpenAPI 中的 `401/408/413` 漂移。
 - [x] `/scan` 已完成第八阶段治理范围与 CLI/API parity 收口：Governance Scope Note 和 CLI/API Parity 已切到生成片段并有契约测试守护。
+- [x] `/scan` 已完成第九阶段稳定性说明收口：Version Stability Guarantee、Deterministic Output 与 Testing 已切到生成片段并有契约测试守护。
 - [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；当前已进入“代码真源 + 参考产物 + OpenAPI/API_CONTRACT 片段同步”的半自动阶段。
 - [ ] `export-artifacts.mjs` 与 `evidence/service.ts` 仍属于大文件热点，本轮不做结构拆分，只保留治理项。
 
@@ -139,8 +140,14 @@
   - 新增 `packages/api/docs/api/generated/scan-api-contract-governance-sections.md`。
   - `packages/api/docs/api/API_CONTRACT.md` 中 Governance Scope Note 与 CLI/API Parity 已切到 `@generated` block。
   - 已补 `generate:scan-api-contract-governance-sections` / `check:scan-api-contract-governance-sections` 脚本与契约测试守护。
+- 已完成 `/scan` 第九阶段稳定性说明收口：
+  - 扩展 `packages/api/src/routes/core/scan-doc-contract.ts`，集中 Version Stability Guarantee、Deterministic Output 与 Testing 说明。
+  - 新增 `packages/api/scripts/sync-scan-api-contract-stability-sections.ts`。
+  - 新增 `packages/api/docs/api/generated/scan-api-contract-stability-sections.md`。
+  - `packages/api/docs/api/API_CONTRACT.md` 中 Version Stability Guarantee、Deterministic Output 与 Testing 已切到 `@generated` block。
+  - 已补 `generate:scan-api-contract-stability-sections` / `check:scan-api-contract-stability-sections` 脚本与契约测试守护。
 - 下一步新增：
-  - 评估是否把 Version Stability Guarantee、Deterministic Output 与 Testing 说明也转成参考产物或快照校验，继续减少手写说明漂移。
+  - 评估是否把 `/scan` 在 OpenAPI 的 examples/description 也进一步收口，或转向处理 `export-artifacts.mjs` 与 `evidence/service.ts` 这类大文件热点。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划

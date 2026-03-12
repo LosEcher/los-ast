@@ -206,3 +206,52 @@ export const SCAN_CLI_API_PARITY_REFERENCE = {
     },
   ],
 } as const;
+
+export const SCAN_VERSION_STABILITY_REFERENCE = {
+  title: 'This v1 contract guarantees:',
+  guarantees: [
+    'Field Stability: required response fields will not be removed',
+    'Type Stability: field types will not change in incompatible ways',
+    'Error Stability: error codes remain constant',
+    'Backward Compatibility: new optional fields may be added',
+  ],
+  deprecationPolicy:
+    'Fields may be deprecated with 6-month notice before removal in v2.',
+} as const;
+
+export const SCAN_DETERMINISTIC_REFERENCE = {
+  intro: 'When `deterministic: true`, the API produces byte-for-byte reproducible output:',
+  rows: [
+    {
+      aspect: 'JSON Keys',
+      behavior: 'Sorted alphabetically (deep sort)',
+    },
+    {
+      aspect: 'Findings Order',
+      behavior: 'Sorted by file path, then line, then column',
+    },
+    {
+      aspect: 'Timestamp',
+      behavior: 'Fixed to Unix epoch (`1970-01-01T00:00:00.000Z`)',
+    },
+    {
+      aspect: 'Fingerprint',
+      behavior: 'Truncated to 32 characters',
+    },
+    {
+      aspect: 'Output',
+      behavior: 'Identical across multiple runs with same input',
+    },
+  ],
+  nondeterministicNote:
+    'When `deterministic: false`, real-time timestamps and full 64-character fingerprints are used.',
+} as const;
+
+export const SCAN_TESTING_REFERENCE = {
+  intro: 'Contract tests verify CLI/API parity:',
+  snippet: [
+    '// tests/contract/cli-api-parity.test.ts',
+    '// Verifies identical output structure between CLI and API',
+  ],
+  command: 'npm run test:api:contract',
+} as const;

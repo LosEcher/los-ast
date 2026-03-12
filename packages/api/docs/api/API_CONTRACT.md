@@ -27,6 +27,7 @@ POST /scan
 > API_CONTRACT 示例片段见 [scan-api-contract-examples.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-examples.md)。
 > API_CONTRACT 运行约束片段见 [scan-api-contract-operational-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-operational-sections.md)。
 > API_CONTRACT 治理/CLI 说明片段见 [scan-api-contract-governance-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-governance-sections.md)。
+> API_CONTRACT 稳定性/确定性/测试片段见 [scan-api-contract-stability-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-stability-sections.md)。
 
 ### Headers
 
@@ -339,14 +340,15 @@ CLI options map to API fields:
 | N/A | `scope` | CLI runs in local mode and does not wrap findings in a `data` envelope |
 <!-- @generated scan-api-contract-governance:end -->
 
+<!-- @generated scan-api-contract-stability:begin -->
 ## Version Stability Guarantee
 
 This v1 contract guarantees:
 
-1. **Field Stability**: Required response fields will not be removed
-2. **Type Stability**: Field types will not change in incompatible ways
-3. **Error Stability**: Error codes remain constant
-4. **Backward Compatibility**: New optional fields may be added
+1. **Field Stability**: required response fields will not be removed
+2. **Type Stability**: field types will not change in incompatible ways
+3. **Error Stability**: error codes remain constant
+4. **Backward Compatibility**: new optional fields may be added
 
 Deprecation policy: Fields may be deprecated with 6-month notice before removal in v2.
 
@@ -377,3 +379,4 @@ Run contract tests:
 ```bash
 npm run test:api:contract
 ```
+<!-- @generated scan-api-contract-stability:end -->
