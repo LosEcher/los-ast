@@ -39,7 +39,8 @@
 - [~] `export-artifacts.mjs` 与 `evidence/service.ts` 大文件热点已开始拆分：
   - `evidence/service.ts` 已抽出 `builders.ts`，把 bundle/rewrite/explain 的纯构造逻辑移出 service orchestration。
   - `cli/index.mjs` 与 `export-artifacts.mjs` 已抽出共享 `workspace-options.mjs`，先收口重复的 workspace/rules 解析。
-  - 下一步优先考虑继续拆 `export-artifacts.mjs` 的 `route-guard-analysis` 或 `source-structure-extractor`。
+  - `export-artifacts.mjs` 已继续抽出 `route-guard-analysis.mjs`，把 control-flow guard / route activation 的纯分析逻辑从 CLI shell 中分离。
+  - 下一步优先考虑继续拆 `export-artifacts.mjs` 的 `source-structure-extractor` 或 `route-topology-and-runtime`。
 
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
