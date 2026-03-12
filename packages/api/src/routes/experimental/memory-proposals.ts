@@ -25,6 +25,73 @@ import type {
   ProposalType,
 } from '@los-ast/shared/types';
 
+const scopeSchema = {
+  type: 'object',
+  properties: {
+    tenant_id: { type: 'string' },
+    project_id: { type: 'string' },
+    actor_id: { type: 'string' },
+    mode: { type: 'string', enum: ['local', 'service'] },
+  },
+} as const;
+
+const proposalIdParamsSchema = {
+  type: 'object',
+  required: ['id'],
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const createProposalBodySchema = {
+  type: 'object',
+  required: ['proposal_type', 'content', 'source'],
+  additionalProperties: false,
+  properties: {
+    scope: scopeSchema,
+    proposal_type: { type: 'string', enum: ['corrected_fact', 'rejected_hypothesis', 'incident_lesson', 'recovery_recipe'] },
+    content: { type: 'object' },
+    source: {
+      type: 'object',
+      required: ['incident_id', 'actor_id'],
+      additionalProperties: false,
+      properties: {
+        incident_id: { type: 'string', minLength: 1 },
+        evidence_bundle_id: { type: 'string', minLength: 1 },
+        actor_id: { type: 'string', minLength: 1 },
+      },
+    },
+    idempotency_key: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const validateProposalBodySchema = {
+  type: 'object',
+  required: ['approve'],
+  additionalProperties: false,
+  properties: {
+    scope: scopeSchema,
+    validator_id: { type: 'string', minLength: 1 },
+    approve: { type: 'boolean' },
+    rejection_reason: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const recipeFindBodySchema = {
+  type: 'object',
+  required: ['keywords'],
+  additionalProperties: false,
+  properties: {
+    scope: scopeSchema,
+    keywords: {
+      type: 'array',
+      minItems: 1,
+      items: { type: 'string', minLength: 1 },
+    },
+  },
+} as const;
+
 // 查询参数验证函数
 function parseProposalType(value: string | undefined): ProposalType | undefined {
   if (!value) return undefined;
@@ -43,7 +110,11 @@ function parseQueryInt(value: string | undefined, defaultValue?: number): number
  */
 export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   // POST /experimental/memory-proposals/proposals - 创建提案
-  fastify.post('/proposals', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/proposals', {
+    schema: {
+      body: createProposalBodySchema,
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as CreateProposalRequest;
 
     // 强制验证 request.scope，确保数据归属正确
@@ -69,7 +140,11 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/memory-proposals/proposals/:id - 获取提案
-  fastify.get('/proposals/:id', async (request: FastifyRequest) => {
+  fastify.get('/proposals/:id', {
+    schema: {
+      params: proposalIdParamsSchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     // 强制使用 request.scope 进行租户边界校验
@@ -92,7 +167,12 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/memory-proposals/proposals/:id/validate - 验证提案
-  fastify.post('/proposals/:id/validate', async (request: FastifyRequest) => {
+  fastify.post('/proposals/:id/validate', {
+    schema: {
+      params: proposalIdParamsSchema,
+      body: validateProposalBodySchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
     const body = request.body as ValidateProposalRequest;
 
@@ -111,7 +191,15 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
       throw new NotFoundError('Proposal', id);
     }
 
-    const proposal = await validateProposal(id, body.validator_id, body.approve, body.rejection_reason);
+    const validatorId = scope.actor_id || body.validator_id;
+    if (!validatorId) {
+      throw new ValidationError(
+        'MISSING_ACTOR_ID',
+        'Proposal validation requires a verified actor_id'
+      );
+    }
+
+    const proposal = await validateProposal(id, validatorId, body.approve, body.rejection_reason);
 
     return { proposal };
   });
@@ -145,7 +233,11 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/memory-proposals/recipes/:id - 获取恢复方案
-  fastify.get('/recipes/:id', async (request: FastifyRequest) => {
+  fastify.get('/recipes/:id', {
+    schema: {
+      params: proposalIdParamsSchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     // 强制使用 request.scope 进行租户边界校验
@@ -168,7 +260,11 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/memory-proposals/recipes/find - 查找匹配的恢复方案
-  fastify.post('/recipes/find', async (request: FastifyRequest) => {
+  fastify.post('/recipes/find', {
+    schema: {
+      body: recipeFindBodySchema,
+    },
+  }, async (request: FastifyRequest) => {
     const body = request.body as {
       keywords: string[];
     };
@@ -187,7 +283,11 @@ export default async function memoryProposalsRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/memory-proposals/lessons/:id - 获取事件教训
-  fastify.get('/lessons/:id', async (request: FastifyRequest) => {
+  fastify.get('/lessons/:id', {
+    schema: {
+      params: proposalIdParamsSchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     // 强制使用 request.scope 进行租户边界校验

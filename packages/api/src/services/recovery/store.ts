@@ -9,20 +9,27 @@ import type {
   ExecuteRecoveryActionRequest,
   ExecutionResult,
   RecoveryPolicy,
+  RecoveryStats,
+  RecoveryLevel,
+  RecoveryActionType,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
+import { recoveryRepository } from '../../persistence/repositories/recovery-repository.js';
 import { getAllIncidents } from '../incident/store.js';
 
-// 内存存储
-const actionStore: Map<string, RecoveryAction> = new Map();
-const policyStore: Map<string, RecoveryPolicy> = new Map();
-const cooldownStore: Map<string, number> = new Map();
+const actionStore = recoveryRepository.actions;
+const policyStore = recoveryRepository.policies;
+const cooldownStore = recoveryRepository.cooldowns;
 
 /**
  * 创建恢复动作
  */
 export async function createRecoveryAction(
-  request: ExecuteRecoveryActionRequest
+  request: ExecuteRecoveryActionRequest,
+  scope: {
+    tenant_id: string;
+    project_id: string;
+  }
 ): Promise<RecoveryAction> {
   const now = new Date().toISOString();
   const actionId = generateId('act');
@@ -35,6 +42,7 @@ export async function createRecoveryAction(
     action_id: actionId,
     incident_id: request.incident_id,
     hypothesis_id: request.hypothesis_id,
+    scope,
     level: request.level,
     type: request.type,
     status: requiresApproval ? 'pending_approval' : 'approved',
@@ -116,6 +124,23 @@ function estimateDowntime(type: string): number {
  */
 export async function getRecoveryAction(actionId: string): Promise<RecoveryAction | null> {
   return actionStore.get(actionId) || null;
+}
+
+export async function getRecoveryActionWithScope(
+  actionId: string,
+  tenant_id: string,
+  project_id: string
+): Promise<RecoveryAction | null> {
+  const action = actionStore.get(actionId);
+  if (!action) {
+    return null;
+  }
+
+  if (action.scope.tenant_id !== tenant_id || action.scope.project_id !== project_id) {
+    return null;
+  }
+
+  return action;
 }
 
 /**
@@ -253,8 +278,19 @@ export async function queryRecoveryActions(params: {
   level?: string;
   limit?: number;
   offset?: number;
+  scope?: {
+    tenant_id?: string;
+    project_id?: string;
+  };
 }): Promise<{ items: RecoveryAction[]; total: number }> {
-  let items = Array.from(actionStore.values());
+  let items = actionStore.values();
+
+  if (params.scope?.tenant_id && params.scope?.project_id) {
+    items = items.filter((action) =>
+      action.scope.tenant_id === params.scope?.tenant_id &&
+      action.scope.project_id === params.scope?.project_id
+    );
+  }
 
   if (params.incident_id) {
     items = items.filter((a) => a.incident_id === params.incident_id);
@@ -308,7 +344,7 @@ export async function getRecoveryPolicy(policyId: string): Promise<RecoveryPolic
  * 获取所有恢复策略
  */
 export async function listRecoveryPolicies(): Promise<RecoveryPolicy[]> {
-  return Array.from(policyStore.values());
+  return policyStore.values();
 }
 
 /**
@@ -317,12 +353,7 @@ export async function listRecoveryPolicies(): Promise<RecoveryPolicy[]> {
 export function getRecoveryStats(scope?: {
   tenant_id?: string;
   project_id?: string;
-}): {
-  totalActions: number;
-  byLevel: Record<string, number>;
-  byStatus: Record<string, number>;
-  byType: Record<string, number>;
-} {
+}): RecoveryStats {
   const scopedIncidentIds = new Set(
     getAllIncidents()
       .filter((incident) => {
@@ -336,25 +367,55 @@ export function getRecoveryStats(scope?: {
       })
       .map((incident) => incident.incident_id)
   );
-  const actions = Array.from(actionStore.values()).filter((action) =>
+  const actions = actionStore.values().filter((action) =>
     scopedIncidentIds.has(action.incident_id)
   );
 
-  const byLevel: Record<string, number> = {};
-  const byStatus: Record<string, number> = {};
-  const byType: Record<string, number> = {};
+  const byLevel: Record<RecoveryLevel, number> = {
+    L1_harmless: 0,
+    L2_controlled: 0,
+    L3_code_level: 0,
+  };
+  const byStatus: Record<RecoveryActionStatus, number> = {
+    pending_approval: 0,
+    approved: 0,
+    executing: 0,
+    succeeded: 0,
+    failed: 0,
+    rolled_back: 0,
+  };
+  const byType: Record<RecoveryActionType, number> = {
+    restart: 0,
+    rollback: 0,
+    circuit_breaker: 0,
+    feature_toggle: 0,
+    code_patch: 0,
+  };
+  let completedCount = 0;
+  let succeededCount = 0;
+  let totalExecutionTimeMs = 0;
 
   for (const action of actions) {
-    byLevel[action.level] = (byLevel[action.level] || 0) + 1;
-    byStatus[action.status] = (byStatus[action.status] || 0) + 1;
-    byType[action.type] = (byType[action.type] || 0) + 1;
+    byLevel[action.level] += 1;
+    byStatus[action.status] += 1;
+    byType[action.type] += 1;
+
+    if (action.execution.result) {
+      completedCount += 1;
+      totalExecutionTimeMs += action.execution.result.duration_ms;
+      if (action.status === 'succeeded') {
+        succeededCount += 1;
+      }
+    }
   }
 
   return {
-    totalActions: actions.length,
-    byLevel,
-    byStatus,
-    byType,
+    total_actions: actions.length,
+    by_level: byLevel,
+    by_status: byStatus,
+    by_type: byType,
+    success_rate: completedCount > 0 ? succeededCount / completedCount : 0,
+    avg_execution_time_ms: completedCount > 0 ? totalExecutionTimeMs / completedCount : 0,
   };
 }
 

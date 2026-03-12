@@ -24,11 +24,121 @@ import type {
   VerifiedScope,
 } from '@los-ast/shared/types';
 
+const requestScopeSchema = {
+  type: 'object',
+  properties: {
+    tenant_id: { type: 'string' },
+    project_id: { type: 'string' },
+    actor_id: { type: 'string' },
+    trace_id: { type: 'string' },
+    mode: { type: 'string', enum: ['local', 'service'] },
+  },
+} as const;
+
+const evidenceIdParamsSchema = {
+  type: 'object',
+  required: ['id'],
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const statsProjectParamsSchema = {
+  type: 'object',
+  required: ['project'],
+  additionalProperties: false,
+  properties: {
+    project: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const generateEvidenceBodySchema = {
+  type: 'object',
+  required: ['project', 'root_dir', 'findings'],
+  additionalProperties: false,
+  properties: {
+    scope: requestScopeSchema,
+    project: { type: 'string', minLength: 1 },
+    root_dir: { type: 'string', minLength: 1 },
+    findings: { type: 'array', items: { type: 'string', minLength: 1 } },
+    include: { type: 'array', items: { type: 'string', minLength: 1 } },
+    ignore: { type: 'array', items: { type: 'string', minLength: 1 } },
+    rules: { type: 'array', items: { type: 'string', minLength: 1 } },
+    deterministic: { type: 'boolean' },
+    include_context: { type: 'boolean' },
+    include_ast: { type: 'boolean' },
+    include_symbols: { type: 'boolean' },
+  },
+} as const;
+
+const validatePatchBodySchema = {
+  type: 'object',
+  required: ['project', 'original_file', 'proposed_patch'],
+  additionalProperties: false,
+  properties: {
+    scope: requestScopeSchema,
+    project: { type: 'string', minLength: 1 },
+    original_file: { type: 'string', minLength: 1 },
+    proposed_patch: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const rewriteBodySchema = {
+  type: 'object',
+  required: ['project', 'findings', 'options'],
+  additionalProperties: false,
+  properties: {
+    scope: requestScopeSchema,
+    project: { type: 'string', minLength: 1 },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['finding_id', 'approved'],
+        additionalProperties: false,
+        properties: {
+          finding_id: { type: 'string', minLength: 1 },
+          approved: { type: 'boolean' },
+          suggested_fix: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+    options: {
+      type: 'object',
+      required: ['dry_run', 'max_candidates', 'safety_level'],
+      additionalProperties: false,
+      properties: {
+        dry_run: { type: 'boolean' },
+        max_candidates: { type: 'integer', minimum: 1 },
+        safety_level: { type: 'string', enum: ['strict', 'moderate', 'lenient'] },
+      },
+    },
+  },
+} as const;
+
+const explainBodySchema = {
+  type: 'object',
+  required: ['file_path', 'line', 'column'],
+  additionalProperties: false,
+  properties: {
+    scope: requestScopeSchema,
+    file_path: { type: 'string', minLength: 1 },
+    line: { type: 'integer', minimum: 1 },
+    column: { type: 'integer', minimum: 1 },
+    context_lines: { type: 'integer', minimum: 0 },
+  },
+} as const;
+
 /**
  * 注册 Evidence 路由 (实验性)
  */
 export default async function evidenceRoutes(fastify: FastifyInstance) {
-  fastify.post('/generate', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/generate', {
+    schema: {
+      body: generateEvidenceBodySchema,
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as GenerateEvidenceRequest;
     const scope = request.scope as VerifiedScope;
     const bundle = await generateEvidence(body, scope);
@@ -36,7 +146,11 @@ export default async function evidenceRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/evidence/:id - 获取证据包
-  fastify.get('/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/:id', {
+    schema: {
+      params: evidenceIdParamsSchema,
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const scope = request.scope as VerifiedScope;
     const bundle = await getEvidenceBundle(id, scope);
@@ -45,22 +159,38 @@ export default async function evidenceRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/evidence/validate-patch - 验证 Patch 安全性
-  fastify.post('/validate-patch', async (request: FastifyRequest) =>
+  fastify.post('/validate-patch', {
+    schema: {
+      body: validatePatchBodySchema,
+    },
+  }, async (request: FastifyRequest) =>
     ok(await validatePatchSafety(request.body as ValidatePatchSafetyRequest))
   );
 
   // POST /experimental/evidence/rewrite - 生成改写候选
-  fastify.post('/rewrite', async (request: FastifyRequest) =>
+  fastify.post('/rewrite', {
+    schema: {
+      body: rewriteBodySchema,
+    },
+  }, async (request: FastifyRequest) =>
     ok(await generateRewrite(request.body as GenerateRewriteRequest))
   );
 
   // POST /experimental/evidence/explain - 解释代码
-  fastify.post('/explain', async (request: FastifyRequest) =>
+  fastify.post('/explain', {
+    schema: {
+      body: explainBodySchema,
+    },
+  }, async (request: FastifyRequest) =>
     ok(await explainCode(request.body as ExplainCodeRequest))
   );
 
   // GET /experimental/evidence/stats/:project - 获取代码统计
-  fastify.get('/stats/:project', async (request: FastifyRequest) =>
+  fastify.get('/stats/:project', {
+    schema: {
+      params: statsProjectParamsSchema,
+    },
+  }, async (request: FastifyRequest) =>
     ok(await getCodeStats((request.params as { project: string }).project))
   );
 }

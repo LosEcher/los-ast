@@ -47,9 +47,9 @@ export interface CreateApprovalRequest {
   description: string;
   risk_level: 'low' | 'medium' | 'high' | 'critical';
   timeout_seconds: number;
-  scope: {
-    tenant_id: string;
-    project_id: string;
+  scope?: {
+    tenant_id?: string;
+    project_id?: string;
   };
   metadata?: Record<string, unknown>;
 }
@@ -59,7 +59,7 @@ export interface CreateApprovalRequest {
  */
 export interface ProcessApprovalRequest {
   action: 'approve' | 'reject';
-  actor_id: string;
+  actor_id?: string;
   comment?: string;
 }
 

@@ -147,7 +147,7 @@ export interface CreateProposalRequest {
   proposal_type: ProposalType;
   content: unknown;
   source: ProposalSource;
-  scope: Scope;
+  scope?: Scope;
   idempotency_key?: string;
 }
 
@@ -155,7 +155,7 @@ export interface CreateProposalRequest {
  * 验证提案请求
  */
 export interface ValidateProposalRequest {
-  validator_id: string;
+  validator_id?: string;
   approve: boolean;
   rejection_reason?: string;
 }

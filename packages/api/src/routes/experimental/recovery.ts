@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   createRecoveryAction,
   getRecoveryAction,
+  getRecoveryActionWithScope,
   updateRecoveryActionStatus,
   startRecoveryAction,
   executeL1Action,
@@ -20,21 +21,88 @@ import {
   getRecoveryStats,
 } from '../../services/recovery/store.js';
 import { NotFoundError, ValidationError } from '../../types/errors.js';
+import { getIncidentWithScope } from '../../services/incident/store.js';
 import type {
   ExecuteRecoveryActionRequest,
+  RollbackRequest,
   RecoveryActionStatus,
 } from '@los-ast/shared/types';
+
+const scopeSchema = {
+  type: 'object',
+  properties: {
+    tenant_id: { type: 'string' },
+    project_id: { type: 'string' },
+    actor_id: { type: 'string' },
+    mode: { type: 'string', enum: ['local', 'service'] },
+  },
+} as const;
+
+const recoveryActionBodySchema = {
+  type: 'object',
+  required: ['incident_id', 'hypothesis_id', 'level', 'type', 'parameters'],
+  additionalProperties: false,
+  properties: {
+    scope: scopeSchema,
+    incident_id: { type: 'string', minLength: 1 },
+    hypothesis_id: { type: 'string', minLength: 1 },
+    level: { type: 'string', enum: ['L1_harmless', 'L2_controlled', 'L3_code_level'] },
+    type: { type: 'string', enum: ['restart', 'rollback', 'circuit_breaker', 'feature_toggle', 'code_patch'] },
+    parameters: { type: 'object' },
+    actor_id: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const rollbackBodySchema = {
+  type: 'object',
+  required: ['reason'],
+  additionalProperties: false,
+  properties: {
+    scope: scopeSchema,
+    actor_id: { type: 'string', minLength: 1 },
+    reason: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const actionIdParamsSchema = {
+  type: 'object',
+  required: ['id'],
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', minLength: 1 },
+  },
+} as const;
 
 /**
  * 注册 Recovery 路由 (实验性)
  */
 export default async function recoveryRoutes(fastify: FastifyInstance) {
   // POST /experimental/recovery/actions - 创建并执行恢复动作
-  fastify.post('/actions', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/actions', {
+    schema: {
+      body: recoveryActionBodySchema,
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as ExecuteRecoveryActionRequest;
+    const scope = request.scope;
+
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError('INCOMPLETE_SCOPE', 'Request scope must include tenant_id and project_id');
+    }
+
+    const incident = await getIncidentWithScope(body.incident_id, scope.tenant_id, scope.project_id);
+    if (!incident) {
+      throw new NotFoundError('Incident', body.incident_id);
+    }
 
     // 创建动作
-    const action = await createRecoveryAction(body);
+    const action = await createRecoveryAction({
+      ...body,
+      actor_id: scope.actor_id || body.actor_id,
+    }, {
+      tenant_id: incident.scope.tenant_id,
+      project_id: incident.scope.project_id,
+    });
 
     // 如果不需要审批，立即执行
     if (!action.safety.requires_approval) {
@@ -72,6 +140,11 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   // GET /experimental/recovery/actions - 查询恢复动作
   fastify.get('/actions', async (request: FastifyRequest) => {
     const query = request.query as Record<string, string | undefined>;
+    const scope = request.scope;
+
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+    }
 
     const result = await queryRecoveryActions({
       incident_id: query.incident_id,
@@ -79,6 +152,10 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
       level: query.level,
       limit: query.limit ? parseInt(query.limit, 10) : undefined,
       offset: query.offset ? parseInt(query.offset, 10) : undefined,
+      scope: {
+        tenant_id: scope.tenant_id,
+        project_id: scope.project_id,
+      },
     });
 
     return result;
@@ -87,8 +164,13 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   // GET /experimental/recovery/actions/:id - 获取恢复动作
   fastify.get('/actions/:id', async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
+    const scope = request.scope;
 
-    const action = await getRecoveryAction(id);
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+    }
+
+    const action = await getRecoveryActionWithScope(id, scope.tenant_id, scope.project_id);
 
     if (!action) {
       throw new NotFoundError('Recovery action', id);
@@ -98,10 +180,19 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/recovery/actions/:id/approve - 审批恢复动作
-  fastify.post('/actions/:id/approve', async (request: FastifyRequest) => {
+  fastify.post('/actions/:id/approve', {
+    schema: {
+      params: actionIdParamsSchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
+    const scope = request.scope;
 
-    const action = await getRecoveryAction(id);
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+    }
+
+    const action = await getRecoveryActionWithScope(id, scope.tenant_id, scope.project_id);
 
     if (!action) {
       throw new NotFoundError('Recovery action', id);
@@ -131,11 +222,21 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/recovery/actions/:id/rollback - 回滚恢复动作
-  fastify.post('/actions/:id/rollback', async (request: FastifyRequest) => {
+  fastify.post('/actions/:id/rollback', {
+    schema: {
+      params: actionIdParamsSchema,
+      body: rollbackBodySchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
-    const { actor_id, reason } = request.body as { actor_id: string; reason: string };
+    const { actor_id, reason } = request.body as RollbackRequest;
+    const scope = request.scope;
 
-    const action = await getRecoveryAction(id);
+    if (!scope?.tenant_id || !scope?.project_id) {
+      throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+    }
+
+    const action = await getRecoveryActionWithScope(id, scope.tenant_id, scope.project_id);
 
     if (!action) {
       throw new NotFoundError('Recovery action', id);
@@ -144,7 +245,7 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
     // 更新状态为已回滚
     await updateRecoveryActionStatus(id, 'rolled_back', {
       success: true,
-      output: `Rolled back by ${actor_id}: ${reason}`,
+      output: `Rolled back by ${scope.actor_id || actor_id}: ${reason}`,
       duration_ms: 0,
     });
 

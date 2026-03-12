@@ -110,6 +110,82 @@ describe('artifact parsers', () => {
     });
   });
 
+  it('should anchor native OpenAPI findings to the actual operation line', () => {
+    const parsed = parseArtifactInputs({
+      openApiDocuments: [
+        {
+          source: 'openapi-inline',
+          file: '/tmp/openapi.yaml',
+          content: [
+            'openapi: 3.0.3',
+            'paths:',
+            '  /users:',
+            '    post:',
+            "      responses: {'400': { description: bad request }}",
+          ].join('\n'),
+          format: 'yaml',
+        },
+      ],
+    });
+
+    expect(parsed.contractArtifacts.map((item) => item.line)).toEqual([4, 4, 4]);
+  });
+
+  it('should anchor OpenAPI comparison findings to the changed operation line', () => {
+    const parsed = parseArtifactInputs({
+      openApiComparisons: [
+        {
+          source: 'openapi-compare-inline',
+          file: '/tmp/openapi-compare.yaml',
+          format: 'yaml',
+          baseline: [
+            'openapi: 3.0.3',
+            'paths:',
+            '  /users:',
+            '    post:',
+            '      requestBody:',
+            '        required: true',
+            '        content:',
+            '          application/json:',
+            '            schema:',
+            '              type: object',
+            '              properties:',
+            '                email: { type: string }',
+            '      responses:',
+            "        '200':",
+            '          description: ok',
+          ].join('\n'),
+          current: [
+            'openapi: 3.0.3',
+            'paths:',
+            '  /users:',
+            '    post:',
+            '      requestBody:',
+            '        required: true',
+            '        content:',
+            '          application/json:',
+            '            schema:',
+            '              type: object',
+            '              required: [email, role]',
+            '              properties:',
+            '                email: { type: string }',
+            '                role: { type: string }',
+            '      responses:',
+            "        '200':",
+            '          description: ok',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.contractArtifacts).toHaveLength(2);
+    expect(parsed.contractArtifacts.map((item) => item.ruleId)).toEqual([
+      'contract/openapi-breaking-request-required-add',
+      'contract/openapi-breaking-request-required-add',
+    ]);
+    expect(parsed.contractArtifacts.map((item) => item.line)).toEqual([4, 4]);
+  });
+
   it('should keep near-match passthrough artifacts when the message differs', () => {
     const parsed = parseArtifactInputs({
       openApiDocuments: [
@@ -313,6 +389,34 @@ describe('artifact parsers', () => {
     });
 
     expect(parsed.schemaArtifacts).toHaveLength(0);
+  });
+
+  it('should bind schema findings to the correct entity without duplicating multi-entity documents', () => {
+    const parsed = parseArtifactInputs({
+      schemaDocuments: [
+        {
+          source: 'schema-multi-entity',
+          file: '/tmp/schema.prisma',
+          format: 'prisma',
+          content: [
+            'model User {',
+            '  id String @id',
+            '  email String?',
+            '}',
+            '',
+            'model AuditLog {',
+            '  id String @id',
+            '  status String',
+            '}',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts.map((item) => item.message)).toEqual([
+      'Sensitive field User.email should not be optional',
+      'Lifecycle field AuditLog.status should declare @default(...)',
+    ]);
   });
 
   it('should treat equivalent prisma uuid and dbgenerated defaults as compatible in schemaComparisons', () => {

@@ -8,7 +8,7 @@ export type ConfigBundleStatus = 'draft' | 'validated' | 'active' | 'rollback' |
 export interface ConfigBundle {
   bundle_id: string;
   version: string;
-  scope: {
+  target_scope: {
     tenants?: string[];
     projects?: string[];
     percentage?: number;
@@ -52,7 +52,7 @@ export interface ThresholdConfig {
 
 export interface CreateConfigBundleRequest {
   version: string;
-  scope: {
+  target_scope: {
     tenants?: string[];
     projects?: string[];
     percentage?: number;

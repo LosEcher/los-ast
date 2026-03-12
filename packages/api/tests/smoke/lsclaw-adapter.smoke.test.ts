@@ -160,6 +160,48 @@ describe('lsclaw Adapter Smoke Tests', () => {
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
 
+    const incidentResponse = await app.inject({
+      method: 'POST',
+      url: '/vps-agent-web/incidents',
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        'x-request-id': `smoke-incident-${Date.now()}`,
+      },
+      payload: {
+        title: 'Smoke incident',
+        description: 'Created for attribution smoke',
+        severity: 'high',
+        source: {
+          type: 'metric_alert',
+          detector_id: 'smoke-detector',
+          raw_payload: { source: 'smoke-test' },
+        },
+      },
+    });
+
+    expect(incidentResponse.statusCode).toBe(201);
+    const incidentId = JSON.parse(incidentResponse.body).incident.incident_id;
+
+    const evidenceResponse = await app.inject({
+      method: 'POST',
+      url: '/vps-agent-web/attribution/evidence',
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        'x-request-id': `smoke-evidence-${Date.now()}`,
+      },
+      payload: {
+        incident_id: incidentId,
+        evidence_types: ['log'],
+        time_range: {
+          from: '2026-03-12T00:00:00.000Z',
+          to: '2026-03-12T01:00:00.000Z',
+        },
+      },
+    });
+
+    expect(evidenceResponse.statusCode).toBe(201);
+    const evidenceBundleId = JSON.parse(evidenceResponse.body).bundle.bundle_id;
+
     const response = await app.inject({
       method: 'POST',
       url: '/vps-agent-web/attribution/analyze',
@@ -168,8 +210,8 @@ describe('lsclaw Adapter Smoke Tests', () => {
         'x-request-id': `smoke-attribution-${Date.now()}`,
       },
       payload: {
-        incident_id: 'inc-smoke-001',
-        evidence_bundle_id: 'evd-smoke-001',
+        incident_id: incidentId,
+        evidence_bundle_id: evidenceBundleId,
       },
     });
 

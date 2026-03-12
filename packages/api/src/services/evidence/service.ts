@@ -26,9 +26,7 @@ import { generateId } from '../../utils/id-generator.js';
 import { scan, explainAtPosition, loadRuleFiles, isReady } from '@los-ast/core';
 import { EVIDENCE_CONFIG } from '../../config/index.js';
 import { CoreNotReadyError } from '../../types/errors.js';
-
-// 内存存储
-const evidenceStore: Map<string, CodeEvidenceBundle> = new Map();
+import { clearEvidenceStore as clearEvidenceBundleStore, getStoredEvidenceBundle, saveEvidenceBundle } from './store.js';
 const EVIDENCE_SCHEMA_VERSION = '1.0.0';
 const EVIDENCE_GENERATOR_VERSION = '1.0.0';
 
@@ -168,7 +166,7 @@ export async function generateEvidence(
     bundle.signature = signature;
   }
 
-  evidenceStore.set(bundleId, bundle);
+  saveEvidenceBundle(bundle);
   console.log(`[EvidenceService] Generated evidence bundle ${bundleId} by ${actor.actor_id}`);
 
   return bundle;
@@ -337,7 +335,7 @@ export async function getEvidenceBundle(
   bundleId: string,
   scope?: { tenant_id?: string; project_id?: string }
 ): Promise<CodeEvidenceBundle | null> {
-  const bundle = evidenceStore.get(bundleId);
+  const bundle = getStoredEvidenceBundle(bundleId);
   if (!bundle) {
     return null;
   }
@@ -378,5 +376,5 @@ export async function getCodeStats(_project: string): Promise<CodeStats> {
  * 清空存储 (用于测试)
  */
 export function clearEvidenceStore(): void {
-  evidenceStore.clear();
+  clearEvidenceBundleStore();
 }

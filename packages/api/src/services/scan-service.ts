@@ -263,8 +263,12 @@ export class ScanService {
       const files = await discoverFiles({ rootDir, include, ignore });
       return files.length;
     } catch (error) {
-      // 如果预估失败，返回一个安全值以继续处理
-      return 0;
+      throw new ValidationError(
+        'FILE_COUNT_ESTIMATE_FAILED',
+        error instanceof Error
+          ? `failed to estimate candidate files before scan: ${error.message}`
+          : 'failed to estimate candidate files before scan'
+      );
     }
   }
 

@@ -139,6 +139,21 @@ describe('Experimental Routes Tests', () => {
         const body = JSON.parse(response.body);
         expect(body.error).toBeDefined();
       });
+
+      it('POST /experimental/memory-proposals/proposals should reject malformed payloads at runtime schema boundary', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/experimental/memory-proposals/proposals',
+          payload: {
+            scope: baseScope,
+            proposal_type: 'incident_lesson',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+      });
     });
 
     describe('Incident Routes', () => {
@@ -159,6 +174,22 @@ describe('Experimental Routes Tests', () => {
 
         expect(response.statusCode).toBe(200);
       });
+
+      it('POST /experimental/incidents should reject malformed payloads at runtime schema boundary', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/experimental/incidents',
+          payload: {
+            scope: baseScope,
+            title: 'Broken incident',
+            severity: 'high',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+      });
     });
 
     describe('Approval Routes', () => {
@@ -172,6 +203,25 @@ describe('Experimental Routes Tests', () => {
         const body = JSON.parse(response.body);
         expect(body.stats).toBeDefined();
       });
+
+      it('POST /experimental/approvals should reject malformed payloads at runtime schema boundary', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/experimental/approvals',
+          payload: {
+            scope: {
+              ...baseScope,
+              actor_id: 'actor-a',
+            },
+            item_type: 'recovery_action',
+            item_id: 'act_123',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+      });
     });
 
     describe('HotReload Routes', () => {
@@ -182,6 +232,22 @@ describe('Experimental Routes Tests', () => {
         });
 
         expect(response.statusCode).toBe(200);
+      });
+
+      it('POST /experimental/hotreload/bundles should reject malformed payloads at runtime schema boundary', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/experimental/hotreload/bundles',
+          payload: {
+            scope: baseScope,
+            version: 'v1',
+            configs: {},
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
       });
     });
 
@@ -218,6 +284,21 @@ describe('Experimental Routes Tests', () => {
         expect(body.data.generator.tool).toBe('los-ast');
         expect(body.data.generator.version).toBeDefined();
         expect(body.data.deterministic).toBe(true);
+      });
+
+      it('POST /experimental/evidence/validate-patch should reject malformed payloads at runtime schema boundary', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/experimental/evidence/validate-patch',
+          payload: {
+            scope: baseScope,
+            project: 'lsclaw',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
       });
 
       it('POST /experimental/evidence/generate should return 503 when core is not ready', async () => {
@@ -274,7 +355,7 @@ describe('Experimental Routes Tests', () => {
     });
 
     describe('Attribution Routes', () => {
-      it('POST /experimental/attribution/analyze should require scope', async () => {
+      it('POST /experimental/attribution/analyze should reject empty payloads at the request boundary', async () => {
         const response = await app.inject({
           method: 'POST',
           url: '/experimental/attribution/analyze',
@@ -283,7 +364,7 @@ describe('Experimental Routes Tests', () => {
 
         expect(response.statusCode).toBe(400);
         const body = JSON.parse(response.body);
-        expect(body.error.code).toBe('MISSING_SCOPE');
+        expect(body.error.code).toBe('VALIDATION_ERROR');
       });
     });
 

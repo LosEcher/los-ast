@@ -15,6 +15,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@los-ast/core": "file:../core",
+    "@los-ast/rules": "file:../rules",
+    "@los-ast/shared": "file:../shared",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1",
     "yaml": "^2.6.1",

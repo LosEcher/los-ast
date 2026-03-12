@@ -14,6 +14,10 @@ export interface RecoveryAction {
   action_id: string;
   incident_id: string;
   hypothesis_id: string;
+  scope: {
+    tenant_id: string;
+    project_id: string;
+  };
   level: RecoveryLevel;
   type: RecoveryActionType;
   status: RecoveryActionStatus;
@@ -111,26 +115,23 @@ export interface ExecuteRecoveryActionRequest {
   level: RecoveryLevel;
   type: RecoveryActionType;
   parameters: Record<string, unknown>;
-  actor_id: string;
+  actor_id?: string;
 }
 
 /**
  * 执行恢复动作响应
  */
 export interface ExecuteRecoveryActionResponse {
-  action_id: string;
-  status: RecoveryActionStatus;
+  action: RecoveryAction;
   message: string;
-  estimated_duration_seconds: number;
 }
 
 /**
  * 回滚请求
  */
 export interface RollbackRequest {
-  action_id: string;
   reason: string;
-  actor_id: string;
+  actor_id?: string;
 }
 
 /**

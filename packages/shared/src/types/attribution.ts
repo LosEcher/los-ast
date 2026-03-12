@@ -3,8 +3,6 @@
  * Phase 1.3: 故障归因系统
  */
 
-import type { LogEntry, MetricSnapshot } from './incident.js';
-
 export type HypothesisCategory = 'code_defect' | 'config_error' | 'infrastructure' | 'dependency_failure';
 export type HypothesisStatus = 'proposed' | 'validating' | 'confirmed' | 'rejected' | 'superseded';
 
@@ -77,16 +75,7 @@ export interface Hypothesis {
  */
 export interface AttributionRequest {
   incident_id: string;
-  context: {
-    logs: LogEntry[];
-    metrics: MetricSnapshot[];
-    traces?: TraceEntry[];
-  };
-  requirements: {
-    max_latency_ms: number;
-    min_confidence: number;
-    max_hypotheses: number;
-  };
+  evidence_bundle_id: string;
 }
 
 export interface TraceEntry {
@@ -105,19 +94,7 @@ export interface TraceEntry {
  * 归因分析响应
  */
 export interface AttributionResponse {
-  analysis_id: string;
-  incident_id: string;
-  hypotheses: HypothesisDraft[];
-  recommended_action?: string;
-  confidence_summary: {
-    highest: number;
-    average: number;
-    lowest: number;
-  };
-  provider_used: string;
-  cost: number;
-  latency_ms: number;
-  created_at: string;
+  analysis: AttributionAnalysis;
 }
 
 export interface HypothesisDraft {
@@ -139,7 +116,7 @@ export interface CreateHypothesisRequest {
   category: HypothesisCategory;
   root_cause: RootCause;
   evidence_bundle_id: string;
-  proposed_by: string;
+  proposed_by?: string;
 }
 
 /**
@@ -148,7 +125,7 @@ export interface CreateHypothesisRequest {
 export interface UpdateHypothesisStatusRequest {
   status: HypothesisStatus;
   confidence?: number;
-  actor_id: string;
+  actor_id?: string;
   reason?: string;
 }
 

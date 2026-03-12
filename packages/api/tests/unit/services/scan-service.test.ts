@@ -339,6 +339,22 @@ describe('ScanService', () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
+    it('should fail closed when file count estimation fails', async () => {
+      vi.mocked(core.discoverFiles).mockRejectedValue(new Error('glob failed'));
+
+      await expect(
+        scanService.execute({
+          project: 'test-project',
+          rootDir: '/test/path',
+          signal: new AbortController().signal,
+        })
+      ).rejects.toMatchObject({
+        code: 'FILE_COUNT_ESTIMATE_FAILED',
+      });
+
+      expect(core.scan).not.toHaveBeenCalled();
+    });
+
     it('should derive contract compatibility findings from openApiComparisons', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

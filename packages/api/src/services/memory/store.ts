@@ -5,6 +5,8 @@
  * 存储和管理经验沉淀数据
  */
 
+import crypto from 'node:crypto';
+
 import type {
   Proposal,
   Scope,
@@ -19,24 +21,79 @@ import type {
   MemoryStats,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
+import { memoryRepository } from '../../persistence/repositories/memory-repository.js';
 
-// 内存存储 - 后续迁移到 PostgreSQL
-const proposalStore: Map<string, Proposal> = new Map();
-const factStore: Map<string, CorrectedFact> = new Map();
-const rejectionStore: Map<string, RejectedHypothesis> = new Map();
-const lessonStore: Map<string, IncidentLesson> = new Map();
-const recipeStore: Map<string, RecoveryRecipe> = new Map();
+const proposalStore = memoryRepository.proposals;
+const factStore = memoryRepository.facts;
+const rejectionStore = memoryRepository.rejections;
+const lessonStore = memoryRepository.lessons;
+const recipeStore = memoryRepository.recipes;
+
+type ScopedCreateProposalRequest = Omit<CreateProposalRequest, 'scope'> & { scope: Scope };
+
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableSerialize(item)}`);
+    return `{${entries.join(',')}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+function buildDefaultIdempotencyKey(request: ScopedCreateProposalRequest): string {
+  const rawKey = stableSerialize({
+    incident_id: request.source.incident_id,
+    proposal_type: request.proposal_type,
+    scope: {
+      tenant_id: request.scope.tenant_id ?? null,
+      project_id: request.scope.project_id ?? null,
+    },
+    content: request.content,
+  });
+
+  return crypto.createHash('sha256').update(rawKey).digest('hex');
+}
+
+function extractKnowledgeTags(content: unknown): string[] {
+  if (!content || typeof content !== 'object') {
+    return [];
+  }
+
+  const typedContent = content as {
+    tags?: unknown;
+    triggers?: {
+      symptom_keywords?: unknown;
+    };
+  };
+
+  if (Array.isArray(typedContent.tags)) {
+    return typedContent.tags.filter((item): item is string => typeof item === 'string');
+  }
+
+  const symptomKeywords = typedContent.triggers?.symptom_keywords;
+  if (Array.isArray(symptomKeywords)) {
+    return symptomKeywords.filter((item): item is string => typeof item === 'string');
+  }
+
+  return [];
+}
 
 /**
  * 创建提案
  */
 export async function createProposal(request: CreateProposalRequest): Promise<Proposal> {
+  const scopedRequest = request as ScopedCreateProposalRequest;
   const now = new Date().toISOString();
   const proposalId = generateId('prp');
 
   // 生成幂等性 key
-  const idempotencyKey =
-    request.idempotency_key || `${request.source.incident_id}_${request.proposal_type}_${now}`;
+  const idempotencyKey = request.idempotency_key || buildDefaultIdempotencyKey(scopedRequest);
 
   // 检查幂等性
   for (const proposal of proposalStore.values()) {
@@ -46,13 +103,20 @@ export async function createProposal(request: CreateProposalRequest): Promise<Pr
     }
   }
 
+  const normalizedContent = await normalizeTypedContent(
+    proposalId,
+    request.proposal_type,
+    request.content,
+    scopedRequest.scope
+  );
+
   const proposal: Proposal = {
     proposal_id: proposalId,
     proposal_type: request.proposal_type,
-    content: request.content,
+    content: normalizedContent,
     source: request.source,
     status: 'proposed',
-    scope: request.scope,
+    scope: scopedRequest.scope,
     idempotency_key: idempotencyKey,
     created_at: now,
     updated_at: now,
@@ -60,10 +124,6 @@ export async function createProposal(request: CreateProposalRequest): Promise<Pr
   };
 
   proposalStore.set(proposalId, proposal);
-
-  // 根据类型存储具体内容
-  // 传入 request.scope 强制注入到 content 中，防止 content.scope 被伪造
-  await storeTypedContent(proposalId, request.proposal_type, request.content, request.scope);
 
   console.log(`[MemoryStore] Created proposal ${proposalId} of type ${request.proposal_type}`);
 
@@ -74,18 +134,18 @@ export async function createProposal(request: CreateProposalRequest): Promise<Pr
  * 存储类型化内容
  * 强制注入 proposal.scope 到 content 中，防止 scope 伪造
  */
-async function storeTypedContent(
+async function normalizeTypedContent(
   proposalId: string,
   type: string,
   content: unknown,
   scope: Scope
-): Promise<void> {
+): Promise<unknown> {
   const now = new Date().toISOString();
 
   switch (type) {
     case 'corrected_fact': {
       const fact = content as CorrectedFact;
-      factStore.set(fact.fact_id || proposalId, {
+      const normalizedFact: CorrectedFact = {
         ...fact,
         fact_id: fact.fact_id || proposalId,
         // 强制注入 scope，防止伪造
@@ -94,13 +154,13 @@ async function storeTypedContent(
           project_id: scope.project_id!,
         },
         created_at: fact.created_at || now,
-      });
-      break;
+      };
+      return normalizedFact;
     }
 
     case 'rejected_hypothesis': {
       const rejection = content as RejectedHypothesis;
-      rejectionStore.set(rejection.rejection_id || proposalId, {
+      const normalizedRejection: RejectedHypothesis = {
         ...rejection,
         rejection_id: rejection.rejection_id || proposalId,
         // 强制注入 scope，防止伪造
@@ -109,13 +169,13 @@ async function storeTypedContent(
           project_id: scope.project_id!,
         },
         created_at: rejection.created_at || now,
-      });
-      break;
+      };
+      return normalizedRejection;
     }
 
     case 'incident_lesson': {
       const lesson = content as IncidentLesson;
-      lessonStore.set(lesson.lesson_id || proposalId, {
+      const normalizedLesson: IncidentLesson = {
         ...lesson,
         lesson_id: lesson.lesson_id || proposalId,
         // 强制注入 scope，防止伪造
@@ -125,13 +185,13 @@ async function storeTypedContent(
         },
         created_at: lesson.created_at || now,
         updated_at: lesson.updated_at || now,
-      });
-      break;
+      };
+      return normalizedLesson;
     }
 
     case 'recovery_recipe': {
       const recipe = content as RecoveryRecipe;
-      recipeStore.set(recipe.recipe_id || proposalId, {
+      const normalizedRecipe: RecoveryRecipe = {
         ...recipe,
         recipe_id: recipe.recipe_id || proposalId,
         // 强制注入 scope，防止伪造（保留 is_global 如果已设置）
@@ -148,10 +208,12 @@ async function storeTypedContent(
         created_at: recipe.created_at || now,
         updated_at: recipe.updated_at || now,
         version: recipe.version || 1,
-      });
-      break;
+      };
+      return normalizedRecipe;
     }
   }
+
+  return content;
 }
 
 /**
@@ -233,6 +295,18 @@ async function activateTypedContent(type: string, content: unknown): Promise<voi
   const now = new Date().toISOString();
 
   switch (type) {
+    case 'corrected_fact': {
+      const fact = content as CorrectedFact;
+      factStore.set(fact.fact_id, fact);
+      break;
+    }
+
+    case 'rejected_hypothesis': {
+      const rejection = content as RejectedHypothesis;
+      rejectionStore.set(rejection.rejection_id, rejection);
+      break;
+    }
+
     case 'incident_lesson': {
       const lesson = content as IncidentLesson;
       lessonStore.set(lesson.lesson_id, {
@@ -344,16 +418,23 @@ export async function queryKnowledge(query: KnowledgeQuery): Promise<KnowledgeRe
   });
 
   // 过滤标签
+  let scopedItems = filteredItems;
   if (query.tags && query.tags.length > 0) {
-    // 简化实现 - 可以在这里添加标签过滤逻辑
+    const normalizedTags = query.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean);
+    if (normalizedTags.length > 0) {
+      scopedItems = filteredItems.filter((item) => {
+        const tags = extractKnowledgeTags(item.content).map((tag) => tag.toLowerCase());
+        return normalizedTags.every((tag) => tags.includes(tag));
+      });
+    }
   }
 
   // 分页
-  const total = filteredItems.length;
+  const total = scopedItems.length;
   const offset = query.offset || 0;
   const limit = query.limit || 20;
 
-  const paginatedItems = filteredItems.slice(offset, offset + limit);
+  const paginatedItems = scopedItems.slice(offset, offset + limit);
 
   return {
     items: paginatedItems,

@@ -4,20 +4,22 @@
  */
 
 import type {
+  AttributionStats,
   Hypothesis,
   HypothesisStatus,
+  HypothesisCategory,
   CreateHypothesisRequest,
   EvidenceBundle,
   EvidenceItem,
   AttributionAnalysis,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
+import { attributionRepository } from '../../persistence/repositories/attribution-repository.js';
 import { getAllIncidents } from '../incident/store.js';
 
-// 内存存储
-const hypothesisStore: Map<string, Hypothesis> = new Map();
-const evidenceBundleStore: Map<string, EvidenceBundle> = new Map();
-const attributionAnalysisStore: Map<string, AttributionAnalysis> = new Map();
+const hypothesisStore = attributionRepository.hypotheses;
+const evidenceBundleStore = attributionRepository.evidenceBundles;
+const attributionAnalysisStore = attributionRepository.analyses;
 
 /**
  * 创建假设
@@ -40,7 +42,7 @@ export async function createHypothesis(request: CreateHypothesisRequest): Promis
       contradicting: [],
       bundle_id: request.evidence_bundle_id,
     },
-    proposed_by: request.proposed_by,
+    proposed_by: request.proposed_by || 'system',
     created_at: now,
     updated_at: now,
     version: 1,
@@ -57,6 +59,22 @@ export async function createHypothesis(request: CreateHypothesisRequest): Promis
  */
 export async function getHypothesis(hypothesisId: string): Promise<Hypothesis | null> {
   return hypothesisStore.get(hypothesisId) || null;
+}
+
+export async function getHypothesisWithScope(
+  hypothesisId: string,
+  scope?: {
+    tenant_id?: string;
+    project_id?: string;
+  }
+): Promise<Hypothesis | null> {
+  const hypothesis = hypothesisStore.get(hypothesisId);
+  if (!hypothesis) {
+    return null;
+  }
+
+  const scopedIncidentIds = buildScopedIncidentIds(scope);
+  return scopedIncidentIds.has(hypothesis.incident_id) ? hypothesis : null;
 }
 
 /**
@@ -130,8 +148,15 @@ export async function queryHypotheses(params: {
   category?: string;
   limit?: number;
   offset?: number;
+  scope?: {
+    tenant_id?: string;
+    project_id?: string;
+  };
 }): Promise<{ items: Hypothesis[]; total: number }> {
-  let items = Array.from(hypothesisStore.values());
+  const scopedIncidentIds = buildScopedIncidentIds(params.scope);
+  let items = hypothesisStore.values().filter((hypothesis) =>
+    scopedIncidentIds.has(hypothesis.incident_id)
+  );
 
   if (params.incident_id) {
     items = items.filter((h) => h.incident_id === params.incident_id);
@@ -183,6 +208,22 @@ export async function getEvidenceBundle(bundleId: string): Promise<EvidenceBundl
   return evidenceBundleStore.get(bundleId) || null;
 }
 
+export async function getEvidenceBundleWithScope(
+  bundleId: string,
+  scope?: {
+    tenant_id?: string;
+    project_id?: string;
+  }
+): Promise<EvidenceBundle | null> {
+  const bundle = evidenceBundleStore.get(bundleId);
+  if (!bundle) {
+    return null;
+  }
+
+  const scopedIncidentIds = buildScopedIncidentIds(scope);
+  return scopedIncidentIds.has(bundle.incident_id) ? bundle : null;
+}
+
 /**
  * 保存归因分析
  */
@@ -227,21 +268,12 @@ function buildScopedIncidentIds(scope?: {
 export function getAttributionStats(scope?: {
   tenant_id?: string;
   project_id?: string;
-}): {
-  hypothesesCount: number;
-  evidenceBundlesCount: number;
-  analysesCount: number;
-  byCategory: Record<string, number>;
-  byStatus: Record<string, number>;
-} {
+}): AttributionStats {
   const scopedIncidentIds = buildScopedIncidentIds(scope);
-  const hypotheses = Array.from(hypothesisStore.values()).filter((hypothesis) =>
+  const hypotheses = hypothesisStore.values().filter((hypothesis) =>
     scopedIncidentIds.has(hypothesis.incident_id)
   );
-  const evidenceBundles = Array.from(evidenceBundleStore.values()).filter((bundle) =>
-    scopedIncidentIds.has(bundle.incident_id)
-  );
-  const analyses = Array.from(attributionAnalysisStore.values()).filter((analysis) => {
+  const analyses = attributionAnalysisStore.values().filter((analysis) => {
     if (analysis.scope?.tenant_id || analysis.scope?.project_id) {
       if (scope?.tenant_id && analysis.scope?.tenant_id !== scope.tenant_id) {
         return false;
@@ -254,20 +286,38 @@ export function getAttributionStats(scope?: {
     return scopedIncidentIds.has(analysis.incident_id);
   });
 
-  const byCategory: Record<string, number> = {};
-  const byStatus: Record<string, number> = {};
+  const byCategory: Record<HypothesisCategory, number> = {
+    code_defect: 0,
+    config_error: 0,
+    infrastructure: 0,
+    dependency_failure: 0,
+  };
+  const byStatus: Record<HypothesisStatus, number> = {
+    proposed: 0,
+    validating: 0,
+    confirmed: 0,
+    rejected: 0,
+    superseded: 0,
+  };
+  let confidenceTotal = 0;
+  let latencyTotal = 0;
 
   for (const h of hypotheses) {
-    byCategory[h.category] = (byCategory[h.category] || 0) + 1;
-    byStatus[h.status] = (byStatus[h.status] || 0) + 1;
+    byCategory[h.category] += 1;
+    byStatus[h.status] += 1;
+    confidenceTotal += h.confidence;
+  }
+
+  for (const analysis of analyses) {
+    latencyTotal += analysis.latency_ms;
   }
 
   return {
-    hypothesesCount: hypotheses.length,
-    evidenceBundlesCount: evidenceBundles.length,
-    analysesCount: analyses.length,
-    byCategory,
-    byStatus,
+    total_analyses: analyses.length,
+    hypotheses_by_category: byCategory,
+    hypotheses_by_status: byStatus,
+    average_confidence: hypotheses.length > 0 ? confidenceTotal / hypotheses.length : 0,
+    average_latency_ms: analyses.length > 0 ? latencyTotal / analyses.length : 0,
   };
 }
 

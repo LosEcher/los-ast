@@ -9,8 +9,9 @@ import type {
   HotReloadStats,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
+import { hotReloadRepository } from '../../persistence/repositories/hotreload-repository.js';
 
-const bundleStore: Map<string, ConfigBundle> = new Map();
+const bundleStore = hotReloadRepository;
 
 export async function createConfigBundle(request: CreateConfigBundleRequest): Promise<ConfigBundle> {
   const now = new Date().toISOString();
@@ -19,7 +20,7 @@ export async function createConfigBundle(request: CreateConfigBundleRequest): Pr
   const bundle: ConfigBundle = {
     bundle_id: bundleId,
     version: request.version,
-    scope: request.scope,
+    target_scope: request.target_scope,
     configs: request.configs,
     status: 'draft',
     validation: {
@@ -81,7 +82,7 @@ export async function rollbackConfigBundle(bundleId: string): Promise<ConfigBund
 }
 
 export async function listConfigBundles(): Promise<ConfigBundle[]> {
-  return Array.from(bundleStore.values());
+  return bundleStore.values();
 }
 
 export function getHotReloadStats(): HotReloadStats {
@@ -94,7 +95,7 @@ export function getHotReloadStats(): HotReloadStats {
   }
 
   return {
-    total_bundles: bundleStore.size,
+    total_bundles: bundleStore.size(),
     active_bundles,
     by_status,
   };

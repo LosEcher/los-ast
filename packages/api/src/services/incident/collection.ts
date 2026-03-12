@@ -13,14 +13,12 @@ import type {
   MetricSnapshot,
   IncidentScope,
 } from '@los-ast/shared/types';
+import { incidentCollectionRepository } from '../../persistence/repositories/incident-collection-repository.js';
 
-// 内存存储 - 后续迁移到时序数据库
-const metricsStore: Map<string, MetricDataPoint[]> = new Map();
-const logsStore: Map<string, LogEntry[]> = new Map();
-const triggersStore: Map<string, Trigger> = new Map();
-
-// 触发器冷却状态
-const triggerCooldowns: Map<string, number> = new Map();
+const metricsStore = incidentCollectionRepository.metrics;
+const logsStore = incidentCollectionRepository.logs;
+const triggersStore = incidentCollectionRepository.triggers;
+const triggerCooldowns = incidentCollectionRepository.triggerCooldowns;
 
 /**
  * 采集指标数据
@@ -31,7 +29,7 @@ export async function collectMetrics(
 ): Promise<void> {
   const key = `${scope.tenant_id}:${scope.project_id}`;
 
-  if (!metricsStore.has(key)) {
+  if (!metricsStore.get(key)) {
     metricsStore.set(key, []);
   }
 
@@ -55,7 +53,7 @@ export async function collectLogs(
 ): Promise<void> {
   const key = `${scope.tenant_id}:${scope.project_id}`;
 
-  if (!logsStore.has(key)) {
+  if (!logsStore.get(key)) {
     logsStore.set(key, []);
   }
 
@@ -148,7 +146,7 @@ export async function getTrigger(triggerId: string): Promise<Trigger | null> {
  * 列出所有触发器
  */
 export async function listTriggers(): Promise<Trigger[]> {
-  return Array.from(triggersStore.values());
+  return triggersStore.values();
 }
 
 /**
@@ -287,7 +285,7 @@ export function getCollectionStats(): {
   return {
     metricsCount,
     logsCount,
-    triggersCount: triggersStore.size,
+    triggersCount: triggersStore.size(),
   };
 }
 
@@ -306,6 +304,6 @@ export function getCollectionStatsByScope(scope: {
   return {
     metricsCount: metrics.length,
     logsCount: logs.length,
-    triggersCount: triggersStore.size,
+    triggersCount: triggersStore.size(),
   };
 }

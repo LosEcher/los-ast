@@ -26,6 +26,53 @@ import type {
   ApprovalItemType,
 } from '@los-ast/shared/types';
 
+const scopeSchema = {
+  type: 'object',
+  properties: {
+    tenant_id: { type: 'string' },
+    project_id: { type: 'string' },
+    actor_id: { type: 'string' },
+    mode: { type: 'string', enum: ['local', 'service'] },
+  },
+} as const;
+
+const approvalBodySchema = {
+  type: 'object',
+  required: ['item_type', 'item_id', 'title', 'description', 'risk_level', 'timeout_seconds'],
+  additionalProperties: false,
+  properties: {
+    scope: scopeSchema,
+    item_type: { type: 'string', enum: ['recovery_action', 'code_patch', 'config_change', 'recipe_activation'] },
+    item_id: { type: 'string', minLength: 1 },
+    title: { type: 'string', minLength: 1 },
+    description: { type: 'string', minLength: 1 },
+    risk_level: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+    timeout_seconds: { type: 'integer', minimum: 1 },
+    metadata: { type: 'object' },
+  },
+} as const;
+
+const processApprovalBodySchema = {
+  type: 'object',
+  required: ['action'],
+  additionalProperties: false,
+  properties: {
+    scope: scopeSchema,
+    action: { type: 'string', enum: ['approve', 'reject'] },
+    actor_id: { type: 'string', minLength: 1 },
+    comment: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+const approvalIdParamsSchema = {
+  type: 'object',
+  required: ['id'],
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', minLength: 1 },
+  },
+} as const;
+
 // 查询参数验证函数
 function parseApprovalStatus(value: string | undefined): ApprovalStatus | undefined {
   if (!value) return undefined;
@@ -77,7 +124,11 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/approvals - 创建审批项
-  fastify.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/', {
+    schema: {
+      body: approvalBodySchema,
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as CreateApprovalRequest;
 
     // 强制注入 request.scope，确保数据归属正确
@@ -102,7 +153,11 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   });
 
   // GET /experimental/approvals/:id - 获取审批项
-  fastify.get('/:id', async (request: FastifyRequest) => {
+  fastify.get('/:id', {
+    schema: {
+      params: approvalIdParamsSchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
 
     // 强制使用 request.scope 进行租户边界校验
@@ -125,7 +180,12 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
   });
 
   // POST /experimental/approvals/:id/process - 处理审批
-  fastify.post('/:id/process', async (request: FastifyRequest) => {
+  fastify.post('/:id/process', {
+    schema: {
+      params: approvalIdParamsSchema,
+      body: processApprovalBodySchema,
+    },
+  }, async (request: FastifyRequest) => {
     const { id } = request.params as { id: string };
     const body = request.body as ProcessApprovalRequest;
 
@@ -144,8 +204,19 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
       throw new NotFoundError('Approval', id);
     }
 
+    const actorId = scope.actor_id || body.actor_id;
+    if (!actorId) {
+      throw new ValidationError(
+        'MISSING_ACTOR_ID',
+        'Approval processing requires a verified actor_id'
+      );
+    }
+
     try {
-      const approval = await processApproval(id, body);
+      const approval = await processApproval(id, {
+        ...body,
+        actor_id: actorId,
+      });
       return { approval };
     } catch (error) {
       throw new ValidationError(

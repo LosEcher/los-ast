@@ -59,7 +59,7 @@ export interface Incident {
  * 创建 Incident 请求
  */
 export interface CreateIncidentRequest {
-  scope: IncidentScope;
+  scope?: Partial<IncidentScope>;
   title: string;
   description: string;
   severity: IncidentSeverity;
@@ -73,7 +73,7 @@ export interface CreateIncidentRequest {
 export interface UpdateIncidentStatusRequest {
   status: IncidentStatus;
   comment?: string;
-  actor_id: string;
+  actor_id?: string;
 }
 
 /**
@@ -136,12 +136,12 @@ export interface MetricSnapshot {
  * 采集数据上报请求
  */
 export interface CollectMetricsRequest {
-  scope: IncidentScope;
+  scope?: Partial<IncidentScope>;
   metrics: MetricDataPoint[];
 }
 
 export interface CollectLogsRequest {
-  scope: IncidentScope;
+  scope?: Partial<IncidentScope>;
   logs: LogEntry[];
 }
 

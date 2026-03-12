@@ -11,11 +11,10 @@ import type {
   IncidentListResponse,
   IncidentStatus,
   CreateIncidentRequest,
+  IncidentScope,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
-
-// 内存存储 - 后续替换为数据库
-const incidentStore: Map<string, Incident> = new Map();
+import { incidentRepository } from '../../persistence/repositories/incident-repository.js';
 
 /**
  * 生成指纹
@@ -28,7 +27,9 @@ function generateFingerprint(scope: { tenant_id: string; project_id: string }, t
 /**
  * 创建 Incident
  */
-export async function createIncident(request: CreateIncidentRequest): Promise<Incident> {
+export async function createIncident(
+  request: Omit<CreateIncidentRequest, 'scope'> & { scope: IncidentScope }
+): Promise<Incident> {
   const now = new Date().toISOString();
   const incidentId = generateId('inc');
 
@@ -64,7 +65,7 @@ export async function createIncident(request: CreateIncidentRequest): Promise<In
     version: 1,
   };
 
-  incidentStore.set(incidentId, incident);
+  incidentRepository.set(incidentId, incident);
 
   console.log(`[IncidentStore] Created incident ${incidentId}: ${incident.title}`);
 
@@ -75,7 +76,24 @@ export async function createIncident(request: CreateIncidentRequest): Promise<In
  * 获取 Incident
  */
 export async function getIncident(incidentId: string): Promise<Incident | null> {
-  return incidentStore.get(incidentId) || null;
+  return incidentRepository.get(incidentId) || null;
+}
+
+export async function getIncidentWithScope(
+  incidentId: string,
+  tenant_id: string,
+  project_id: string
+): Promise<Incident | null> {
+  const incident = incidentRepository.get(incidentId);
+  if (!incident) {
+    return null;
+  }
+
+  if (incident.scope.tenant_id !== tenant_id || incident.scope.project_id !== project_id) {
+    return null;
+  }
+
+  return incident;
 }
 
 /**
@@ -87,7 +105,7 @@ export async function updateIncidentStatus(
   comment?: string,
   actorId?: string
 ): Promise<Incident | null> {
-  const incident = incidentStore.get(incidentId);
+  const incident = incidentRepository.get(incidentId);
   if (!incident) {
     return null;
   }
@@ -107,7 +125,7 @@ export async function updateIncidentStatus(
   incident.updated_at = now;
   incident.version += 1;
 
-  incidentStore.set(incidentId, incident);
+  incidentRepository.set(incidentId, incident);
 
   console.log(`[IncidentStore] Updated incident ${incidentId} status to ${newStatus}`);
 
@@ -121,7 +139,7 @@ export async function addHypothesisToIncident(
   incidentId: string,
   hypothesisId: string
 ): Promise<Incident | null> {
-  const incident = incidentStore.get(incidentId);
+  const incident = incidentRepository.get(incidentId);
   if (!incident) {
     return null;
   }
@@ -130,7 +148,7 @@ export async function addHypothesisToIncident(
     incident.hypotheses.push(hypothesisId);
     incident.updated_at = new Date().toISOString();
     incident.version += 1;
-    incidentStore.set(incidentId, incident);
+    incidentRepository.set(incidentId, incident);
   }
 
   return incident;
@@ -143,7 +161,7 @@ export async function addRecoveryActionToIncident(
   incidentId: string,
   actionId: string
 ): Promise<Incident | null> {
-  const incident = incidentStore.get(incidentId);
+  const incident = incidentRepository.get(incidentId);
   if (!incident) {
     return null;
   }
@@ -152,7 +170,7 @@ export async function addRecoveryActionToIncident(
     incident.recovery_actions.push(actionId);
     incident.updated_at = new Date().toISOString();
     incident.version += 1;
-    incidentStore.set(incidentId, incident);
+    incidentRepository.set(incidentId, incident);
   }
 
   return incident;
@@ -162,108 +180,35 @@ export async function addRecoveryActionToIncident(
  * 查询 Incidents
  */
 export async function queryIncidents(params: IncidentQueryParams): Promise<IncidentListResponse> {
-  let items = Array.from(incidentStore.values());
-
-  // 应用过滤器
-  if (params.tenant_id) {
-    items = items.filter((i) => i.scope.tenant_id === params.tenant_id);
-  }
-
-  if (params.project_id) {
-    items = items.filter((i) => i.scope.project_id === params.project_id);
-  }
-
-  if (params.status) {
-    items = items.filter((i) => i.status === params.status);
-  }
-
-  if (params.severity) {
-    items = items.filter((i) => i.severity === params.severity);
-  }
-
-  if (params.source_type) {
-    items = items.filter((i) => i.source.type === params.source_type);
-  }
-
-  if (params.from) {
-    items = items.filter((i) => i.created_at >= params.from!);
-  }
-
-  if (params.to) {
-    items = items.filter((i) => i.created_at <= params.to!);
-  }
-
-  // 按创建时间降序
-  items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-  const total = items.length;
-  const offset = params.offset || 0;
-  const limit = params.limit || 20;
-
-  items = items.slice(offset, offset + limit);
-
-  return {
-    items,
-    total,
-    has_more: offset + limit < total,
-    next_offset: offset + limit < total ? offset + limit : undefined,
-  };
+  return incidentRepository.query(params);
 }
 
 /**
  * 获取所有 Incidents (用于调试)
  */
 export function getAllIncidents(): Incident[] {
-  return Array.from(incidentStore.values());
+  return incidentRepository.values();
 }
 
 /**
  * 清空存储 (用于测试)
  */
 export function clearStore(): void {
-  incidentStore.clear();
+  incidentRepository.clear();
 }
 
 /**
  * 获取存储统计
  */
 export function getStoreStats(): { count: number; byStatus: Record<string, number> } {
-  const items = Array.from(incidentStore.values());
-  const byStatus: Record<string, number> = {};
-
-  for (const incident of items) {
-    byStatus[incident.status] = (byStatus[incident.status] || 0) + 1;
-  }
-
-  return {
-    count: items.length,
-    byStatus,
-  };
+  return incidentRepository.getScopedStats();
 }
 
 export function getStoreStatsByScope(scope: {
   tenant_id?: string;
   project_id?: string;
 }): { count: number; byStatus: Record<string, number> } {
-  const items = Array.from(incidentStore.values()).filter((incident) => {
-    if (scope.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
-      return false;
-    }
-    if (scope.project_id && incident.scope.project_id !== scope.project_id) {
-      return false;
-    }
-    return true;
-  });
-  const byStatus: Record<string, number> = {};
-
-  for (const incident of items) {
-    byStatus[incident.status] = (byStatus[incident.status] || 0) + 1;
-  }
-
-  return {
-    count: items.length,
-    byStatus,
-  };
+  return incidentRepository.getScopedStats(scope);
 }
 
 /**
@@ -276,7 +221,7 @@ export async function addTimelineEvent(
   actor?: string,
   metadata?: Record<string, unknown>
 ): Promise<Incident | null> {
-  const incident = incidentStore.get(incidentId);
+  const incident = incidentRepository.get(incidentId);
   if (!incident) {
     return null;
   }
@@ -292,7 +237,7 @@ export async function addTimelineEvent(
   incident.updated_at = new Date().toISOString();
   incident.version += 1;
 
-  incidentStore.set(incidentId, incident);
+  incidentRepository.set(incidentId, incident);
 
   return incident;
 }
