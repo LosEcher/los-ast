@@ -31,6 +31,7 @@
 - [x] `/scan` 已完成第三阶段机器参考产物：新增可生成/校验的 `scan-contract-reference.json`，给后续自动生成文档打底。
 - [x] `/scan` 已完成第四阶段 OpenAPI 片段半自动同步：新增 `scan-openapi-components.yaml` 生成片段与同步脚本，主 `openapi.yaml` 已由生成块嵌入。
 - [x] `/scan` 已完成第五阶段 API_CONTRACT 半自动同步：请求/响应字段总览已改为生成片段，并由校验脚本守护。
+- [x] `/scan` 已完成第六阶段 API_CONTRACT 示例半自动同步：Example Request / Example Success Response 已切到生成片段，并补齐 finding 治理字段示例。
 - [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；当前已进入“代码真源 + 参考产物 + OpenAPI/API_CONTRACT 片段同步”的半自动阶段。
 - [ ] `export-artifacts.mjs` 与 `evidence/service.ts` 仍属于大文件热点，本轮不做结构拆分，只保留治理项。
 
@@ -119,8 +120,13 @@
   - 新增 `packages/api/docs/api/generated/scan-api-contract-sections.md`。
   - `packages/api/docs/api/API_CONTRACT.md` 中请求/响应字段总览已切到 `@generated` block。
   - 已补 `generate:scan-api-contract-sections` / `check:scan-api-contract-sections` 脚本与契约测试守护。
+- 已完成 `/scan` 第六阶段 API_CONTRACT 示例半自动同步：
+  - 新增 `packages/api/scripts/sync-scan-api-contract-examples.ts`。
+  - 新增 `packages/api/docs/api/generated/scan-api-contract-examples.md`。
+  - `packages/api/docs/api/API_CONTRACT.md` 中 Example Request / Example Success Response 已切到 `@generated` block。
+  - 已补 `generate:scan-api-contract-examples` / `check:scan-api-contract-examples` 脚本与契约测试守护。
 - 下一步新增：
-  - 评估是否把 Example Request / Example Success Response 也转成生成或快照校验，继续减少手写示例漂移。
+  - 评估是否把错误码表、限制说明和治理范围说明也转成参考产物或快照校验，继续减少手写说明漂移。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划

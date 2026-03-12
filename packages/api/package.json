@@ -15,12 +15,15 @@
     "check:scan-openapi-components": "tsx scripts/sync-scan-openapi-components.ts --check",
     "generate:scan-api-contract-sections": "tsx scripts/sync-scan-api-contract-sections.ts",
     "check:scan-api-contract-sections": "tsx scripts/sync-scan-api-contract-sections.ts --check",
+    "generate:scan-api-contract-examples": "tsx scripts/sync-scan-api-contract-examples.ts",
+    "check:scan-api-contract-examples": "tsx scripts/sync-scan-api-contract-examples.ts --check",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:smoke": "vitest run tests/smoke",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@los-ast/ai": "file:../ai",
     "@los-ast/core": "file:../core",
     "@los-ast/rules": "file:../rules",
     "@los-ast/shared": "file:../shared",

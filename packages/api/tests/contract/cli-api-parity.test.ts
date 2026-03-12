@@ -281,6 +281,10 @@ describe('CLI/API Parity', () => {
         path.join(testRootDir, 'packages/api/docs/api/generated/scan-api-contract-sections.md'),
         'utf8'
       );
+      const generatedApiContractExamples = await fs.readFile(
+        path.join(testRootDir, 'packages/api/docs/api/generated/scan-api-contract-examples.md'),
+        'utf8'
+      );
       const openApiDoc = await fs.readFile(
         path.join(testRootDir, 'docs/api/openapi.yaml'),
         'utf8'
@@ -361,8 +365,16 @@ describe('CLI/API Parity', () => {
       expect(generatedApiContractSections).toMatch(/@generated scan-api-contract:begin/);
       expect(generatedApiContractSections).toMatch(/interface ScanRequest/);
       expect(generatedApiContractSections).toMatch(/Current `data` properties:/);
+      expect(generatedApiContractExamples).toMatch(/@generated scan-api-contract-examples:begin/);
+      expect(generatedApiContractExamples).toMatch(/"findingSource": "ast"/);
+      expect(generatedApiContractExamples).toMatch(/"governanceDomain": \[/);
+      expect(generatedApiContractExamples).toMatch(/"impactHint": "medium"/);
+      expect(generatedApiContractExamples).toMatch(/"diff": null/);
+      expect(generatedApiContractExamples).toMatch(/"applied": false/);
       expect(apiContract).toContain('<!-- @generated scan-api-contract:begin -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract:end -->');
+      expect(apiContract).toContain('<!-- @generated scan-api-contract-examples:begin -->');
+      expect(apiContract).toContain('<!-- @generated scan-api-contract-examples:end -->');
 
       expect(scanContractReference.request.required).toEqual(['project']);
       expect(scanContractReference.request.baseProperties).toEqual([...SCAN_REQUEST_BASE_PROPERTY_KEYS]);

@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0
 **Stability:** Stable (frozen for remote evidence interface)
-**Last Updated:** 2026-03-12
+**Last Updated:** 2026-03-13
 
 ## Overview
 
@@ -24,6 +24,7 @@ POST /scan
 > 机器可读参考产物见 [scan-contract-reference.json](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-contract-reference.json)。
 > OpenAPI 生成片段见 [scan-openapi-components.yaml](/Users/echerlos/Downloads/projects/los-ast/docs/api/generated/scan-openapi-components.yaml)。
 > API_CONTRACT 生成片段见 [scan-api-contract-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-sections.md)。
+> API_CONTRACT 示例片段见 [scan-api-contract-examples.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-examples.md)。
 
 ### Headers
 
@@ -102,6 +103,7 @@ Current `data` properties:
 - `scanTelemetry`
 <!-- @generated scan-api-contract:end -->
 
+<!-- @generated scan-api-contract-examples:begin -->
 ### Example Request
 
 ```json
@@ -114,9 +116,15 @@ Current `data` properties:
   },
   "project": "myapp",
   "rootDir": "/workspace/myapp",
-  "include": ["src/**/*.ts"],
-  "ignore": ["**/*.spec.ts", "node_modules/**"],
-  "includeStats": true
+  "include": [
+    "src/**/*.ts"
+  ],
+  "ignore": [
+    "**/*.spec.ts",
+    "node_modules/**"
+  ],
+  "includeStats": true,
+  "deterministic": true
 }
 ```
 
@@ -129,23 +137,39 @@ Current `data` properties:
     "findings": [
       {
         "tool": "los-ast",
-        "version": 0,
-        "timestamp": "2026-03-08T12:34:56.789Z",
+        "version": 1,
+        "timestamp": "2026-03-13T00:00:00.000Z",
         "project": "myapp",
         "ruleFile": "rules/languages/typescript/no-console.yml",
         "ruleId": "typescript/no-console",
+        "findingSource": "ast",
+        "governanceDomain": [
+          "frontend",
+          "api"
+        ],
+        "impactHint": "medium",
         "severity": "warning",
         "message": "Unexpected console statement",
         "file": "/workspace/myapp/src/index.ts",
         "language": "typescript",
         "range": {
-          "start": { "line": 10, "column": 0, "index": 245 },
-          "end": { "line": 10, "column": 11, "index": 256 }
+          "start": {
+            "line": 10,
+            "column": 0,
+            "index": 245
+          },
+          "end": {
+            "line": 10,
+            "column": 11,
+            "index": 256
+          }
         },
         "excerpt": "console.log",
         "hasFix": false,
         "proposedReplacement": null,
-        "fingerprint": "a1b2c3d4e5f6..."
+        "diff": null,
+        "applied": false,
+        "fingerprint": "a1b2c3d4e5f60718293a4b5c6d7e8f90"
       }
     ],
     "parseCache": {
@@ -187,6 +211,7 @@ Current `data` properties:
   }
 }
 ```
+<!-- @generated scan-api-contract-examples:end -->
 
 ## Error Responses
 
