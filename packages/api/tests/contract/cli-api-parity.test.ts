@@ -19,6 +19,7 @@ import scopeValidatorPlugin from '../../src/plugins/scope-validator';
 import cancellationPlugin from '../../src/plugins/cancellation';
 import healthCheckPlugin from '../../src/plugins/health-check';
 import { scanRoutes } from '../../src/routes/core';
+import { buildOutputSchema } from '@los-ast/ai';
 
 // __dirname is /Users/echerlos/Downloads/projects/los-ast/packages/api/tests/contract
 // Need to go up 4 levels to reach repo root: tests -> api -> packages -> packages -> repo root
@@ -260,7 +261,7 @@ describe('CLI/API Parity', () => {
   });
 
   describe('Documentation Drift Guards', () => {
-    it('shared type, API contract, and OpenAPI docs should all declare current scan/finding fields', async () => {
+    it('shared type, API contract, OpenAPI docs, and output schemas should all declare current scan/finding fields', async () => {
       const sharedTypes = await fs.readFile(
         path.join(testRootDir, 'packages/shared/src/types/api.ts'),
         'utf8'
@@ -273,9 +274,25 @@ describe('CLI/API Parity', () => {
         path.join(testRootDir, 'docs/api/openapi.yaml'),
         'utf8'
       );
+      const outputSchemaDoc = await fs.readFile(
+        path.join(testRootDir, 'docs/ai/OUTPUT_SCHEMA.md'),
+        'utf8'
+      );
+      const outputJsonSchema = await fs.readFile(
+        path.join(testRootDir, 'packages/ai/schemas/los-ast-output.schema.json'),
+        'utf8'
+      );
+      const parserCapabilities = await fs.readFile(
+        path.join(testRootDir, 'docs/api/ARTIFACT_PARSER_CAPABILITIES.md'),
+        'utf8'
+      );
+      const generatedOutputSchema = buildOutputSchema();
 
       expect(sharedTypes).toMatch(/rootDir\?: string;/);
       expect(sharedTypes).toMatch(/parseFailures\?: \{/);
+      expect(sharedTypes).toMatch(/scanTelemetry\?: \{/);
+      expect(sharedTypes).toMatch(/export type FindingSource = 'ast' \| 'contract' \| 'schema';/);
+      expect(sharedTypes).toMatch(/findingSource\?: FindingSource;/);
       expect(sharedTypes).toMatch(/governanceDomain\?: string\[\] \| null;/);
       expect(sharedTypes).toMatch(/impactHint\?: 'low' \| 'medium' \| 'high' \| null;/);
       expect(sharedTypes).toMatch(/diff\?: string \| null;/);
@@ -283,17 +300,38 @@ describe('CLI/API Parity', () => {
 
       expect(apiContract).toMatch(/rootDir\?: string;/);
       expect(apiContract).toMatch(/parseFailures\?: \{/);
+      expect(apiContract).toMatch(/scanTelemetry\?: \{/);
+      expect(apiContract).toMatch(/findingSource\?: 'ast' \| 'contract' \| 'schema';|findingSource\?: FindingSource;/);
       expect(apiContract).toMatch(/governanceDomain\?: string\[\] \| null;/);
       expect(apiContract).toMatch(/impactHint\?: 'low' \| 'medium' \| 'high' \| null;/);
       expect(apiContract).toMatch(/diff\?: string \| null;/);
       expect(apiContract).toMatch(/applied\?: boolean;/);
 
       expect(openApiDoc).toMatch(/parseFailures:/);
+      expect(openApiDoc).toMatch(/scanTelemetry:/);
+      expect(openApiDoc).toMatch(/findingSource:/);
       expect(openApiDoc).toMatch(/diff:/);
       expect(openApiDoc).toMatch(/applied:/);
       expect(openApiDoc).toMatch(/governanceDomain:/);
       expect(openApiDoc).toMatch(/impactHint:/);
       expect(openApiDoc).toMatch(/nullable: true/);
+
+      expect(outputSchemaDoc).toMatch(/findingSource/);
+      expect(outputSchemaDoc).toMatch(/governanceDomain/);
+      expect(outputSchemaDoc).toMatch(/impactHint/);
+      expect(outputSchemaDoc).toMatch(/diff/);
+      expect(outputSchemaDoc).toMatch(/applied/);
+
+      expect(outputJsonSchema).toMatch(/"findingSource"/);
+      expect(outputJsonSchema).toMatch(/"governanceDomain"/);
+      expect(outputJsonSchema).toMatch(/"impactHint"/);
+      expect(outputJsonSchema).toMatch(/"diff"/);
+      expect(outputJsonSchema).toMatch(/"applied"/);
+      expect(JSON.parse(outputJsonSchema)).toEqual(generatedOutputSchema);
+
+      expect(parserCapabilities).toMatch(/schema-native/);
+      expect(parserCapabilities).toMatch(/Prisma `uuid\(\)`/);
+      expect(parserCapabilities).toMatch(/OpenAPI/);
     });
   });
 });

@@ -48,4 +48,4 @@
 ### `schema-native` `0.2.0`
 
 - 补齐 `schemaComparisons` 的主键变化、字段/组合唯一键 drift、新增必填字段无 default、带 default 的降级提示、enum drift、default drift。
-- 固定最小时间默认值与常见 UUID 默认值函数等价归一。
+- 固定最小时间默认值与常见 UUID 默认值函数等价归一，含 Prisma `uuid()` / `dbgenerated("gen_random_uuid()")` 与 `now()` / `dbgenerated("CURRENT_TIMESTAMP")`。

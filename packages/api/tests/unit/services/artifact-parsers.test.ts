@@ -315,6 +315,32 @@ describe('artifact parsers', () => {
     expect(parsed.schemaArtifacts).toHaveLength(0);
   });
 
+  it('should treat equivalent prisma uuid and dbgenerated defaults as compatible in schemaComparisons', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-prisma-default-equivalence',
+          file: '/tmp/schema.prisma',
+          format: 'prisma',
+          baseline: [
+            'model User {',
+            '  id String @id @default(uuid())',
+            '  createdAt DateTime @default(now())',
+            '}',
+          ].join('\n'),
+          current: [
+            'model User {',
+            '  id String @id @default(dbgenerated("gen_random_uuid()"))',
+            '  createdAt DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)"))',
+            '}',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts).toHaveLength(0);
+  });
+
   it('should grade field-level unique drift in schemaComparisons', () => {
     const parsed = parseArtifactInputs({
       schemaComparisons: [

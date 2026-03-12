@@ -191,6 +191,36 @@ test('markdown scan report includes parse failure aggregates', async () => {
   assert.match(markdown, /parseFailureSamples: 2\/20/)
 })
 
+test('markdown scan report includes scan telemetry aggregates', async () => {
+  const markdown = toMarkdownScan({
+    project: 'custom',
+    filesScanned: 0,
+    findings: [],
+    scanTelemetry: {
+      durationMs: 17,
+      mode: 'native_only',
+      explicitRulePatterns: 0,
+      loadedRules: 0,
+      nativeInputs: {
+        openApiDocuments: 1,
+        openApiComparisons: 2,
+        schemaDocuments: 3,
+        schemaComparisons: 4,
+        contractArtifacts: 5,
+        schemaArtifacts: 6,
+      },
+    },
+  })
+
+  assert.match(markdown, /scanTelemetryMode: native_only/)
+  assert.match(markdown, /scanDurationMs: 17/)
+  assert.match(markdown, /scanRules: explicit=0, loaded=0/)
+  assert.match(
+    markdown,
+    /scanNativeInputs: contractArtifacts:5, openApiComparisons:2, openApiDocuments:1, schemaArtifacts:6, schemaComparisons:4, schemaDocuments:3/
+  )
+})
+
 test('scan parse failure stats cap samples while preserving totals', async () => {
   const rules = await loadRuleFiles(['rules/languages/javascript/no-console-log.yml'])
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'los-ast-'))
@@ -369,6 +399,16 @@ test('frontend governance rules cover window.fetch and common client aliases', a
     'utf8'
   )
   await fs.writeFile(
+    path.join(tmpRoot, 'request-wrapper.ts'),
+    "async function load() { return request('/health', { method: 'GET' }) }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'api-request.ts'),
+    "async function load() { return apiRequest('/items', { method: 'POST', body: payload }) }\n",
+    'utf8'
+  )
+  await fs.writeFile(
     path.join(tmpRoot, 'api-client.ts'),
     "const apiClient = axios.create({ baseURL: '/api' })\nasync function load() { return apiClient.post('/items', payload) }\n",
     'utf8'
@@ -408,6 +448,11 @@ test('frontend governance rules cover window.fetch and common client aliases', a
     "const cacheStore = createCacheStore()\nasync function load() { return cacheStore.get('feature-flag') }\n",
     'utf8'
   )
+  await fs.writeFile(
+    path.join(tmpRoot, 'request-animation.ts'),
+    "function tick() { return requestAnimationFrame(() => {}) }\n",
+    'utf8'
+  )
 
   const scanRes = await scan({
     project: 'custom',
@@ -417,10 +462,12 @@ test('frontend governance rules cover window.fetch and common client aliases', a
     rules,
   })
 
-  assert.equal(scanRes.findings.length, 7)
+  assert.equal(scanRes.findings.length, 9)
   assert.deepEqual(
     scanRes.findings.map((finding) => finding.ruleId).sort(),
     [
+      'lsclaw-governance.frontend-http-client',
+      'lsclaw-governance.frontend-http-client',
       'lsclaw-governance.frontend-http-client',
       'lsclaw-governance.frontend-http-client-axios',
       'lsclaw-governance.frontend-http-client-axios',
@@ -431,6 +478,8 @@ test('frontend governance rules cover window.fetch and common client aliases', a
     ]
   )
   assert.ok(scanRes.findings.some((finding) => /window\.fetch/.test(finding.excerpt)))
+  assert.ok(scanRes.findings.some((finding) => /request\('\/health'/.test(finding.excerpt)))
+  assert.ok(scanRes.findings.some((finding) => /apiRequest\('\/items'/.test(finding.excerpt)))
   assert.ok(scanRes.findings.some((finding) => /apiClient\.post/.test(finding.excerpt)))
   assert.ok(scanRes.findings.some((finding) => /http\.get/.test(finding.excerpt)))
   assert.ok(scanRes.findings.some((finding) => /requestClient\.patch/.test(finding.excerpt)))
@@ -438,6 +487,69 @@ test('frontend governance rules cover window.fetch and common client aliases', a
   assert.ok(scanRes.findings.some((finding) => /billingApi\.get/.test(finding.excerpt)))
   assert.ok(scanRes.findings.some((finding) => /requestGateway\.post/.test(finding.excerpt)))
   assert.ok(!scanRes.findings.some((finding) => /cacheStore\.get/.test(finding.excerpt)))
+  assert.ok(!scanRes.findings.some((finding) => /requestAnimationFrame/.test(finding.excerpt)))
+})
+
+test('frontend governance rules detect wrapper implementations without matching non-http helpers', async () => {
+  const rules = await loadRuleFiles(['rules/projects/lsclaw-governance/frontend-interface.yml'])
+
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'los-ast-'))
+  await fs.writeFile(
+    path.join(tmpRoot, 'request-wrapper.ts'),
+    "async function request(url, options) { return fetch(url, options) }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'api-request-wrapper.ts'),
+    "const apiRequest = async (url, options) => window.fetch(url, options)\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'client-wrapper.ts'),
+    "function billingClient(path, body) { return apiClient.post(path, body) }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'delegating-wrapper.ts'),
+    [
+      "const request = (url, options) => fetch(url, options)",
+      "const apiRequest = (url, options) => request(url, options)",
+    ].join('\n'),
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'non-http-helper.ts'),
+    "function requestAnimation() { return requestAnimationFrame(() => {}) }\n",
+    'utf8'
+  )
+  await fs.writeFile(
+    path.join(tmpRoot, 'metrics-helper.ts'),
+    "const metricsClient = () => metricsStore.getGauge('latency')\n",
+    'utf8'
+  )
+
+  const scanRes = await scan({
+    project: 'custom',
+    rootDir: tmpRoot,
+    include: ['**/*.ts'],
+    ignore: [],
+    rules,
+  })
+
+  const wrapperFindings = scanRes.findings.filter(
+    (finding) => finding.ruleId === 'lsclaw-governance.frontend-http-wrapper-implementation'
+      || finding.ruleId === 'lsclaw-governance.frontend-http-wrapper-implementation-axios'
+      || finding.ruleId === 'lsclaw-governance.frontend-http-wrapper-implementation-delegating'
+  )
+
+  assert.equal(wrapperFindings.length, 5)
+  assert.ok(wrapperFindings.some((finding) => /function request/.test(finding.excerpt)))
+  assert.ok(wrapperFindings.some((finding) => /apiRequest = async/.test(finding.excerpt)))
+  assert.ok(wrapperFindings.some((finding) => /billingClient/.test(finding.excerpt)))
+  assert.ok(wrapperFindings.some((finding) => /const request = \(url, options\) => fetch/.test(finding.excerpt)))
+  assert.ok(wrapperFindings.some((finding) => /const apiRequest = \(url, options\) => request/.test(finding.excerpt)))
+  assert.ok(!wrapperFindings.some((finding) => /requestAnimationFrame/.test(finding.excerpt)))
+  assert.ok(!wrapperFindings.some((finding) => /getGauge/.test(finding.excerpt)))
 })
 
 test('lsclaw-governance rule pack has stable fixture baseline', async () => {

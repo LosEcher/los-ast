@@ -553,6 +553,61 @@ describe('API Contract Tests', () => {
       });
     });
 
+    it('POST /scan should accept native-only input with includeStats without rootDir', async () => {
+      vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 0,
+        findings: [],
+        scanTelemetry: {
+          durationMs: 5,
+          mode: 'native_only',
+          explicitRulePatterns: 0,
+          loadedRules: 0,
+          nativeInputs: {
+            openApiDocuments: 0,
+            openApiComparisons: 0,
+            schemaDocuments: 1,
+            schemaComparisons: 0,
+            contractArtifacts: 0,
+            schemaArtifacts: 0,
+          },
+        },
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          includeStats: true,
+          schemaDocuments: [
+            {
+              source: 'schema-inline',
+              file: '/tmp/schema.prisma',
+              content: 'model User {\n  id String @id\n}\n',
+              format: 'prisma',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.scanTelemetry).toMatchObject({
+        mode: 'native_only',
+        nativeInputs: {
+          schemaDocuments: 1,
+        },
+      });
+    });
+
     it('POST /scan should accept openApiComparisons as native contract comparison input', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,

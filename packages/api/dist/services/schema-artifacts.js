@@ -30,13 +30,18 @@ function normalizeDefaultValue(value) {
         normalized = normalized.slice(1, -1).trim();
     }
     normalized = normalized.toLowerCase();
+    const dbGeneratedMatch = normalized.match(/^dbgenerated\((.+)\)$/);
+    if (dbGeneratedMatch) {
+        return normalizeDefaultValue(dbGeneratedMatch[1]);
+    }
     if (normalized === 'now()'
         || normalized === 'current_timestamp'
         || normalized === 'current_timestamp()'
         || /^current_timestamp\(\d+\)$/.test(normalized)) {
         return '@current_timestamp';
     }
-    if (normalized === 'gen_random_uuid()'
+    if (normalized === 'uuid()'
+        || normalized === 'gen_random_uuid()'
         || normalized === 'uuid_generate_v4()') {
         return '@generated_uuid';
     }

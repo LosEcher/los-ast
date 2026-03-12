@@ -40,3 +40,4 @@ los-ast 的 `--format jsonl` 输出为 JSON Lines：每行一个 JSON 对象，�
 ## JSON Schema
 
 - 机器可读 schema：`packages/ai/schemas/los-ast-output.schema.json`
+- 当前由 `packages/ai/src/output-schema-spec.mjs` 生成，避免机器 schema 与共享契约漂移。

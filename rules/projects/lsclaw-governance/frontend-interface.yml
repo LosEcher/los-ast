@@ -8,6 +8,14 @@
       - pattern: fetch($URL, $OPTIONS)
       - pattern: window.fetch($URL)
       - pattern: window.fetch($URL, $OPTIONS)
+      - pattern: request($URL)
+      - pattern: request($URL, $OPTIONS)
+      - pattern: apiRequest($URL)
+      - pattern: apiRequest($URL, $OPTIONS)
+      - pattern: httpRequest($URL)
+      - pattern: httpRequest($URL, $OPTIONS)
+      - pattern: restRequest($URL)
+      - pattern: restRequest($URL, $OPTIONS)
   governance:
     domain: frontend
     owner: platform
@@ -35,3 +43,89 @@
     owner: platform
     impact: medium
     rationale: 保持接口调用一致性，便于 API 契约治理与审计
+
+- id: lsclaw-governance.frontend-http-wrapper-implementation
+  language: TypeScript
+  severity: info
+  message: "检测到自定义 HTTP wrapper 实现，建议纳入统一网络层约束与审计范围"
+  rule:
+    any:
+      - pattern: async function $NAME($$$ARGS) { return fetch($URL) }
+      - pattern: async function $NAME($$$ARGS) { return fetch($URL, $OPTIONS) }
+      - pattern: async function $NAME($$$ARGS) { return window.fetch($URL) }
+      - pattern: async function $NAME($$$ARGS) { return window.fetch($URL, $OPTIONS) }
+      - pattern: function $NAME($$$ARGS) { return fetch($URL) }
+      - pattern: function $NAME($$$ARGS) { return fetch($URL, $OPTIONS) }
+      - pattern: function $NAME($$$ARGS) { return window.fetch($URL) }
+      - pattern: function $NAME($$$ARGS) { return window.fetch($URL, $OPTIONS) }
+      - pattern: const $NAME = async ($$$ARGS) => fetch($URL)
+      - pattern: const $NAME = async ($$$ARGS) => fetch($URL, $OPTIONS)
+      - pattern: const $NAME = async ($$$ARGS) => window.fetch($URL)
+      - pattern: const $NAME = async ($$$ARGS) => window.fetch($URL, $OPTIONS)
+      - pattern: const $NAME = ($$$ARGS) => fetch($URL)
+      - pattern: const $NAME = ($$$ARGS) => fetch($URL, $OPTIONS)
+      - pattern: const $NAME = ($$$ARGS) => window.fetch($URL)
+      - pattern: const $NAME = ($$$ARGS) => window.fetch($URL, $OPTIONS)
+  constraints:
+    - name: NAME
+      regex: "^(?:request|apiRequest|httpRequest|restRequest|[A-Za-z_$][\\w$]*(?:Request|Fetch|Client))$"
+      mode: any
+  governance:
+    domain: frontend
+    owner: platform
+    impact: low
+    rationale: 识别散落的自定义网络层实现，便于统一纳管与后续封装治理
+
+- id: lsclaw-governance.frontend-http-wrapper-implementation-delegating
+  language: TypeScript
+  severity: info
+  message: "检测到多跳 HTTP wrapper 转发，建议纳入统一网络层约束与审计范围"
+  rule:
+    any:
+      - pattern: async function $NAME($$$ARGS) { return $TARGET($$$FORWARD) }
+      - pattern: function $NAME($$$ARGS) { return $TARGET($$$FORWARD) }
+      - pattern: const $NAME = async ($$$ARGS) => $TARGET($$$FORWARD)
+      - pattern: const $NAME = ($$$ARGS) => $TARGET($$$FORWARD)
+  constraints:
+    - name: NAME
+      regex: "^(?:request|apiRequest|httpRequest|restRequest|[A-Za-z_$][\\w$]*(?:Request|Fetch|Client))$"
+      mode: any
+    - name: TARGET
+      regex: "^(?:request|apiRequest|httpRequest|restRequest|[A-Za-z_$][\\w$]*(?:Request|Fetch|Client))$"
+      mode: any
+  governance:
+    domain: frontend
+    owner: platform
+    impact: low
+    rationale: 识别一层 wrapper-to-wrapper 转发，便于统一纳管与后续封装治理
+
+- id: lsclaw-governance.frontend-http-wrapper-implementation-axios
+  language: TypeScript
+  severity: info
+  message: "检测到自定义 HTTP wrapper 实现，建议纳入统一网络层约束与审计范围"
+  rule:
+    any:
+      - pattern: async function $NAME($$$ARGS) { return $CLIENT.$METHOD($URL) }
+      - pattern: async function $NAME($$$ARGS) { return $CLIENT.$METHOD($URL, $OPTIONS) }
+      - pattern: function $NAME($$$ARGS) { return $CLIENT.$METHOD($URL) }
+      - pattern: function $NAME($$$ARGS) { return $CLIENT.$METHOD($URL, $OPTIONS) }
+      - pattern: const $NAME = async ($$$ARGS) => $CLIENT.$METHOD($URL)
+      - pattern: const $NAME = async ($$$ARGS) => $CLIENT.$METHOD($URL, $OPTIONS)
+      - pattern: const $NAME = ($$$ARGS) => $CLIENT.$METHOD($URL)
+      - pattern: const $NAME = ($$$ARGS) => $CLIENT.$METHOD($URL, $OPTIONS)
+  constraints:
+    - name: NAME
+      regex: "^(?:request|apiRequest|httpRequest|restRequest|[A-Za-z_$][\\w$]*(?:Request|Fetch|Client))$"
+      mode: any
+    - name: METHOD
+      regex: "^(get|post|put|patch|delete)$"
+      mode: any
+      flags: "i"
+    - name: CLIENT
+      regex: "^(?:axios|client|http|(?:api|http|request|rest)[A-Z_$][\\w$]*|[A-Za-z_$][\\w$]*(?:Api|Client|Http|Request|Rest))$"
+      mode: any
+  governance:
+    domain: frontend
+    owner: platform
+    impact: low
+    rationale: 识别散落的自定义网络层实现，便于统一纳管与后续封装治理

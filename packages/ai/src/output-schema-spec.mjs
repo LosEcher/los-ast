@@ -1,0 +1,68 @@
+export const OUTPUT_SCHEMA_SPEC = Object.freeze({
+  required: [
+    'tool',
+    'version',
+    'timestamp',
+    'project',
+    'ruleId',
+    'severity',
+    'message',
+    'file',
+    'language',
+    'range',
+    'excerpt',
+    'hasFix',
+    'fingerprint',
+  ],
+  properties: {
+    tool: { const: 'los-ast' },
+    version: { type: ['number', 'string'] },
+    timestamp: { type: 'string' },
+    project: { type: 'string' },
+    ruleFile: { type: ['string', 'null'] },
+    ruleId: { type: 'string' },
+    findingSource: { enum: ['ast', 'contract', 'schema'] },
+    governanceDomain: {
+      type: ['array', 'null'],
+      items: { type: 'string' },
+    },
+    impactHint: {
+      type: ['string', 'null'],
+      enum: ['low', 'medium', 'high', null],
+    },
+    severity: { enum: ['info', 'warning', 'error'] },
+    message: { type: 'string' },
+    file: { type: 'string' },
+    language: { type: 'string' },
+    range: {
+      type: 'object',
+      required: ['start', 'end'],
+      properties: {
+        start: {
+          type: 'object',
+          required: ['line', 'column', 'index'],
+          properties: {
+            line: { type: 'integer' },
+            column: { type: 'integer' },
+            index: { type: 'integer' },
+          },
+        },
+        end: {
+          type: 'object',
+          required: ['line', 'column', 'index'],
+          properties: {
+            line: { type: 'integer' },
+            column: { type: 'integer' },
+            index: { type: 'integer' },
+          },
+        },
+      },
+    },
+    excerpt: { type: 'string' },
+    hasFix: { type: 'boolean' },
+    proposedReplacement: { type: ['string', 'null'] },
+    diff: { type: ['string', 'null'] },
+    applied: { type: 'boolean' },
+    fingerprint: { type: 'string' },
+  },
+})

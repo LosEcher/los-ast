@@ -141,6 +141,21 @@ export interface ScanResult {
       error: string;
     }>;
   };
+  scanTelemetry?: {
+    durationMs: number;
+    mode: 'ast' | 'native_only' | 'hybrid';
+    explicitRulePatterns: number;
+    loadedRules: number;
+    estimatedFiles?: number;
+    nativeInputs: {
+      openApiDocuments: number;
+      openApiComparisons: number;
+      schemaDocuments: number;
+      schemaComparisons: number;
+      contractArtifacts: number;
+      schemaArtifacts: number;
+    };
+  };
 }
 
 // === 符号发现相关类型 ===

@@ -119,11 +119,28 @@ export interface ParseFailureStats {
   samples: ParseFailureSample[];
 }
 
+export interface ScanTelemetry {
+  durationMs: number;
+  mode: 'ast' | 'native_only' | 'hybrid';
+  explicitRulePatterns: number;
+  loadedRules: number;
+  estimatedFiles?: number;
+  nativeInputs: {
+    openApiDocuments: number;
+    openApiComparisons: number;
+    schemaDocuments: number;
+    schemaComparisons: number;
+    contractArtifacts: number;
+    schemaArtifacts: number;
+  };
+}
+
 export interface ScanResult {
   filesScanned: number;
   findings: Finding[];
   parseCache?: ParseCacheStats;
   parseFailures?: ParseFailureStats;
+  scanTelemetry?: ScanTelemetry;
 }
 
 export declare function discoverFiles(options: {

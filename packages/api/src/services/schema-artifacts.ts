@@ -65,6 +65,11 @@ function normalizeDefaultValue(value: string | undefined): string | undefined {
 
   normalized = normalized.toLowerCase();
 
+  const dbGeneratedMatch = normalized.match(/^dbgenerated\((.+)\)$/);
+  if (dbGeneratedMatch) {
+    return normalizeDefaultValue(dbGeneratedMatch[1]);
+  }
+
   if (
     normalized === 'now()'
     || normalized === 'current_timestamp'
@@ -75,7 +80,8 @@ function normalizeDefaultValue(value: string | undefined): string | undefined {
   }
 
   if (
-    normalized === 'gen_random_uuid()'
+    normalized === 'uuid()'
+    || normalized === 'gen_random_uuid()'
     || normalized === 'uuid_generate_v4()'
   ) {
     return '@generated_uuid';

@@ -96,6 +96,21 @@ describe('ScanService', () => {
         expect.objectContaining({ includeStats: true })
       );
       expect(result.parseCache).toBeDefined();
+      expect(result.scanTelemetry).toMatchObject({
+        mode: 'ast',
+        explicitRulePatterns: 0,
+        loadedRules: 0,
+        estimatedFiles: 0,
+        nativeInputs: {
+          openApiDocuments: 0,
+          openApiComparisons: 0,
+          schemaDocuments: 0,
+          schemaComparisons: 0,
+          contractArtifacts: 0,
+          schemaArtifacts: 0,
+        },
+      });
+      expect(result.scanTelemetry?.durationMs).toEqual(expect.any(Number));
     });
 
     it('should merge contract artifacts as contract findings', async () => {
@@ -179,6 +194,7 @@ describe('ScanService', () => {
     it('should allow native-only contract scans without rootDir and skip core.scan', async () => {
       const result = await scanService.execute({
         project: 'test-project',
+        includeStats: true,
         openApiDocuments: [
           {
             source: 'openapi-inline',
@@ -202,6 +218,19 @@ describe('ScanService', () => {
       expect(result.filesScanned).toBe(0);
       expect(result.findings).toHaveLength(3);
       expect(result.findings.every((finding) => finding.findingSource === 'contract')).toBe(true);
+      expect(result.scanTelemetry).toMatchObject({
+        mode: 'native_only',
+        explicitRulePatterns: 0,
+        loadedRules: 0,
+        nativeInputs: {
+          openApiDocuments: 1,
+          openApiComparisons: 0,
+          schemaDocuments: 0,
+          schemaComparisons: 0,
+          contractArtifacts: 0,
+          schemaArtifacts: 0,
+        },
+      });
     });
 
     it('should allow native-only scans when core is not ready', async () => {
@@ -2072,6 +2101,40 @@ describe('ScanService', () => {
               '  created_at TIMESTAMP NOT NULL DEFAULT (now()),',
               '  PRIMARY KEY (id)',
               ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
+    it('should treat equivalent prisma uuid and dbgenerated defaults as compatible in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-prisma-default-equivalence',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id String @id @default(uuid())',
+              '  createdAt DateTime @default(now())',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              '  id String @id @default(dbgenerated("gen_random_uuid()"))',
+              '  createdAt DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)"))',
+              '}',
             ].join('\n'),
           },
         ],

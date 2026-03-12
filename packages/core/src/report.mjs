@@ -26,7 +26,7 @@ export function toJsonLines(records, deterministic = false) {
   return records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '')
 }
 
-export function toMarkdownScan({ project, filesScanned, findings, parseFailures }) {
+export function toMarkdownScan({ project, filesScanned, findings, parseFailures, scanTelemetry }) {
   const lines = []
   lines.push(`# los-ast scan report`)
   lines.push('')
@@ -45,6 +45,21 @@ export function toMarkdownScan({ project, filesScanned, findings, parseFailures 
     lines.push(`- parseFailureSamples: ${parseFailures.samples.length}/${parseFailures.sampleLimit}`)
     if (parseFailures.truncated) {
       lines.push(`- parseFailureSamplesTruncated: true`)
+    }
+  }
+  if (scanTelemetry) {
+    lines.push(`- scanTelemetryMode: ${scanTelemetry.mode}`)
+    lines.push(`- scanDurationMs: ${scanTelemetry.durationMs}`)
+    lines.push(`- scanRules: explicit=${scanTelemetry.explicitRulePatterns}, loaded=${scanTelemetry.loadedRules}`)
+    if (typeof scanTelemetry.estimatedFiles === 'number') {
+      lines.push(`- scanEstimatedFiles: ${scanTelemetry.estimatedFiles}`)
+    }
+    const nativeInputs = Object.entries(scanTelemetry.nativeInputs || {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, count]) => `${name}:${count}`)
+      .join(', ')
+    if (nativeInputs) {
+      lines.push(`- scanNativeInputs: ${nativeInputs}`)
     }
   }
   lines.push('')

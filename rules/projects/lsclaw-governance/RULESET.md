@@ -68,15 +68,19 @@ lsclaw-governance
   - `fetch(url, options)`
   - `window.fetch(url)`
   - `window.fetch(url, options)`
+  - `request(url, options)` / `apiRequest(url, options)`
   - `axios.get(url)`
   - `axios.get(url, args)` 及其他已声明 method
   - `apiClient.post(url, args)` / `client.get(url)`
   - `requestClient.patch(url, args)` / `restClient.delete(url)`
   - 受限泛化对象名，如 `billingApi.get(url)` / `requestGateway.post(url, args)`
   - `const http = axios; http.get(url)`
+  - wrapper 实现体，如 `async function request(...) { return fetch(...) }`
+  - wrapper 实现体，如 `function billingClient(...) { return apiClient.post(...) }`
+  - 一层 wrapper-to-wrapper 转发，如 `const apiRequest = (...) => request(...)`
 - 当前不覆盖以下场景：
   - 任意自定义对象名的 `.get/.post/...`，例如 `metricsClient.getGauge(...)`
-  - 更高层的自定义网络层封装识别
+  - 超过一层以上的 wrapper 链或需要数据流分析的更深封装识别
 
 ## Fixture Baseline
 

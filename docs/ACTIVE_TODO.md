@@ -66,7 +66,7 @@
 - 已完成 `schemaDocuments -> schema findings` 最小闭环。
 - 当前覆盖主键缺失、敏感字段可空、生命周期默认值、审计时间默认值 4 类基础检查。
 - 已完成最小 `schemaComparisons -> compatibility findings` 闭环，当前覆盖字段删除、类型变化、可空性收紧、新增必填字段无 default、enum 值删除、默认值变化分级。
-- 已补时间默认值函数与常见 UUID 默认值函数的最小等价归一（如 `CURRENT_TIMESTAMP` / `now()`、`uuid_generate_v4()` / `gen_random_uuid()`）。
+- 已补时间默认值函数与常见 UUID 默认值函数的最小等价归一（如 `CURRENT_TIMESTAMP` / `now()`、`uuid_generate_v4()` / `gen_random_uuid()`、Prisma `uuid()` / `dbgenerated("gen_random_uuid()")`）。
 - 已补主键变化、字段/组合唯一键 drift comparison，以及“新增必填字段但带 default”的降级提示。
 - 下一步扩展到更细的兼容性等级与方言等价规则。
 
@@ -80,6 +80,8 @@
 - 已补 native parser 产物与 passthrough artifact 的去重，避免相同 finding 双计数。
 - 已补 AST parse-failure stats，可在 `includeStats=true` 时观察被跳过的解析失败文件。
 - 已补 parse-failure telemetry 聚合：`sampleLimit`、`byLanguage` 与统一 Markdown 展示已收口。
+- 已将 output JSON schema 的机器契约抽到 `packages/ai/src/output-schema-spec.mjs`，并由合同测试校验生成结果与落盘 schema 一致。
+- 已补 `/scan` 结构化 telemetry：`durationMs`、执行模式、规则模式计数、native input 计数，当前在 `includeStats=true` 时返回。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划
@@ -125,10 +127,14 @@
   - 组合 guard 当前会保留 `additionalConditions`，明确还有额外门禁存在
 - 已完成第十阶段 helper gate 最小转发：
   - 支持同文件、单一 `return`、参数与实参一一映射的 helper boolean gate
+  - 支持 `const foo = (...) => { ... }` 这类 arrow helper / route builder 的最小作用域提取
   - 当前 helper 展开仅限静态可替换表达式，不处理多语句或有副作用函数
 - 第十一阶段优先补更复杂控制流：
   - 已补非字面静态 helper 转发后的 gate 识别（局部静态 alias + return、同文件 helper 链）
   - 已补带外层否定与括号的 helper compound / early-return guard 归因
+  - 已补 expression-bodied arrow helper 与 arrow route builder 的最小作用域提取
+  - 已补 single-parameter arrow helper / route builder（如 `flag => flag`、`async server => {}`）
+  - 已补 grouped nested `&&` 的递归必需 flag 提取，并对 grouped `||` 保持保守附加条件归因
   - 更复杂 `else if` 链与布尔表达式归因
   - 已补多 flag 组合场景下的保守分层策略（`activation.mode=flag_set`）
 - 第十二阶段再考虑 Express/前端 router 等其他框架。
@@ -139,7 +145,8 @@
 - 固定 `rules/projects/lsclaw-governance/` 的组织方式。
 - 已完成前端 HTTP 治理规则的第一阶段语义收口：
   - `frontend-interface.yml` 已拆分为 `fetch` 与 `axios method` 两条规则，保留原 `id` 给 `fetch` 以维持兼容。
-  - 已补常见直接调用形态覆盖：`fetch(url)`、`fetch(url, options)`、`window.fetch(url)`、`axios.{get,post,put,patch,delete}(url[, args])`、常见 `apiClient/client/http/httpClient/requestClient/restClient` 实例名，以及受限泛化对象名（如 `billingApi.get(...)`、`requestGateway.post(...)`）。
+  - 已补常见直接调用形态覆盖：`fetch(url)`、`fetch(url, options)`、`window.fetch(url)`、`request(url, options)` / `apiRequest(url, options)` 这类函数式 wrapper、`axios.{get,post,put,patch,delete}(url[, args])`、常见 `apiClient/client/http/httpClient/requestClient/restClient` 实例名，以及受限泛化对象名（如 `billingApi.get(...)`、`requestGateway.post(...)`）。
+  - 已补最小 wrapper 实现体识别：可识别直接转发到 `fetch/window.fetch`、受约束 HTTP client，以及一层 wrapper-to-wrapper 转发的函数/arrow wrapper。
   - 已补针对性回归测试与负例保护，避免 helper 调用（如 `axios.create(...)`）误报。
   - 已在规则文档中补充“不要在 capture 不共享的 `any` 规则上挂分支特有 constraint”的编写约束。
 - 已补最小整包 fixtures 基线：

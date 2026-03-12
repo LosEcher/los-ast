@@ -232,6 +232,20 @@ describe('API Integration Tests', () => {
             },
           ],
         },
+        scanTelemetry: {
+          durationMs: 12,
+          mode: 'ast',
+          explicitRulePatterns: 0,
+          loadedRules: 0,
+          nativeInputs: {
+            openApiDocuments: 0,
+            openApiComparisons: 0,
+            schemaDocuments: 0,
+            schemaComparisons: 0,
+            contractArtifacts: 0,
+            schemaArtifacts: 0,
+          },
+        },
       } as any);
 
       const response = await app.inject({
@@ -265,6 +279,20 @@ describe('API Integration Tests', () => {
           },
         ],
       });
+      expect(body.data.scanTelemetry).toMatchObject({
+        mode: 'ast',
+        explicitRulePatterns: 0,
+        loadedRules: 0,
+        nativeInputs: {
+          openApiDocuments: 0,
+          openApiComparisons: 0,
+          schemaDocuments: 0,
+          schemaComparisons: 0,
+          contractArtifacts: 0,
+          schemaArtifacts: 0,
+        },
+      });
+      expect(body.data.scanTelemetry.durationMs).toEqual(expect.any(Number));
     });
 
     it('POST /scan should forward openApiDocuments to scan service', async () => {
@@ -344,6 +372,55 @@ describe('API Integration Tests', () => {
             format: 'yaml',
           }),
         ]),
+      }));
+    });
+
+    it('POST /scan should allow native-only requests with includeStats without rootDir', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 0,
+        findings: [],
+        scanTelemetry: {
+          durationMs: 4,
+          mode: 'native_only',
+          explicitRulePatterns: 0,
+          loadedRules: 0,
+          nativeInputs: {
+            openApiDocuments: 1,
+            openApiComparisons: 0,
+            schemaDocuments: 0,
+            schemaComparisons: 0,
+            contractArtifacts: 0,
+            schemaArtifacts: 0,
+          },
+        },
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          includeStats: true,
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        rootDir: undefined,
+        includeStats: true,
       }));
     });
 

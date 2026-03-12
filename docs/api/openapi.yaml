@@ -969,6 +969,36 @@ components:
                         type: string
                       error:
                         type: string
+            scanTelemetry:
+              type: object
+              description: 统一扫描 telemetry（仅 includeStats=true）
+              properties:
+                durationMs:
+                  type: number
+                mode:
+                  type: string
+                  enum: [ast, native_only, hybrid]
+                explicitRulePatterns:
+                  type: integer
+                loadedRules:
+                  type: integer
+                estimatedFiles:
+                  type: integer
+                nativeInputs:
+                  type: object
+                  properties:
+                    openApiDocuments:
+                      type: integer
+                    openApiComparisons:
+                      type: integer
+                    schemaDocuments:
+                      type: integer
+                    schemaComparisons:
+                      type: integer
+                    contractArtifacts:
+                      type: integer
+                    schemaArtifacts:
+                      type: integer
 
     Finding:
       type: object

@@ -1431,6 +1431,368 @@ export async function buildServer(server) {
   assert.equal(bind.evidence.activation.mode, 'flag_set')
 })
 
+test('hub-lite artifact export resolves arrow-function helper guards and route builders', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-arrow-helper-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-arrow-helper-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/preview.ts',
+    `export default async function previewRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import previewRoutes from './routes/preview.js'
+
+const previewGate = (experimentalEnabled, allowPreview) => {
+  const ready = experimentalEnabled && allowPreview
+  return ready
+}
+
+export const buildServer = async (server) => {
+  const allowPreview = server.hasDecorator('preview')
+
+  if (previewGate(ROUTE_CONFIG.enableExperimental, allowPreview)) {
+    await server.register(previewRoutes, { prefix: '/experimental-preview' })
+  }
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'previewRoutes')
+  const bind = structureMap.route_binds.find((item) => item.path === '/experimental-preview/status')
+
+  assert.equal(mount.controlFlowGuard.effectiveCondition, 'ROUTE_CONFIG.enableExperimental && allowPreview')
+  assert.equal(mount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+  assert.equal(mount.activation.guardShape, 'compound_and')
+  assert.deepEqual(mount.activation.additionalConditions, ['allowPreview'])
+  assert.equal(bind.evidence.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+})
+
+test('hub-lite artifact export resolves expression-bodied arrow helpers', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-arrow-expression-helper-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-arrow-expression-helper-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+  enableInternal: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/internal.ts',
+    `export default async function internalRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import internalRoutes from './routes/internal.js'
+
+const previewGate = (experimentalEnabled, allowPreview) => experimentalEnabled && allowPreview
+const internalGate = (experimentalEnabled, allowPreview, internalEnabled) => previewGate(experimentalEnabled, allowPreview) && internalEnabled
+
+export async function buildServer(server) {
+  const allowPreview = server.hasDecorator('preview')
+
+  if (internalGate(ROUTE_CONFIG.enableExperimental, allowPreview, ROUTE_CONFIG.enableInternal)) {
+    await server.register(internalRoutes, { prefix: '/internal' })
+  }
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'internalRoutes')
+  const bind = structureMap.route_binds.find((item) => item.path === '/internal/status')
+
+  assert.equal(
+    mount.controlFlowGuard.effectiveCondition,
+    'ROUTE_CONFIG.enableExperimental && allowPreview && ROUTE_CONFIG.enableInternal'
+  )
+  assert.equal(mount.activation.mode, 'flag_set')
+  assert.deepEqual(
+    mount.activation.flags,
+    ['ENABLE_EXPERIMENTAL_ROUTES', 'ENABLE_INTERNAL_ROUTES']
+  )
+  assert.deepEqual(mount.activation.additionalConditions, ['allowPreview'])
+  assert.equal(bind.evidence.activation.mode, 'flag_set')
+})
+
+test('hub-lite artifact export resolves single-parameter arrow helpers and builders', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-single-arrow-helper-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-single-arrow-helper-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/preview.ts',
+    `export default async function previewRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import previewRoutes from './routes/preview.js'
+
+const previewGate = enabled => enabled
+
+export const buildServer = async server => {
+  if (previewGate(ROUTE_CONFIG.enableExperimental)) {
+    await server.register(previewRoutes, { prefix: '/experimental-preview' })
+  }
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'previewRoutes')
+  const bind = structureMap.route_binds.find((item) => item.path === '/experimental-preview/status')
+
+  assert.equal(mount.controlFlowGuard.effectiveCondition, 'ROUTE_CONFIG.enableExperimental')
+  assert.equal(mount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+  assert.equal(bind.evidence.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+})
+
+test('hub-lite artifact export extracts nested required flags from grouped and-terms', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-nested-and-flags-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-nested-and-flags-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+  enableInternal: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/internal.ts',
+    `export default async function internalRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import internalRoutes from './routes/internal.js'
+
+export async function buildServer(server) {
+  const adminMode = server.hasDecorator('admin')
+
+  if (ROUTE_CONFIG.enableExperimental && (ROUTE_CONFIG.enableInternal && adminMode)) {
+    await server.register(internalRoutes, { prefix: '/internal' })
+  }
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'internalRoutes')
+
+  assert.equal(mount.activation.mode, 'flag_set')
+  assert.deepEqual(
+    mount.activation.flags,
+    ['ENABLE_EXPERIMENTAL_ROUTES', 'ENABLE_INTERNAL_ROUTES']
+  )
+  assert.deepEqual(mount.activation.additionalConditions, ['adminMode'])
+})
+
+test('hub-lite artifact export keeps grouped or-terms as additional conditions when flags are not universally required', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-grouped-or-flags-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-grouped-or-flags-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+  enableInternal: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/preview.ts',
+    `export default async function previewRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import previewRoutes from './routes/preview.js'
+
+export async function buildServer(server) {
+  const adminMode = server.hasDecorator('admin')
+
+  if (ROUTE_CONFIG.enableExperimental && (ROUTE_CONFIG.enableInternal || adminMode)) {
+    await server.register(previewRoutes, { prefix: '/experimental-preview' })
+  }
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'previewRoutes')
+
+  assert.equal(mount.activation.mode, 'flag')
+  assert.equal(mount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+  assert.deepEqual(mount.activation.additionalConditions, ['ROUTE_CONFIG.enableInternal || adminMode'])
+})
+
 test('hub-lite artifact export probes los-ast api runtime routes using actual default route wiring', () => {
   const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-runtime-output-'))
   const repoRoot = process.cwd()

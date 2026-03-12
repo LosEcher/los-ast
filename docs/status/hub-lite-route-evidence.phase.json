@@ -25,6 +25,11 @@
       "same_file_static_alias_helper_guard",
       "same_file_helper_chain_guard",
       "negated_helper_compound_guard",
+      "arrow_helper_guard",
+      "expression_arrow_helper_guard",
+      "single_param_arrow_helper_guard",
+      "nested_and_flag_set_guard",
+      "nested_or_additional_condition_guard",
       "multi_flag_guard_set",
       "unsafe_helper_fallback"
     ]
@@ -33,7 +38,7 @@
     "l1_hub_lite_artifacts": {
       "command": "node --test ./test/hub-lite-artifacts.test.mjs",
       "status": "pass",
-      "result": "18/18"
+      "result": "23/23"
     },
     "l2_api_build": {
       "command": "npm run build:api",
@@ -42,12 +47,12 @@
     "l3_api_tests": {
       "command": "npm run test:api",
       "status": "pass",
-      "result": "21 files, 230 tests"
+      "result": "21 files, 232 tests"
     },
     "l4_repo_tests": {
       "command": "npm run test",
       "status": "pass",
-      "result": "core 11 tests + api 21 files / 230 tests"
+      "result": "core 11 tests + api 21 files / 232 tests"
     }
   },
   "evidenceCounts": {

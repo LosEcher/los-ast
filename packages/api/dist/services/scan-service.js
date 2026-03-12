@@ -102,12 +102,21 @@ function hasNativeArtifactInputs(options) {
         options.schemaArtifacts,
     ].some((items) => Array.isArray(items) && items.length > 0);
 }
+function countNativeInputs(options) {
+    return {
+        openApiDocuments: Array.isArray(options.openApiDocuments) ? options.openApiDocuments.length : 0,
+        openApiComparisons: Array.isArray(options.openApiComparisons) ? options.openApiComparisons.length : 0,
+        schemaDocuments: Array.isArray(options.schemaDocuments) ? options.schemaDocuments.length : 0,
+        schemaComparisons: Array.isArray(options.schemaComparisons) ? options.schemaComparisons.length : 0,
+        contractArtifacts: Array.isArray(options.contractArtifacts) ? options.contractArtifacts.length : 0,
+        schemaArtifacts: Array.isArray(options.schemaArtifacts) ? options.schemaArtifacts.length : 0,
+    };
+}
 function requiresCodeScan(options) {
     return typeof options.rootDir !== 'undefined'
         || (Array.isArray(options.include) && options.include.length > 0)
         || (Array.isArray(options.ignore) && options.ignore.length > 0)
-        || (Array.isArray(options.rules) && options.rules.length > 0)
-        || options.includeStats === true;
+        || (Array.isArray(options.rules) && options.rules.length > 0);
 }
 function buildFindingsFromArtifacts({ project, contractArtifacts, schemaArtifacts, deterministic = false, defaultFindingSource, }) {
     const artifacts = defaultFindingSource === 'schema'
@@ -179,7 +188,10 @@ export class ScanService {
      * 4. 执行扫描（带超时和取消支持）
      */
     async execute(options) {
+        const startedAt = Date.now();
         const { project, rootDir, include, ignore, rules: rulePatterns, includeStats, deterministic, openApiDocuments, openApiComparisons, schemaDocuments, schemaComparisons, contractArtifacts, schemaArtifacts, signal, } = options;
+        const nativeInputCounts = countNativeInputs(options);
+        const explicitRulePatterns = Array.isArray(rulePatterns) ? rulePatterns.length : 0;
         const parsedArtifacts = parseArtifactInputs({
             openApiDocuments,
             openApiComparisons,
@@ -214,6 +226,8 @@ export class ScanService {
             filesScanned: 0,
             findings: [],
         };
+        let loadedRules = 0;
+        let estimatedFiles;
         if (shouldRunAstScan) {
             if (!hasScannableRootDir(rootDir)) {
                 throw new ValidationError('INVALID_ROOTDIR', 'rootDir must be a non-empty string');
@@ -226,8 +240,10 @@ export class ScanService {
             const rules = rulePatterns && rulePatterns.length > 0
                 ? await loadRuleFiles(rulePatterns)
                 : [];
+            loadedRules = rules.length;
             // 预估文件数量
             const estimatedCount = await this.estimateFileCount(rootDir, include, ignore);
+            estimatedFiles = estimatedCount;
             // 检查文件数限制（硬约束 #4）
             if (estimatedCount > SCAN_LIMITS.maxFilesPerSyncScan) {
                 throw new ScanTooLargeError(SCAN_LIMITS.maxFilesPerSyncScan, estimatedCount);
@@ -259,6 +275,16 @@ export class ScanService {
             defaultFindingSource: 'schema',
         });
         if (contractFindings.length === 0 && schemaFindings.length === 0) {
+            if (includeStats) {
+                result.scanTelemetry = {
+                    durationMs: Date.now() - startedAt,
+                    mode: shouldRunAstScan && hasNativeArtifacts ? 'hybrid' : shouldRunAstScan ? 'ast' : 'native_only',
+                    explicitRulePatterns,
+                    loadedRules,
+                    ...(typeof estimatedFiles === 'number' ? { estimatedFiles } : {}),
+                    nativeInputs: nativeInputCounts,
+                };
+            }
             return result;
         }
         const mergedFindings = [
@@ -269,10 +295,21 @@ export class ScanService {
         if (deterministic) {
             mergedFindings.sort(deterministicSortFindings);
         }
-        return {
+        const mergedResult = {
             ...result,
             findings: mergedFindings,
         };
+        if (includeStats) {
+            mergedResult.scanTelemetry = {
+                durationMs: Date.now() - startedAt,
+                mode: shouldRunAstScan && hasNativeArtifacts ? 'hybrid' : shouldRunAstScan ? 'ast' : 'native_only',
+                explicitRulePatterns,
+                loadedRules,
+                ...(typeof estimatedFiles === 'number' ? { estimatedFiles } : {}),
+                nativeInputs: nativeInputCounts,
+            };
+        }
+        return mergedResult;
     }
 }
 // 导出单例实例

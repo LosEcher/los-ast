@@ -6,6 +6,7 @@ import type { ScanParams } from '@los-ast/shared/types';
 import { scanService } from '../../services/scan-service.js';
 import { SCAN_LIMITS } from '../../config/index.js';
 import { ValidationError, ScanTooLargeError } from '../../types/errors.js';
+import { buildScanRequestBodySchema, scanResponseSchema } from './scan-schema.js';
 
 type BuiltInRulePack = string;
 const BUILT_IN_RULE_PACK_NAMES = getBuiltInRulePackNames();
@@ -142,8 +143,7 @@ function requiresCodeScan(body: ScanRequestBody, resolvedRules?: string[]): bool
     || (Array.isArray(body.include) && body.include.length > 0)
     || (Array.isArray(body.ignore) && body.ignore.length > 0)
     || (Array.isArray(body.rules) && body.rules.length > 0)
-    || (Array.isArray(resolvedRules) && resolvedRules.length > 0)
-    || body.includeStats === true;
+    || (Array.isArray(resolvedRules) && resolvedRules.length > 0);
 }
 
 export default async function scanRoutes(fastify: FastifyInstance) {
@@ -153,226 +153,9 @@ export default async function scanRoutes(fastify: FastifyInstance) {
     {
       schema: {
         description: '执行代码扫描',
-        body: {
-          type: 'object',
-          required: ['project'],
-          properties: {
-            scope: {
-              type: 'object',
-              properties: {
-                tenant_id: { type: 'string' },
-                project_id: { type: 'string' },
-                actor_id: { type: 'string' },
-                mode: { type: 'string', enum: ['local', 'service'] },
-              },
-            },
-            project: { type: 'string', minLength: 1 },
-            rootDir: { type: 'string', minLength: 1 },
-            include: { type: 'array', items: { type: 'string' } },
-            ignore: { type: 'array', items: { type: 'string' } },
-            rules: { type: 'array', items: { type: 'string' } },
-            rulePack: {
-              type: 'string',
-              enum: BUILT_IN_RULE_PACK_NAMES,
-              description: `内置治理规则包。当前支持 ${BUILT_IN_RULE_PACK_NAMES.join(', ')}。`,
-            },
-            includeStats: { type: 'boolean' },
-            deterministic: { type: 'boolean' },
-            openApiDocuments: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['content'],
-                properties: {
-                  source: { type: 'string' },
-                  file: { type: 'string' },
-                  content: { type: 'string', minLength: 1 },
-                  format: { type: 'string', enum: ['yaml', 'json'] },
-                },
-              },
-            },
-            openApiComparisons: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['baseline', 'current'],
-                properties: {
-                  source: { type: 'string' },
-                  file: { type: 'string' },
-                  baseline: { type: 'string', minLength: 1 },
-                  current: { type: 'string', minLength: 1 },
-                  format: { type: 'string', enum: ['yaml', 'json'] },
-                },
-              },
-            },
-            schemaDocuments: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['content'],
-                properties: {
-                  source: { type: 'string' },
-                  file: { type: 'string' },
-                  content: { type: 'string', minLength: 1 },
-                  format: { type: 'string', enum: ['sql', 'prisma'] },
-                },
-              },
-            },
-            schemaComparisons: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['baseline', 'current'],
-                properties: {
-                  source: { type: 'string' },
-                  file: { type: 'string' },
-                  baseline: { type: 'string', minLength: 1 },
-                  current: { type: 'string', minLength: 1 },
-                  format: { type: 'string', enum: ['sql', 'prisma'] },
-                },
-              },
-            },
-            contractArtifacts: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  source: { type: 'string' },
-                  ruleId: { type: 'string' },
-                  severity: { type: 'string', enum: ['info', 'warning', 'error'] },
-                  message: { type: 'string' },
-                  file: { type: 'string' },
-                  language: { type: 'string' },
-                  line: { type: 'number' },
-                  column: { type: 'number' },
-                  startIndex: { type: 'number' },
-                  endIndex: { type: 'number' },
-                  excerpt: { type: 'string' },
-                  governanceDomain: {
-                    anyOf: [
-                      { type: 'string' },
-                      {
-                        type: 'array',
-                        items: { type: 'string' },
-                      },
-                    ],
-                  },
-                  impactHint: { type: 'string', enum: ['low', 'medium', 'high'] },
-                  range: {
-                    type: 'object',
-                    properties: {
-                      start: {
-                        type: 'object',
-                        properties: {
-                          line: { type: 'number' },
-                          column: { type: 'number' },
-                          index: { type: 'number' },
-                        },
-                      },
-                      end: {
-                        type: 'object',
-                        properties: {
-                          line: { type: 'number' },
-                          column: { type: 'number' },
-                          index: { type: 'number' },
-                        },
-                      },
-                    },
-                  },
-                },
-                additionalProperties: true,
-              },
-            },
-            schemaArtifacts: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  source: { type: 'string' },
-                  ruleId: { type: 'string' },
-                  severity: { type: 'string', enum: ['info', 'warning', 'error'] },
-                  message: { type: 'string' },
-                  file: { type: 'string' },
-                  language: { type: 'string' },
-                  line: { type: 'number' },
-                  column: { type: 'number' },
-                  startIndex: { type: 'number' },
-                  endIndex: { type: 'number' },
-                  excerpt: { type: 'string' },
-                  governanceDomain: {
-                    anyOf: [
-                      { type: 'string' },
-                      {
-                        type: 'array',
-                        items: { type: 'string' },
-                      },
-                    ],
-                  },
-                  impactHint: { type: 'string', enum: ['low', 'medium', 'high'] },
-                  range: {
-                    type: 'object',
-                    properties: {
-                      start: {
-                        type: 'object',
-                        properties: {
-                          line: { type: 'number' },
-                          column: { type: 'number' },
-                          index: { type: 'number' },
-                        },
-                      },
-                      end: {
-                        type: 'object',
-                        properties: {
-                          line: { type: 'number' },
-                          column: { type: 'number' },
-                          index: { type: 'number' },
-                        },
-                      },
-                    },
-                  },
-                },
-                additionalProperties: true,
-              },
-            },
-          },
-        },
+        body: buildScanRequestBodySchema(BUILT_IN_RULE_PACK_NAMES),
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              data: {
-                type: 'object',
-                properties: {
-                  filesScanned: { type: 'number' },
-                  findings: { type: 'array' },
-                  parseCache: { type: 'object' },
-                  parseFailures: {
-                    type: 'object',
-                    properties: {
-                      count: { type: 'number' },
-                      sampleLimit: { type: 'number' },
-                      truncated: { type: 'boolean' },
-                      byLanguage: {
-                        type: 'object',
-                        additionalProperties: { type: 'number' },
-                      },
-                      samples: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            file: { type: 'string' },
-                            language: { type: 'string' },
-                            error: { type: 'string' },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
+          200: scanResponseSchema,
         },
       },
     },

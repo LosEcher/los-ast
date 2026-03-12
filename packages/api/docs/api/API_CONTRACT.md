@@ -101,7 +101,7 @@ interface ScanRequest {
 | `rootDir` | string | Conditional | Required for AST/code scanning. Optional when the request only contains native contract/schema inputs |
 | `include` | string[] | No | Glob patterns (fast-glob syntax), default: `['**/*']` |
 | `ignore` | string[] | No | Glob patterns to exclude |
-| `includeStats` | boolean | No | Include parse statistics in response (`parseCache` / `parseFailures`, default: false) |
+| `includeStats` | boolean | No | Include parse statistics in response (`parseCache` / `parseFailures` / `scanTelemetry`, default: false). Native-only requests may set this without providing `rootDir` |
 | `deterministic` | boolean | No | Produce deterministic output (default: true). When true: sorted keys, fixed epoch timestamp, truncated fingerprints |
 | `openApiDocuments` | object[] | No | Optional native OpenAPI inputs. Each document is parsed into `findingSource='contract'` findings before merge |
 | `openApiComparisons` | object[] | No | Optional baseline/current OpenAPI comparisons. Each pair is parsed into `findingSource='contract'` compatibility findings before merge |
@@ -109,7 +109,7 @@ interface ScanRequest {
 | `schemaComparisons` | object[] | No | Optional baseline/current schema comparisons. Each pair is parsed into `findingSource='schema'` breaking-risk findings before merge |
 | `contractArtifacts` | object[] | No | Optional contract/scheme findings input. Each entry is normalized into `findingSource='contract'` findings |
 
-When `rootDir` is omitted, the request must provide at least one native input set: `openApiDocuments`, `openApiComparisons`, `schemaDocuments`, `schemaComparisons`, `contractArtifacts`, or `schemaArtifacts`. Native-only requests skip repository scanning and return `filesScanned: 0`.
+When `rootDir` is omitted, the request must provide at least one native input set: `openApiDocuments`, `openApiComparisons`, `schemaDocuments`, `schemaComparisons`, `contractArtifacts`, or `schemaArtifacts`. Native-only requests skip repository scanning and return `filesScanned: 0`; `includeStats=true` only affects emitted stats and does not force AST scanning.
 
 ### Example Request
 
@@ -154,6 +154,21 @@ interface ScanResponse {
         language: string;    // Parser language label
         error: string;       // Parser error message
       }>;
+    };
+    scanTelemetry?: {        // Present if includeStats=true
+      durationMs: number;    // End-to-end scan service duration
+      mode: 'ast' | 'native_only' | 'hybrid';
+      explicitRulePatterns: number;
+      loadedRules: number;
+      estimatedFiles?: number;
+      nativeInputs: {
+        openApiDocuments: number;
+        openApiComparisons: number;
+        schemaDocuments: number;
+        schemaComparisons: number;
+        contractArtifacts: number;
+        schemaArtifacts: number;
+      };
     };
   };
 }
@@ -233,6 +248,21 @@ interface Finding {
           "error": "Unexpected token"
         }
       ]
+    },
+    "scanTelemetry": {
+      "durationMs": 37,
+      "mode": "ast",
+      "explicitRulePatterns": 1,
+      "loadedRules": 12,
+      "estimatedFiles": 42,
+      "nativeInputs": {
+        "openApiDocuments": 0,
+        "openApiComparisons": 0,
+        "schemaDocuments": 0,
+        "schemaComparisons": 0,
+        "contractArtifacts": 0,
+        "schemaArtifacts": 0
+      }
     }
   }
 }
@@ -323,7 +353,7 @@ type ErrorCategory =
 | 前端/后端接口治理 | 代码层可扫描（如调用方式、错误处理、网络层封装） | 可通过规则包持续补齐 |
 | 接口契约治理 | `contract` 域已支持最小接入 | 支持 `contractArtifacts` 直通、`openApiDocuments` 原生输入和 `openApiComparisons` 最小兼容性对比；当前已支持本地 `$ref`、简单 `allOf`、`oneOf/anyOf` 公共字段归一（含 response 侧本地 ref 组合场景）、success response 按状态码对齐，以及 object 嵌套路径、`array.items` 路径和 `additionalProperties` map-like 路径的 request/response comparison；嵌套路径中的本地 `$ref`、简单 `allOf` 与 `oneOf` 数组项组合也已有回归覆盖，更完整的 OpenAPI/IDL/Schema 提取器仍在后续阶段 |
 | 字段治理 | `schema` 域已支持最小接入 | 支持 `schemaArtifacts` 直通和 `schemaDocuments` 原生输入；当前先覆盖主键与敏感字段可空类问题 |
-| 兼容性治理 | `contract/schema` 域已支持最小对比 | `contract` 支持 `openApiComparisons` 的 operation 删除、请求字段删除/类型变化/必填新增、请求新增必填字段带 default 的降级提示、响应字段删除/类型变化、响应 required -> optional 变化、最小值语义 comparison（`nullable` 收紧、`enum` 值删除、`default` 删除/变更），以及最小 `discriminator` comparison（`propertyName` 变化、mapping 值删除）；`schema` 支持 `schemaComparisons` 的字段删除、类型变化、主键变化、字段/组合唯一键 drift、可空性收紧、新增必填字段无 default，以及新增必填字段带 default 的降级提示 |
+| 兼容性治理 | `contract/schema` 域已支持最小对比 | `contract` 支持 `openApiComparisons` 的 operation 删除、请求字段删除/类型变化/必填新增、请求新增必填字段带 default 的降级提示、响应字段删除/类型变化、响应 required -> optional 变化、最小值语义 comparison（`nullable` 收紧、`enum` 值删除、`default` 删除/变更），以及最小 `discriminator` comparison（`propertyName` 变化、mapping 值删除）；`schema` 支持 `schemaComparisons` 的字段删除、类型变化、主键变化、字段/组合唯一键 drift、可空性收紧、新增必填字段无 default、带 default 的降级提示，以及最小 Prisma/SQL 默认值等价归一 |
 | 数据库字段治理 | `schema` 域未内置 | 需要 schema/DDL 侧解析与字段变更语义模型 |
 
 `findingSource='contract'|'schema'` 是后续演进预留字段，与现有 `findingSource='ast'` 兼容。

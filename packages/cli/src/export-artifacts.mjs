@@ -364,9 +364,16 @@ function formatBooleanTermForJoin(term, joinOperator) {
   return normalized
 }
 
+function readArrowParamsRaw(match, startIndex = 2) {
+  const parenParams = String(match[startIndex] || '').trim()
+  if (parenParams) return parenParams
+  return String(match[startIndex + 1] || '').trim()
+}
+
 function extractFunctionScopes(source) {
   const scopes = []
   const functionRegex = /(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*(?::\s*[^{]+)?\{/gm
+  const arrowFunctionRegex = /(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(([^)]*)\)|([A-Za-z_$][\w$]*))\s*=>\s*(?::\s*[^{=]+)?\{/gm
 
   let match
   while ((match = functionRegex.exec(source)) !== null) {
@@ -383,6 +390,23 @@ function extractFunctionScopes(source) {
       line: indexToLine(source, match.index),
     })
   }
+
+  while ((match = arrowFunctionRegex.exec(source)) !== null) {
+    const openBraceIndex = arrowFunctionRegex.lastIndex - 1
+    const endIndex = findMatchingBrace(source, openBraceIndex)
+    if (endIndex === -1) continue
+
+    scopes.push({
+      name: String(match[1] || '').trim(),
+      paramsRaw: readArrowParamsRaw(match),
+      start: match.index,
+      bodyStart: openBraceIndex,
+      end: endIndex,
+      line: indexToLine(source, match.index),
+    })
+  }
+
+  scopes.sort((a, b) => a.start - b.start)
 
   return scopes
 }
@@ -678,11 +702,34 @@ function extractSafeHelperExpression(body, params, helperFunctions = new Map()) 
   return null
 }
 
+function extractExpressionBodyHelpers(source) {
+  const helpers = []
+  const arrowExpressionRegex = /(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(([^)]*)\)|([A-Za-z_$][\w$]*))\s*=>\s*(?!\{)([^;\n]+);?/gm
+  let match
+
+  while ((match = arrowExpressionRegex.exec(source)) !== null) {
+    const expression = String(match[4] || '').trim()
+    if (!expression || expression.startsWith('{')) {
+      continue
+    }
+
+    helpers.push({
+      name: String(match[1] || '').trim(),
+      paramsRaw: readArrowParamsRaw(match),
+      expression,
+      line: indexToLine(source, match.index),
+    })
+  }
+
+  return helpers
+}
+
 function extractBooleanHelperFunctions(source, functionScopes) {
   const helpers = new Map()
   const remainingScopes = [...functionScopes]
+  const remainingExpressionHelpers = extractExpressionBodyHelpers(source)
 
-  for (let pass = 0; pass < functionScopes.length; pass += 1) {
+  for (let pass = 0; pass < functionScopes.length + remainingExpressionHelpers.length; pass += 1) {
     let addedInPass = false
 
     for (let index = remainingScopes.length - 1; index >= 0; index -= 1) {
@@ -702,6 +749,27 @@ function extractBooleanHelperFunctions(source, functionScopes) {
         expression,
       })
       remainingScopes.splice(index, 1)
+      addedInPass = true
+    }
+
+    for (let index = remainingExpressionHelpers.length - 1; index >= 0; index -= 1) {
+      const helperScope = remainingExpressionHelpers[index]
+      const params = parseParameterNames(helperScope.paramsRaw)
+      if (params.length === 0) {
+        remainingExpressionHelpers.splice(index, 1)
+        continue
+      }
+
+      const expression = resolveGuardCondition(helperScope.expression, new Map(), helpers)
+      if (!isSafeBooleanHelperExpression(expression, params)) {
+        continue
+      }
+
+      helpers.set(helperScope.name, {
+        params,
+        expression,
+      })
+      remainingExpressionHelpers.splice(index, 1)
       addedInPass = true
     }
 
@@ -1532,6 +1600,67 @@ function buildMultiFlagActivation(flagActivations, guardExpression, guardShape, 
   }
 }
 
+function uniqueFlagActivations(flagActivations) {
+  const seenFlags = new Set()
+  return flagActivations.filter((activation) => {
+    if (!activation?.flag || seenFlags.has(activation.flag)) return false
+    seenFlags.add(activation.flag)
+    return true
+  })
+}
+
+function analyzeRouteActivationExpression(expression, guardExpression) {
+  const normalized = stripWrappingParens(expression)
+  if (!normalized) {
+    return { activations: [], residuals: [] }
+  }
+
+  const directActivation = getRouteFlagActivation(normalized, guardExpression)
+  if (directActivation) {
+    return {
+      activations: [directActivation],
+      residuals: [],
+    }
+  }
+
+  const andTerms = splitTopLevelLogical(normalized, '&&')
+  if (andTerms.length > 1) {
+    const combined = andTerms.map((term) => analyzeRouteActivationExpression(term, guardExpression))
+    return {
+      activations: uniqueFlagActivations(combined.flatMap((item) => item.activations)),
+      residuals: combined.flatMap((item) => item.residuals),
+    }
+  }
+
+  const orTerms = splitTopLevelLogical(normalized, '||')
+  if (orTerms.length > 1) {
+    const branchAnalyses = orTerms.map((term) => analyzeRouteActivationExpression(term, guardExpression))
+    const branchFlagSets = branchAnalyses.map((item) => new Set(item.activations.map((activation) => activation.flag)))
+    const sharedFlags = branchAnalyses[0]?.activations
+      .map((activation) => activation.flag)
+      .filter((flag) => branchFlagSets.every((set) => set.has(flag))) || []
+
+    if (sharedFlags.length === 0) {
+      return {
+        activations: [],
+        residuals: [normalized],
+      }
+    }
+
+    return {
+      activations: uniqueFlagActivations(
+        branchAnalyses[0].activations.filter((activation) => sharedFlags.includes(activation.flag))
+      ),
+      residuals: [],
+    }
+  }
+
+  return {
+    activations: [],
+    residuals: [normalized],
+  }
+}
+
 function classifyActivationFromGuard(controlFlowGuard) {
   if (!controlFlowGuard) return null
 
@@ -1543,97 +1672,48 @@ function classifyActivationFromGuard(controlFlowGuard) {
   if (directActivation) return directActivation
 
   if (controlFlowGuard.kind === 'block') {
-    const andTerms = splitTopLevelLogical(effectiveCondition, '&&')
-    if (andTerms.length > 1) {
-      const termActivations = andTerms
-        .map((term) => ({
-          term,
-          activation: getRouteFlagActivation(term, guardExpression),
-        }))
-        .filter((item) => item.activation)
+    const analysis = analyzeRouteActivationExpression(effectiveCondition, guardExpression)
+    const guardShape = splitTopLevelLogical(effectiveCondition, '&&').length > 1 ? 'compound_and' : null
 
-      const multiFlagActivation = buildMultiFlagActivation(
-        termActivations.map((item) => item.activation),
-        guardExpression,
-        'compound_and',
-        andTerms
-          .filter((term) => !getRouteFlagActivation(term, guardExpression))
-          .map((term) => stripWrappingParens(term)),
-      )
-      if (multiFlagActivation) {
-        return multiFlagActivation
-      }
+    const multiFlagActivation = buildMultiFlagActivation(
+      analysis.activations,
+      guardExpression,
+      guardShape,
+      analysis.residuals,
+    )
+    if (multiFlagActivation) {
+      return multiFlagActivation
+    }
 
-      for (const term of andTerms) {
-        const activation = getRouteFlagActivation(term, guardExpression)
-        if (activation) {
-          return {
-            ...activation,
-            guardShape: 'compound_and',
-            additionalConditions: andTerms
-              .filter((item) => stripWrappingParens(item).replace(/\s+/g, '') !== stripWrappingParens(term).replace(/\s+/g, ''))
-              .map((item) => stripWrappingParens(item)),
-          }
-        }
+    if (analysis.activations.length === 1) {
+      return {
+        ...analysis.activations[0],
+        ...(guardShape ? { guardShape } : {}),
+        ...(analysis.residuals.length > 0 ? { additionalConditions: analysis.residuals } : {}),
       }
     }
     return null
   }
 
   if (controlFlowGuard.kind === 'early_return') {
-    const orTerms = splitTopLevelLogical(resolvedCondition, '||')
-    if (orTerms.length > 1) {
-      const termActivations = orTerms
-        .map((term) => {
-          const normalizedTerm = stripWrappingParens(term)
-          const positiveTerm = normalizedTerm.startsWith('!')
-            ? stripWrappingParens(normalizedTerm.slice(1))
-            : ''
-          return {
-            term,
-            normalizedTerm,
-            activation: positiveTerm
-              ? getRouteFlagActivation(positiveTerm, guardExpression)
-              : null,
-          }
-        })
-        .filter((item) => item.activation)
+    const analysis = analyzeRouteActivationExpression(effectiveCondition, guardExpression)
+    const guardShape = splitTopLevelLogical(resolvedCondition, '||').length > 1 ? 'compound_or' : null
 
-      const multiFlagActivation = buildMultiFlagActivation(
-        termActivations.map((item) => item.activation),
-        guardExpression,
-        'compound_or',
-        orTerms
-          .filter((term) => {
-            const normalizedTerm = stripWrappingParens(term)
-            const positiveTerm = normalizedTerm.startsWith('!')
-              ? stripWrappingParens(normalizedTerm.slice(1))
-              : ''
-            return !positiveTerm || !getRouteFlagActivation(positiveTerm, guardExpression)
-          })
-          .map((term) => invertBooleanExpression(stripWrappingParens(term))),
-      )
-      if (multiFlagActivation) {
-        return multiFlagActivation
-      }
+    const multiFlagActivation = buildMultiFlagActivation(
+      analysis.activations,
+      guardExpression,
+      guardShape,
+      analysis.residuals,
+    )
+    if (multiFlagActivation) {
+      return multiFlagActivation
+    }
 
-      for (const term of orTerms) {
-        const normalizedTerm = stripWrappingParens(term)
-        const positiveTerm = normalizedTerm.startsWith('!')
-          ? stripWrappingParens(normalizedTerm.slice(1))
-          : ''
-        const activation = positiveTerm
-          ? getRouteFlagActivation(positiveTerm, guardExpression)
-          : null
-        if (activation) {
-          return {
-            ...activation,
-            guardShape: 'compound_or',
-            additionalConditions: orTerms
-              .filter((item) => stripWrappingParens(item).replace(/\s+/g, '') !== normalizedTerm.replace(/\s+/g, ''))
-              .map((item) => invertBooleanExpression(stripWrappingParens(item))),
-          }
-        }
+    if (analysis.activations.length === 1) {
+      return {
+        ...analysis.activations[0],
+        ...(guardShape ? { guardShape } : {}),
+        ...(analysis.residuals.length > 0 ? { additionalConditions: analysis.residuals } : {}),
       }
     }
   }

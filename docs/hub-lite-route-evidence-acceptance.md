@@ -38,11 +38,15 @@ node --test ./test/hub-lite-artifacts.test.mjs
 - 覆盖 wrapped compound condition
 - 覆盖同文件 helper gate 正例、静态 alias 转发、helper 链转发与 unsafe helper 负例
 - 覆盖 `!(helper(...) && extra)` 这类带括号的 negated helper compound / early-return guard
+- 覆盖 arrow-function route builder 与 arrow helper gate
+- 覆盖 expression-bodied arrow helper gate
+- 覆盖 single-parameter arrow helper / route builder
+- 覆盖 grouped nested `&&` 的递归 flag 提取与 grouped `||` 的保守 additionalConditions
 - 覆盖多 flag guard 的保守 `flag_set` 分层
 
 当前基线：
 
-- 2026-03-12：`18/18` 通过
+- 2026-03-12：`23/23` 通过
 
 ### L2: 构建验收
 
