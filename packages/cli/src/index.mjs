@@ -6,68 +6,13 @@ import { Command } from 'commander'
 import {
   explainAtPosition,
   fix,
-  loadRuleFiles,
   scan,
   toJsonLines,
   toMarkdownFix,
   toMarkdownScan,
 } from '@los-ast/core'
-
-import { getProjectAdapter, listProjects } from '@los-ast/adapters'
-
-function normalizeArray(value) {
-  if (!value) return []
-  if (Array.isArray(value)) return value.flatMap((v) => String(v).split(',')).map((s) => s.trim()).filter(Boolean)
-  return String(value).split(',').map((s) => s.trim()).filter(Boolean)
-}
-
-async function resolveWorkspace(options) {
-  if (options.project && options.project !== 'custom') {
-    const adapter = getProjectAdapter(options.project)
-    return {
-      project: adapter.project,
-      rootDir: adapter.rootDir,
-      include: normalizeArray(options.include).length ? normalizeArray(options.include) : adapter.include,
-      ignore: normalizeArray(options.ignore).length ? normalizeArray(options.ignore) : adapter.ignore,
-      ruleGlobs: adapter.ruleGlobs,
-    }
-  }
-  if (options.root) {
-    const project = options.project || 'custom'
-    return {
-      project,
-      rootDir: path.resolve(options.root),
-      include: normalizeArray(options.include),
-      ignore: normalizeArray(options.ignore),
-      // 解析顺序：language base -> project extension
-      ruleGlobs: [
-        'rules/languages/**/*.yml',
-        'rules/languages/**/*.yaml',
-        `rules/projects/${project}/**/*.yml`,
-        `rules/projects/${project}/**/*.yaml`,
-      ],
-    }
-  }
-  throw new Error(`missing required option: --root (or use --project ${listProjects().join('|')})`)
-}
-
-async function resolveRules(options) {
-  const ws = await resolveWorkspace(options)
-  // 基础规则：language base -> project extension
-  const basePatterns = ws.ruleGlobs
-
-  // 显式附加规则（作为 addon 追加，而非替换）
-  const explicitPatterns = normalizeArray(options.rules)
-
-  // 合并规则：base + explicit addons
-  const allPatterns = [...basePatterns, ...explicitPatterns]
-
-  if (allPatterns.length === 0) {
-    return []
-  }
-
-  return await loadRuleFiles(allPatterns)
-}
+import { listProjects } from '@los-ast/adapters'
+import { resolveRules, resolveWorkspace } from './workspace-options.mjs'
 
 async function writeOutput({ format, payload, project, quietMachine = false, deterministic = false, isError = false }) {
   if (format === 'jsonl') {
@@ -142,8 +87,8 @@ program
   .option('--quiet-machine', 'machine-friendly output (stdout for data, stderr for errors)', false)
   .option('--deterministic', 'deterministic output (stable sorting, timestamps)', false)
   .action(async (options) => {
-    const ws = await resolveWorkspace(options)
-    const rules = await resolveRules(options)
+    const ws = await resolveWorkspace(options, { preferProjectAdapter: true })
+    const rules = await resolveRules(options, { preferProjectAdapter: true })
     const { rootDir, include, ignore, project } = ws
 
     const scanOptions = {
@@ -180,8 +125,8 @@ program
   .option('--quiet-machine', 'machine-friendly output (stdout for data, stderr for errors)', false)
   .option('--deterministic', 'deterministic output (stable sorting, timestamps)', false)
   .action(async (options) => {
-    const ws = await resolveWorkspace(options)
-    const rules = await resolveRules(options)
+    const ws = await resolveWorkspace(options, { preferProjectAdapter: true })
+    const rules = await resolveRules(options, { preferProjectAdapter: true })
     const { rootDir, include, ignore, project } = ws
     const maxChanges = Number(options.maxChanges)
     if (!Number.isFinite(maxChanges) || maxChanges <= 0) throw new Error('--max-changes must be a positive number')
@@ -220,8 +165,8 @@ program
   .option('--quiet-machine', 'machine-friendly output (stdout for data, stderr for errors)', false)
   .option('--deterministic', 'deterministic output (stable sorting, timestamps)', false)
   .action(async (options) => {
-    const ws = await resolveWorkspace(options)
-    const rules = await resolveRules(options)
+    const ws = await resolveWorkspace(options, { preferProjectAdapter: true })
+    const rules = await resolveRules(options, { preferProjectAdapter: true })
 
     const [lineRaw, colRaw] = String(options.pos).split(':')
     const line = Number(lineRaw)

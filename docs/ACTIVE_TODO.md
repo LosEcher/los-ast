@@ -36,7 +36,10 @@
 - [x] `/scan` 已完成第八阶段治理范围与 CLI/API parity 收口：Governance Scope Note 和 CLI/API Parity 已切到生成片段并有契约测试守护。
 - [x] `/scan` 已完成第九阶段稳定性说明收口：Version Stability Guarantee、Deterministic Output 与 Testing 已切到生成片段并有契约测试守护。
 - [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；当前已进入“代码真源 + 参考产物 + OpenAPI/API_CONTRACT 片段同步”的半自动阶段。
-- [ ] `export-artifacts.mjs` 与 `evidence/service.ts` 仍属于大文件热点，本轮不做结构拆分，只保留治理项。
+- [~] `export-artifacts.mjs` 与 `evidence/service.ts` 大文件热点已开始拆分：
+  - `evidence/service.ts` 已抽出 `builders.ts`，把 bundle/rewrite/explain 的纯构造逻辑移出 service orchestration。
+  - `cli/index.mjs` 与 `export-artifacts.mjs` 已抽出共享 `workspace-options.mjs`，先收口重复的 workspace/rules 解析。
+  - 下一步优先考虑继续拆 `export-artifacts.mjs` 的 `route-guard-analysis` 或 `source-structure-extractor`。
 
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
