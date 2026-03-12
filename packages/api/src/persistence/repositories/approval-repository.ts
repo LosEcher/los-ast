@@ -5,10 +5,45 @@ import type {
   ApprovalStats,
   ApprovalStatus,
 } from '@los-ast/shared/types';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
-import { createSqliteDatabase, registerSqliteSchemaVersion } from '../sqlite-database.js';
+import { applySqliteMigrations, createSqliteDatabase } from '../sqlite-database.js';
 import { createRepository, type Repository } from './repository.js';
+
+const approvalMigrations = [
+  {
+    version: 1,
+    up(database: DatabaseSync) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS approvals (
+          approval_id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          risk_level TEXT NOT NULL,
+          item_type TEXT NOT NULL,
+          timeout_at TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          payload_json TEXT NOT NULL
+        ) STRICT
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS approvals_scope_created_idx
+        ON approvals (tenant_id, project_id, created_at DESC)
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS approvals_scope_status_idx
+        ON approvals (tenant_id, project_id, status)
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS approvals_scope_timeout_idx
+        ON approvals (status, timeout_at)
+      `);
+    },
+  },
+];
 
 interface ApprovalQueryResult {
   items: ApprovalItem[];
@@ -155,33 +190,7 @@ class SqliteApprovalRepository implements ApprovalRepository {
   private readonly database = createSqliteDatabase();
 
   constructor() {
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS approvals (
-        approval_id TEXT PRIMARY KEY,
-        tenant_id TEXT NOT NULL,
-        project_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        risk_level TEXT NOT NULL,
-        item_type TEXT NOT NULL,
-        timeout_at TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        payload_json TEXT NOT NULL
-      ) STRICT
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS approvals_scope_created_idx
-      ON approvals (tenant_id, project_id, created_at DESC)
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS approvals_scope_status_idx
-      ON approvals (tenant_id, project_id, status)
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS approvals_scope_timeout_idx
-      ON approvals (status, timeout_at)
-    `);
-    registerSqliteSchemaVersion(this.database, 'approvals', 1);
+    applySqliteMigrations(this.database, 'approvals', approvalMigrations);
   }
 
   get(id: string): ApprovalItem | undefined {

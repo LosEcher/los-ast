@@ -4,10 +4,45 @@ import type {
   IncidentQueryParams,
   IncidentStatus,
 } from '@los-ast/shared/types';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
-import { createSqliteDatabase, registerSqliteSchemaVersion } from '../sqlite-database.js';
+import { applySqliteMigrations, createSqliteDatabase } from '../sqlite-database.js';
 import { createRepository, type Repository } from './repository.js';
+
+const incidentMigrations = [
+  {
+    version: 1,
+    up(database: DatabaseSync) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS incidents (
+          incident_id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          severity TEXT NOT NULL,
+          source_type TEXT NOT NULL,
+          fingerprint TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          payload_json TEXT NOT NULL
+        ) STRICT
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS incidents_scope_created_idx
+        ON incidents (tenant_id, project_id, created_at DESC)
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS incidents_scope_status_idx
+        ON incidents (tenant_id, project_id, status)
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS incidents_scope_severity_idx
+        ON incidents (tenant_id, project_id, severity)
+      `);
+    },
+  },
+];
 
 export interface IncidentRepository extends Repository<Incident> {
   query(params: IncidentQueryParams): IncidentListResponse;
@@ -133,33 +168,7 @@ class SqliteIncidentRepository implements IncidentRepository {
   private readonly database = createSqliteDatabase();
 
   constructor() {
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS incidents (
-        incident_id TEXT PRIMARY KEY,
-        tenant_id TEXT NOT NULL,
-        project_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        severity TEXT NOT NULL,
-        source_type TEXT NOT NULL,
-        fingerprint TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        payload_json TEXT NOT NULL
-      ) STRICT
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS incidents_scope_created_idx
-      ON incidents (tenant_id, project_id, created_at DESC)
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS incidents_scope_status_idx
-      ON incidents (tenant_id, project_id, status)
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS incidents_scope_severity_idx
-      ON incidents (tenant_id, project_id, severity)
-    `);
-    registerSqliteSchemaVersion(this.database, 'incidents', 1);
+    applySqliteMigrations(this.database, 'incidents', incidentMigrations);
   }
 
   get(id: string): Incident | undefined {

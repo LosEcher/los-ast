@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { PERSISTENCE_CONFIG } from '../config/index.js';
-import { createSqliteDatabase, registerSqliteSchemaVersion } from './sqlite-database.js';
+import { applySqliteMigrations, createSqliteDatabase } from './sqlite-database.js';
 
 export type KeyValueStoreBackend = 'memory' | 'file' | 'sqlite';
 
@@ -29,6 +30,22 @@ type SerializedStore<T> = {
 };
 
 const STORE_SCHEMA_VERSION = 1;
+const keyValueStoreMigrations = [
+  {
+    version: 1,
+    up(database: DatabaseSync) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS key_value_store (
+          namespace TEXT NOT NULL,
+          item_key TEXT NOT NULL,
+          value_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (namespace, item_key)
+        ) STRICT
+      `);
+    },
+  },
+];
 
 class InMemoryKeyValueStore<T> implements KeyValueStore<T> {
   private readonly store = new Map<string, T>();
@@ -185,16 +202,7 @@ class SqliteKeyValueStore<T> implements KeyValueStore<T> {
       dir: this.dir,
       sqlitePath: this.sqlitePath,
     });
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS key_value_store (
-        namespace TEXT NOT NULL,
-        item_key TEXT NOT NULL,
-        value_json TEXT NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (namespace, item_key)
-      ) STRICT
-    `);
-    registerSqliteSchemaVersion(this.database, 'key_value_store', 1);
+    applySqliteMigrations(this.database, 'key_value_store', keyValueStoreMigrations);
   }
 
   get(key: string): T | undefined {

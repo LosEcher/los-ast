@@ -6,10 +6,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createKeyValueStore } from '../../../src/persistence/key-value-store.js';
+import { closeAllSqliteDatabases } from '../../../src/persistence/sqlite-database.js';
 
 const tempDirs: string[] = [];
 
 afterEach(() => {
+  closeAllSqliteDatabases();
   while (tempDirs.length > 0) {
     const target = tempDirs.pop();
     if (target && fs.existsSync(target)) {

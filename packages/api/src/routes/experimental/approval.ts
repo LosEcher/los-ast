@@ -13,6 +13,16 @@ import {
   queryApprovals,
   getApprovalStats,
 } from '../../services/approval/store.js';
+import { PERSISTENCE_CONFIG } from '../../config/index.js';
+import { runInSqliteTransaction } from '../../persistence/sqlite-database.js';
+import {
+  executeL1Action,
+  executeL2Action,
+  getRecoveryAction,
+  getRecoveryActionWithScope,
+  startRecoveryAction,
+  updateRecoveryActionStatus,
+} from '../../services/recovery/store.js';
 import { NotFoundError, ValidationError } from '../../types/errors.js';
 import { MemoryCache } from '../../utils/cache.js';
 
@@ -213,10 +223,52 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const approval = await processApproval(id, {
-        ...body,
-        actor_id: actorId,
+      let linkedRecoveryAction = null;
+      if (existing.item_type === 'recovery_action') {
+        linkedRecoveryAction = await getRecoveryActionWithScope(existing.item_id, scope.tenant_id, scope.project_id);
+        if (!linkedRecoveryAction) {
+          throw new NotFoundError('Recovery action', existing.item_id);
+        }
+      }
+
+      const approval = await runApprovalMutation(async () => {
+        const processed = await processApproval(id, {
+          ...body,
+          actor_id: actorId,
+        });
+
+        if (linkedRecoveryAction) {
+          if (body.action === 'approve') {
+            await updateRecoveryActionStatus(linkedRecoveryAction.action_id, 'approved');
+          } else {
+            await updateRecoveryActionStatus(linkedRecoveryAction.action_id, 'failed', {
+              success: false,
+              error: `Approval rejected by ${actorId}${body.comment ? `: ${body.comment}` : ''}`,
+              duration_ms: 0,
+            });
+          }
+        }
+
+        return processed;
       });
+
+      if (
+        linkedRecoveryAction &&
+        body.action === 'approve' &&
+        (linkedRecoveryAction.level === 'L1_harmless' || linkedRecoveryAction.level === 'L2_controlled')
+      ) {
+        await startRecoveryAction(linkedRecoveryAction.action_id);
+        const approvedAction = await getRecoveryAction(linkedRecoveryAction.action_id);
+
+        if (approvedAction?.level === 'L1_harmless') {
+          const result = await executeL1Action(approvedAction);
+          await updateRecoveryActionStatus(approvedAction.action_id, result.success ? 'succeeded' : 'failed', result);
+        } else if (approvedAction?.level === 'L2_controlled') {
+          const result = await executeL2Action(approvedAction);
+          await updateRecoveryActionStatus(approvedAction.action_id, result.success ? 'succeeded' : 'failed', result);
+        }
+      }
+
       return { approval };
     } catch (error) {
       throw new ValidationError(
@@ -251,4 +303,12 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
     statsCache.set(cacheKey, stats, 30000);
     return { stats };
   });
+}
+
+async function runApprovalMutation<T>(callback: () => T | Promise<T>): Promise<T> {
+  if (PERSISTENCE_CONFIG.experimentalStoreBackend !== 'sqlite') {
+    return callback();
+  }
+
+  return runInSqliteTransaction(async () => callback());
 }

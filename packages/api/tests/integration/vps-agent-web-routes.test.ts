@@ -407,6 +407,133 @@ describe('VPS Agent Web Routes', () => {
       expect(crossScope.statusCode).toBe(404);
     });
 
+    it('should attach created recovery actions back onto the incident record', async () => {
+      const scope = {
+        tenant_id: 'tenant-recovery-link',
+        project_id: 'project-recovery-link',
+        actor_id: 'actor-link',
+      };
+
+      const incidentResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/incidents',
+        payload: {
+          scope,
+          title: 'Linked recovery incident',
+          description: 'Incident should receive recovery action linkage',
+          severity: 'high',
+          source: { type: 'metric_alert', detector_id: 'detector-link', raw_payload: {} },
+        },
+      });
+
+      expect(incidentResponse.statusCode).toBe(201);
+      const incidentId = JSON.parse(incidentResponse.body).incident.incident_id;
+
+      const actionResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/recovery/actions',
+        payload: {
+          scope,
+          incident_id: incidentId,
+          hypothesis_id: 'hyp-link',
+          level: 'L1_harmless',
+          type: 'restart',
+          parameters: {},
+        },
+      });
+
+      expect(actionResponse.statusCode).toBe(201);
+      const actionId = JSON.parse(actionResponse.body).action.action_id;
+
+      const incidentReadResponse = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/incidents/${incidentId}?scope=${encodeURIComponent(JSON.stringify(scope))}`,
+      });
+
+      expect(incidentReadResponse.statusCode).toBe(200);
+      const incidentBody = JSON.parse(incidentReadResponse.body);
+      expect(incidentBody.incident.recovery_actions).toContain(actionId);
+    });
+
+    it('should drive recovery execution when a linked approval is approved', async () => {
+      const scope = {
+        tenant_id: 'tenant-recovery-approval',
+        project_id: 'project-recovery-approval',
+        actor_id: 'actor-approval',
+      };
+
+      const incidentResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/incidents',
+        payload: {
+          scope,
+          title: 'Approval-linked recovery incident',
+          description: 'Approval should advance recovery action state',
+          severity: 'high',
+          source: { type: 'metric_alert', detector_id: 'detector-approval', raw_payload: {} },
+        },
+      });
+
+      expect(incidentResponse.statusCode).toBe(201);
+      const incidentId = JSON.parse(incidentResponse.body).incident.incident_id;
+
+      const actionResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/recovery/actions',
+        payload: {
+          scope,
+          incident_id: incidentId,
+          hypothesis_id: 'hyp-approval',
+          level: 'L1_harmless',
+          type: 'restart',
+          parameters: {},
+        },
+      });
+
+      expect(actionResponse.statusCode).toBe(201);
+      const actionBody = JSON.parse(actionResponse.body);
+      const actionId = actionBody.action.action_id;
+      expect(actionBody.action.status).toBe('pending_approval');
+
+      const approvalResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/approvals',
+        payload: {
+          scope,
+          item_type: 'recovery_action',
+          item_id: actionId,
+          title: 'Approve recovery action',
+          description: 'Linked recovery action approval',
+          risk_level: 'medium',
+          timeout_seconds: 60,
+        },
+      });
+
+      expect(approvalResponse.statusCode).toBe(201);
+      const approvalId = JSON.parse(approvalResponse.body).approval.approval_id;
+
+      const processResponse = await app.inject({
+        method: 'POST',
+        url: `/vps-agent-web/approvals/${approvalId}/process`,
+        payload: {
+          scope,
+          action: 'approve',
+          comment: 'Ship it',
+        },
+      });
+
+      expect(processResponse.statusCode).toBe(200);
+
+      const actionReadResponse = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/recovery/actions/${actionId}?scope=${encodeURIComponent(JSON.stringify(scope))}`,
+      });
+
+      expect(actionReadResponse.statusCode).toBe(200);
+      const updatedAction = JSON.parse(actionReadResponse.body).action;
+      expect(['succeeded', 'failed']).toContain(updatedAction.status);
+    });
+
     it('should return 404 when reading attribution evidence from another scope', async () => {
       const scopeA = {
         tenant_id: 'tenant-attr-a',

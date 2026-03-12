@@ -6,10 +6,69 @@ import type {
   RecoveryPolicy,
   RecoveryStats,
 } from '@los-ast/shared/types';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
-import { createSqliteDatabase, registerSqliteSchemaVersion } from '../sqlite-database.js';
+import { applySqliteMigrations, createSqliteDatabase } from '../sqlite-database.js';
 import { createRepository, type Repository } from './repository.js';
+
+const recoveryActionMigrations = [
+  {
+    version: 1,
+    up(database: DatabaseSync) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS recovery_actions (
+          action_id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          incident_id TEXT NOT NULL,
+          hypothesis_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          level TEXT NOT NULL,
+          type TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          payload_json TEXT NOT NULL
+        ) STRICT
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS recovery_actions_scope_created_idx
+        ON recovery_actions (tenant_id, project_id, created_at DESC)
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS recovery_actions_incident_idx
+        ON recovery_actions (incident_id, created_at DESC)
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS recovery_actions_status_idx
+        ON recovery_actions (tenant_id, project_id, status)
+      `);
+    },
+  },
+];
+
+const recoveryPolicyMigrations = [
+  {
+    version: 1,
+    up(database: DatabaseSync) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS recovery_policies (
+          policy_id TEXT PRIMARY KEY,
+          level TEXT NOT NULL,
+          name TEXT NOT NULL,
+          auto_execute INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          payload_json TEXT NOT NULL
+        ) STRICT
+      `);
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS recovery_policies_level_idx
+        ON recovery_policies (level, updated_at DESC)
+      `);
+    },
+  },
+];
 
 interface RecoveryActionQueryParams {
   incident_id?: string;
@@ -164,34 +223,7 @@ class SqliteRecoveryActionRepository implements RecoveryActionRepository {
   private readonly database = createSqliteDatabase();
 
   constructor() {
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS recovery_actions (
-        action_id TEXT PRIMARY KEY,
-        tenant_id TEXT NOT NULL,
-        project_id TEXT NOT NULL,
-        incident_id TEXT NOT NULL,
-        hypothesis_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        level TEXT NOT NULL,
-        type TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        payload_json TEXT NOT NULL
-      ) STRICT
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS recovery_actions_scope_created_idx
-      ON recovery_actions (tenant_id, project_id, created_at DESC)
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS recovery_actions_incident_idx
-      ON recovery_actions (incident_id, created_at DESC)
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS recovery_actions_status_idx
-      ON recovery_actions (tenant_id, project_id, status)
-    `);
-    registerSqliteSchemaVersion(this.database, 'recovery_actions', 1);
+    applySqliteMigrations(this.database, 'recovery_actions', recoveryActionMigrations);
   }
 
   get(id: string): RecoveryAction | undefined {
@@ -389,22 +421,7 @@ class SqliteRecoveryPolicyRepository implements RecoveryPolicyRepository {
   private readonly database = createSqliteDatabase();
 
   constructor() {
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS recovery_policies (
-        policy_id TEXT PRIMARY KEY,
-        level TEXT NOT NULL,
-        name TEXT NOT NULL,
-        auto_execute INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        payload_json TEXT NOT NULL
-      ) STRICT
-    `);
-    this.database.exec(`
-      CREATE INDEX IF NOT EXISTS recovery_policies_level_idx
-      ON recovery_policies (level, updated_at DESC)
-    `);
-    registerSqliteSchemaVersion(this.database, 'recovery_policies', 1);
+    applySqliteMigrations(this.database, 'recovery_policies', recoveryPolicyMigrations);
   }
 
   get(id: string): RecoveryPolicy | undefined {

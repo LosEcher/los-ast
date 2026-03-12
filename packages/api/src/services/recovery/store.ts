@@ -11,8 +11,11 @@ import type {
   RecoveryPolicy,
   RecoveryStats,
 } from '@los-ast/shared/types';
+import { PERSISTENCE_CONFIG } from '../../config/index.js';
+import { runInSqliteTransaction } from '../../persistence/sqlite-database.js';
 import { generateId } from '../../utils/id-generator.js';
 import { recoveryRepository } from '../../persistence/repositories/recovery-repository.js';
+import { addRecoveryActionToIncident } from '../incident/store.js';
 
 const actionStore = recoveryRepository.actions;
 const policyStore = recoveryRepository.policies;
@@ -53,7 +56,13 @@ export async function createRecoveryAction(
     updated_at: now,
   };
 
-  actionStore.set(actionId, action);
+  await runRecoveryMutation(async () => {
+    actionStore.set(actionId, action);
+    const incident = await addRecoveryActionToIncident(request.incident_id, actionId);
+    if (!incident) {
+      throw new Error(`Incident ${request.incident_id} not found when attaching recovery action`);
+    }
+  });
   console.log(`[RecoveryStore] Created recovery action ${actionId}: ${action.type} (${action.level})`);
 
   return action;
@@ -151,18 +160,19 @@ export async function updateRecoveryActionStatus(
   action.status = newStatus;
   action.updated_at = new Date().toISOString();
 
-  if (result) {
-    action.execution.result = result;
-    action.execution.completed_at = new Date().toISOString();
+  await runRecoveryMutation(() => {
+    if (result) {
+      action.execution.result = result;
+      action.execution.completed_at = new Date().toISOString();
 
-    // 记录冷却期
-    if (newStatus === 'succeeded' || newStatus === 'failed') {
-      const cooldownKey = `${action.incident_id}:${action.type}`;
-      cooldownStore.set(cooldownKey, Date.now());
+      if (newStatus === 'succeeded' || newStatus === 'failed') {
+        const cooldownKey = `${action.incident_id}:${action.type}`;
+        cooldownStore.set(cooldownKey, Date.now());
+      }
     }
-  }
 
-  actionStore.set(actionId, action);
+    actionStore.set(actionId, action);
+  });
   console.log(`[RecoveryStore] Updated recovery action ${actionId} status to ${newStatus}`);
 
   return action;
@@ -329,4 +339,12 @@ export function clearRecoveryStore(): void {
   actionStore.clear();
   policyStore.clear();
   cooldownStore.clear();
+}
+
+async function runRecoveryMutation<T>(callback: () => T | Promise<T>): Promise<T> {
+  if (PERSISTENCE_CONFIG.experimentalStoreBackend !== 'sqlite') {
+    return callback();
+  }
+
+  return runInSqliteTransaction(async () => callback());
 }
