@@ -2,13 +2,16 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getBuiltInRulePackNames, getBuiltInRulePackPattern } from '@los-ast/rules';
-import type { ScanParams } from '@los-ast/shared/types';
 import { scanService } from '../../services/scan-service.js';
 import { SCAN_LIMITS } from '../../config/index.js';
 import { ValidationError, ScanTooLargeError } from '../../types/errors.js';
 import { buildScanRequestBodySchema, scanResponseSchema } from './scan-schema.js';
+import {
+  SCAN_NATIVE_INPUT_KEYS,
+  type BuiltInRulePack,
+  type ScanRequestBody,
+} from './scan-contract.js';
 
-type BuiltInRulePack = string;
 const BUILT_IN_RULE_PACK_NAMES = getBuiltInRulePackNames();
 
 function hasRuleCatalog(baseDir: string): boolean {
@@ -58,84 +61,11 @@ function resolveRulePackPatterns(rulePack?: BuiltInRulePack): string[] | undefin
   return [path.join(resolveRulesRoot(), relativePattern)];
 }
 
-// 请求体验证 schema
-interface ScanRequestBody extends Omit<ScanParams, 'rulePack'> {
-  rulePack?: BuiltInRulePack;
-  openApiDocuments?: Array<{
-    source?: string;
-    file?: string;
-    content: string;
-    format?: 'yaml' | 'json';
-  }>;
-  openApiComparisons?: Array<{
-    source?: string;
-    file?: string;
-    baseline: string;
-    current: string;
-    format?: 'yaml' | 'json';
-  }>;
-  schemaDocuments?: Array<{
-    source?: string;
-    file?: string;
-    content: string;
-    format?: 'sql' | 'prisma';
-  }>;
-  schemaComparisons?: Array<{
-    source?: string;
-    file?: string;
-    baseline: string;
-    current: string;
-    format?: 'sql' | 'prisma';
-  }>;
-  contractArtifacts?: Array<{
-    source?: string;
-    ruleId?: string;
-    severity?: 'info' | 'warning' | 'error';
-    message?: string;
-    file?: string;
-    language?: string;
-    line?: number;
-    column?: number;
-    startIndex?: number;
-    endIndex?: number;
-    excerpt?: string;
-    governanceDomain?: string[] | string;
-    impactHint?: 'low' | 'medium' | 'high';
-    range?: {
-      start: { line: number; column: number; index: number };
-      end: { line: number; column: number; index: number };
-    };
-  }>;
-  schemaArtifacts?: Array<{
-    source?: string;
-    ruleId?: string;
-    severity?: 'info' | 'warning' | 'error';
-    message?: string;
-    file?: string;
-    language?: string;
-    line?: number;
-    column?: number;
-    startIndex?: number;
-    endIndex?: number;
-    excerpt?: string;
-    governanceDomain?: string[] | string;
-    impactHint?: 'low' | 'medium' | 'high';
-    range?: {
-      start: { line: number; column: number; index: number };
-      end: { line: number; column: number; index: number };
-    };
-  }>;
-}
-
 function hasNativeArtifactInputs(body: ScanRequestBody): boolean {
-  return [
-    body.openApiDocuments,
-    body.openApiComparisons,
-    body.schemaDocuments,
-    body.schemaComparisons,
-    body.contractArtifacts,
-    body.schemaArtifacts,
-  ].some((items) => Array.isArray(items) && items.length > 0);
+  return SCAN_NATIVE_INPUT_KEYS.some((key) => {
+    const items = body[key];
+    return Array.isArray(items) && items.length > 0;
+  });
 }
 
 function requiresCodeScan(body: ScanRequestBody, resolvedRules?: string[]): boolean {

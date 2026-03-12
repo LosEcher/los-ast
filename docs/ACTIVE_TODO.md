@@ -1,6 +1,6 @@
 # los-ast Active TODO
 
-更新时间：2026-03-11
+更新时间：2026-03-12
 
 本文件是当前有效的执行清单，用于替代仓库内分散的阶段性 TODO/复盘文档。
 
@@ -19,6 +19,16 @@
 - 如调整 `hub-lite:artifacts` 的文件名或 `structure-map.json` 顶层字段，需同步更新 `docs/adapters/lsclaw-artifact-contract.md` 并通知 `lsclaw` bump pin。
 
 ## P0 本周优先级
+
+0. 审查收口（2026-03-12）
+- [x] 把本轮项目审查发现补入当前有效 TODO，而不是散落在会话结论里。
+- [x] 收紧 `incident / attribution / recovery` 预览路由的 scope 边界，统一以 `request.scope` 作为租户/项目真源，避免继续信任 query/body 里的 forged scope。
+- [x] 为 `recovery action` 补齐最小 `scope` 归属字段，并对 action 列表/详情/审批/回滚按 scope 过滤。
+- [x] 修复 `memory proposal -> activate` 链路中“规范化入库后又用原始 content 回写”的一致性问题，避免 `lesson_id/recipe_id` 缺失时写入 `undefined` 键。
+- [x] 为 `packages/api` 补齐显式 workspace 依赖声明，避免当前依赖根仓环境兜底。
+- [x] `/scan` 已完成第一阶段定义收口：代码内请求体类型与 Fastify schema 已汇总到统一 `scan-contract` 模块，文档改为引用代码真源。
+- [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；本轮先完成代码内双份定义收口。
+- [ ] `export-artifacts.mjs` 与 `evidence/service.ts` 仍属于大文件热点，本轮不做结构拆分，只保留治理项。
 
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
@@ -84,6 +94,12 @@
 - 已补 parse-failure telemetry 聚合：`sampleLimit`、`byLanguage` 与统一 Markdown 展示已收口。
 - 已将 output JSON schema 的机器契约抽到 `packages/ai/src/output-schema-spec.mjs`，并由合同测试校验生成结果与落盘 schema 一致。
 - 已补 `/scan` 结构化 telemetry：`durationMs`、执行模式、规则模式计数、native input 计数，当前在 `includeStats=true` 时返回。
+- 已完成 `/scan` 第一阶段代码真源收口：
+  - `scan.ts` 不再维护独立 `ScanRequestBody` 副本。
+  - `scan-schema.ts` 改为复用统一 `scan-contract` 结构定义。
+  - API 文档已补“代码真源”说明，避免文档继续成为首个定义来源。
+- 下一步新增：
+  - 收口 `packages/shared/src/types/api.ts`、`docs/api/openapi.yaml`、`packages/api/docs/api/API_CONTRACT.md` 之间的重复字段定义，推进到真正单一生成源。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划
@@ -168,7 +184,12 @@
 - 验收：`los-ast` 回到 code intelligence kernel 的边界。
 
 2. 存储抽象
-- 将当前内存 `Map` store 改为 repository 接口，支持持久化后端替换。
+- 已完成 repository 抽象与后端替换基线：
+  - 预览域已统一走 repository / key-value-store 边界。
+  - 当前支持 `memory / file / sqlite` 三种 backend。
+  - `incident / approval / recovery` 已补 SQLite 领域表、migration 与事务边界。
+- 下一步：
+  - 继续评估 `attribution / memory / evidence / hotreload` 是否需要进一步下沉为领域表，而不只停留在通用 KV / repository 层。
 - 验收：store 不再直接决定长期状态模型，测试可替换存储实现。
 
 3. 平台化与异步化

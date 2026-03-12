@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0
 **Stability:** Stable (frozen for remote evidence interface)
-**Last Updated:** 2026-03-11
+**Last Updated:** 2026-03-12
 
 ## Overview
 
@@ -15,6 +15,12 @@ POST /scan
 ```
 
 ## Request Schema
+
+> Source of truth note:
+> `/scan` request/response字段的代码真源当前以 [packages/api/src/routes/core/scan-contract.ts](/Users/echerlos/Downloads/projects/los-ast/packages/api/src/routes/core/scan-contract.ts)、
+> [packages/api/src/routes/core/scan-schema.ts](/Users/echerlos/Downloads/projects/los-ast/packages/api/src/routes/core/scan-schema.ts)、
+> [packages/shared/src/types/api.ts](/Users/echerlos/Downloads/projects/los-ast/packages/shared/src/types/api.ts) 为准。
+> 本文档保留对外契约说明，但不再作为新增字段的首个定义来源。
 
 ### Headers
 

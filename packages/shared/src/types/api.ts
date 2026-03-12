@@ -22,7 +22,7 @@ export interface VerifiedScope {
 // === 扫描相关类型 ===
 
 export interface ScanParams {
-  scope: Scope;
+  scope?: Scope;
   project: string;
   rootDir?: string;
   include?: string[];
