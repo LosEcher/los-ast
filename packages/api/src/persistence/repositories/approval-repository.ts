@@ -7,7 +7,7 @@ import type {
 } from '@los-ast/shared/types';
 
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
-import { createSqliteDatabase } from '../sqlite-database.js';
+import { createSqliteDatabase, registerSqliteSchemaVersion } from '../sqlite-database.js';
 import { createRepository, type Repository } from './repository.js';
 
 interface ApprovalQueryResult {
@@ -181,6 +181,7 @@ class SqliteApprovalRepository implements ApprovalRepository {
       CREATE INDEX IF NOT EXISTS approvals_scope_timeout_idx
       ON approvals (status, timeout_at)
     `);
+    registerSqliteSchemaVersion(this.database, 'approvals', 1);
   }
 
   get(id: string): ApprovalItem | undefined {

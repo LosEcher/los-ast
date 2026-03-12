@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -94,6 +95,26 @@ describe('key value store persistence', () => {
     expect(approvalStore.get('shared-id')).toEqual({ value: 'approval' });
     expect(incidentStore.entries()).toEqual([['shared-id', { value: 'incident' }]]);
     expect(approvalStore.entries()).toEqual([['shared-id', { value: 'approval' }]]);
+  });
+
+  it('should register sqlite schema versions for the key value store', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'los-ast-store-'));
+    tempDirs.push(dir);
+    const sqlitePath = path.join(dir, 'state.sqlite');
+
+    const store = createKeyValueStore<{ value: string }>('schema-version-store', {
+      backend: 'sqlite',
+      sqlitePath,
+    });
+    store.set('persisted', { value: 'saved' });
+
+    const database = new DatabaseSync(sqlitePath);
+    const row = database
+      .prepare('SELECT version FROM schema_versions WHERE schema_name = ?')
+      .get('key_value_store') as { version: number | bigint } | undefined;
+
+    expect(row).toBeDefined();
+    expect(Number(row?.version)).toBe(1);
   });
 
   it('should quarantine invalid file-backed payloads and continue with an empty store', () => {

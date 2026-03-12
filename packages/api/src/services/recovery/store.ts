@@ -10,12 +10,9 @@ import type {
   ExecutionResult,
   RecoveryPolicy,
   RecoveryStats,
-  RecoveryLevel,
-  RecoveryActionType,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
 import { recoveryRepository } from '../../persistence/repositories/recovery-repository.js';
-import { getAllIncidents } from '../incident/store.js';
 
 const actionStore = recoveryRepository.actions;
 const policyStore = recoveryRepository.policies;
@@ -66,12 +63,7 @@ export async function createRecoveryAction(
  * 获取恢复策略
  */
 async function getRecoveryPolicyForLevel(level: string): Promise<RecoveryPolicy | undefined> {
-  for (const policy of policyStore.values()) {
-    if (policy.level === level) {
-      return policy;
-    }
-  }
-  return undefined;
+  return policyStore.getByLevel(level);
 }
 
 /**
@@ -283,34 +275,7 @@ export async function queryRecoveryActions(params: {
     project_id?: string;
   };
 }): Promise<{ items: RecoveryAction[]; total: number }> {
-  let items = actionStore.values();
-
-  if (params.scope?.tenant_id && params.scope?.project_id) {
-    items = items.filter((action) =>
-      action.scope.tenant_id === params.scope?.tenant_id &&
-      action.scope.project_id === params.scope?.project_id
-    );
-  }
-
-  if (params.incident_id) {
-    items = items.filter((a) => a.incident_id === params.incident_id);
-  }
-
-  if (params.status) {
-    items = items.filter((a) => a.status === params.status);
-  }
-
-  if (params.level) {
-    items = items.filter((a) => a.level === params.level);
-  }
-
-  const total = items.length;
-  const offset = params.offset || 0;
-  const limit = params.limit || 20;
-
-  items = items.slice(offset, offset + limit);
-
-  return { items, total };
+  return actionStore.query(params);
 }
 
 /**
@@ -354,69 +319,7 @@ export function getRecoveryStats(scope?: {
   tenant_id?: string;
   project_id?: string;
 }): RecoveryStats {
-  const scopedIncidentIds = new Set(
-    getAllIncidents()
-      .filter((incident) => {
-        if (scope?.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
-          return false;
-        }
-        if (scope?.project_id && incident.scope.project_id !== scope.project_id) {
-          return false;
-        }
-        return true;
-      })
-      .map((incident) => incident.incident_id)
-  );
-  const actions = actionStore.values().filter((action) =>
-    scopedIncidentIds.has(action.incident_id)
-  );
-
-  const byLevel: Record<RecoveryLevel, number> = {
-    L1_harmless: 0,
-    L2_controlled: 0,
-    L3_code_level: 0,
-  };
-  const byStatus: Record<RecoveryActionStatus, number> = {
-    pending_approval: 0,
-    approved: 0,
-    executing: 0,
-    succeeded: 0,
-    failed: 0,
-    rolled_back: 0,
-  };
-  const byType: Record<RecoveryActionType, number> = {
-    restart: 0,
-    rollback: 0,
-    circuit_breaker: 0,
-    feature_toggle: 0,
-    code_patch: 0,
-  };
-  let completedCount = 0;
-  let succeededCount = 0;
-  let totalExecutionTimeMs = 0;
-
-  for (const action of actions) {
-    byLevel[action.level] += 1;
-    byStatus[action.status] += 1;
-    byType[action.type] += 1;
-
-    if (action.execution.result) {
-      completedCount += 1;
-      totalExecutionTimeMs += action.execution.result.duration_ms;
-      if (action.status === 'succeeded') {
-        succeededCount += 1;
-      }
-    }
-  }
-
-  return {
-    total_actions: actions.length,
-    by_level: byLevel,
-    by_status: byStatus,
-    by_type: byType,
-    success_rate: completedCount > 0 ? succeededCount / completedCount : 0,
-    avg_execution_time_ms: completedCount > 0 ? totalExecutionTimeMs / completedCount : 0,
-  };
+  return actionStore.getStats(scope);
 }
 
 /**

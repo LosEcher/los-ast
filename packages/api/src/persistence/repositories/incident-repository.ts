@@ -6,7 +6,7 @@ import type {
 } from '@los-ast/shared/types';
 
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
-import { createSqliteDatabase } from '../sqlite-database.js';
+import { createSqliteDatabase, registerSqliteSchemaVersion } from '../sqlite-database.js';
 import { createRepository, type Repository } from './repository.js';
 
 export interface IncidentRepository extends Repository<Incident> {
@@ -159,6 +159,7 @@ class SqliteIncidentRepository implements IncidentRepository {
       CREATE INDEX IF NOT EXISTS incidents_scope_severity_idx
       ON incidents (tenant_id, project_id, severity)
     `);
+    registerSqliteSchemaVersion(this.database, 'incidents', 1);
   }
 
   get(id: string): Incident | undefined {

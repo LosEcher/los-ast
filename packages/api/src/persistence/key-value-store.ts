@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { PERSISTENCE_CONFIG } from '../config/index.js';
-import { createSqliteDatabase } from './sqlite-database.js';
+import { createSqliteDatabase, registerSqliteSchemaVersion } from './sqlite-database.js';
 
 export type KeyValueStoreBackend = 'memory' | 'file' | 'sqlite';
 
@@ -194,6 +194,7 @@ class SqliteKeyValueStore<T> implements KeyValueStore<T> {
         PRIMARY KEY (namespace, item_key)
       ) STRICT
     `);
+    registerSqliteSchemaVersion(this.database, 'key_value_store', 1);
   }
 
   get(key: string): T | undefined {
