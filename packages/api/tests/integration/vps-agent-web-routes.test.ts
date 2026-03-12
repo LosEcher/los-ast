@@ -534,6 +534,136 @@ describe('VPS Agent Web Routes', () => {
       expect(['succeeded', 'failed']).toContain(updatedAction.status);
     });
 
+    it('should mark linked recovery actions failed when approval is rejected', async () => {
+      const scope = {
+        tenant_id: 'tenant-recovery-reject',
+        project_id: 'project-recovery-reject',
+        actor_id: 'actor-reject',
+      };
+
+      const incidentResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/incidents',
+        payload: {
+          scope,
+          title: 'Rejected recovery incident',
+          description: 'Approval rejection should fail linked recovery action',
+          severity: 'high',
+          source: { type: 'metric_alert', detector_id: 'detector-reject', raw_payload: {} },
+        },
+      });
+
+      expect(incidentResponse.statusCode).toBe(201);
+      const incidentId = JSON.parse(incidentResponse.body).incident.incident_id;
+
+      const actionResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/recovery/actions',
+        payload: {
+          scope,
+          incident_id: incidentId,
+          hypothesis_id: 'hyp-reject',
+          level: 'L1_harmless',
+          type: 'restart',
+          parameters: {},
+        },
+      });
+
+      expect(actionResponse.statusCode).toBe(201);
+      const actionId = JSON.parse(actionResponse.body).action.action_id;
+
+      const approvalResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/approvals',
+        payload: {
+          scope,
+          item_type: 'recovery_action',
+          item_id: actionId,
+          title: 'Reject recovery action',
+          description: 'Linked recovery action rejection',
+          risk_level: 'high',
+          timeout_seconds: 60,
+        },
+      });
+
+      expect(approvalResponse.statusCode).toBe(201);
+      const approvalId = JSON.parse(approvalResponse.body).approval.approval_id;
+
+      const processResponse = await app.inject({
+        method: 'POST',
+        url: `/vps-agent-web/approvals/${approvalId}/process`,
+        payload: {
+          scope,
+          action: 'reject',
+          comment: 'Too risky',
+        },
+      });
+
+      expect(processResponse.statusCode).toBe(200);
+
+      const actionReadResponse = await app.inject({
+        method: 'GET',
+        url: `/vps-agent-web/recovery/actions/${actionId}?scope=${encodeURIComponent(JSON.stringify(scope))}`,
+      });
+
+      expect(actionReadResponse.statusCode).toBe(200);
+      const updatedAction = JSON.parse(actionReadResponse.body).action;
+      expect(updatedAction.status).toBe('failed');
+      expect(updatedAction.execution.result?.error).toContain('Approval rejected');
+    });
+
+    it('should reject rollback for actions that are still pending approval', async () => {
+      const scope = {
+        tenant_id: 'tenant-recovery-rollback',
+        project_id: 'project-recovery-rollback',
+        actor_id: 'actor-rollback',
+      };
+
+      const incidentResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/incidents',
+        payload: {
+          scope,
+          title: 'Rollback pending incident',
+          description: 'Pending actions should not roll back',
+          severity: 'high',
+          source: { type: 'metric_alert', detector_id: 'detector-rollback', raw_payload: {} },
+        },
+      });
+
+      expect(incidentResponse.statusCode).toBe(201);
+      const incidentId = JSON.parse(incidentResponse.body).incident.incident_id;
+
+      const actionResponse = await app.inject({
+        method: 'POST',
+        url: '/vps-agent-web/recovery/actions',
+        payload: {
+          scope,
+          incident_id: incidentId,
+          hypothesis_id: 'hyp-rollback',
+          level: 'L1_harmless',
+          type: 'restart',
+          parameters: {},
+        },
+      });
+
+      expect(actionResponse.statusCode).toBe(201);
+      const actionId = JSON.parse(actionResponse.body).action.action_id;
+
+      const rollbackResponse = await app.inject({
+        method: 'POST',
+        url: `/vps-agent-web/recovery/actions/${actionId}/rollback`,
+        payload: {
+          scope,
+          reason: 'Undo it',
+        },
+      });
+
+      expect(rollbackResponse.statusCode).toBe(400);
+      const rollbackBody = JSON.parse(rollbackResponse.body);
+      expect(rollbackBody.error.code).toBe('INVALID_STATUS');
+    });
+
     it('should return 404 when reading attribution evidence from another scope', async () => {
       const scopeA = {
         tenant_id: 'tenant-attr-a',

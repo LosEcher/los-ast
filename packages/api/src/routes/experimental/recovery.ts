@@ -7,19 +7,18 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
-  createRecoveryAction,
-  getRecoveryAction,
   getRecoveryActionWithScope,
-  updateRecoveryActionStatus,
-  startRecoveryAction,
-  executeL1Action,
-  executeL2Action,
   queryRecoveryActions,
   createRecoveryPolicy,
   getRecoveryPolicy,
   listRecoveryPolicies,
   getRecoveryStats,
 } from '../../services/recovery/store.js';
+import {
+  approveRecoveryActionWorkflow,
+  createRecoveryActionWorkflow,
+  rollbackRecoveryActionWorkflow,
+} from '../../services/recovery/workflow.js';
 import { NotFoundError, ValidationError } from '../../types/errors.js';
 import { getIncidentWithScope } from '../../services/incident/store.js';
 import type {
@@ -95,46 +94,17 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
       throw new NotFoundError('Incident', body.incident_id);
     }
 
-    // 创建动作
-    const action = await createRecoveryAction({
-      ...body,
-      actor_id: scope.actor_id || body.actor_id,
-    }, {
-      tenant_id: incident.scope.tenant_id,
-      project_id: incident.scope.project_id,
+    const result = await createRecoveryActionWorkflow({
+      request: body,
+      actorId: scope.actor_id || body.actor_id,
+      scope: {
+        tenant_id: incident.scope.tenant_id,
+        project_id: incident.scope.project_id,
+      },
     });
 
-    // 如果不需要审批，立即执行
-    if (!action.safety.requires_approval) {
-      await startRecoveryAction(action.action_id);
-
-      if (action.level === 'L1_harmless') {
-        const result = await executeL1Action(action);
-        await updateRecoveryActionStatus(
-          action.action_id,
-          result.success ? 'succeeded' : 'failed',
-          result
-        );
-      } else if (action.level === 'L2_controlled') {
-        const result = await executeL2Action(action);
-        await updateRecoveryActionStatus(
-          action.action_id,
-          result.success ? 'succeeded' : 'failed',
-          result
-        );
-      }
-    }
-
-    // 获取最新状态
-    const finalAction = await getRecoveryAction(action.action_id);
-
     reply.status(201);
-    return {
-      action: finalAction,
-      message: action.safety.requires_approval
-        ? 'Recovery action pending approval'
-        : 'Recovery action executed',
-    };
+    return result;
   });
 
   // GET /experimental/recovery/actions - 查询恢复动作
@@ -192,32 +162,10 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
       throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
     }
 
-    const action = await getRecoveryActionWithScope(id, scope.tenant_id, scope.project_id);
-
-    if (!action) {
-      throw new NotFoundError('Recovery action', id);
-    }
-
-    if (action.status !== 'pending_approval') {
-      throw new ValidationError('INVALID_STATUS', 'Action is not pending approval');
-    }
-
-    // 更新状态为已审批
-    await updateRecoveryActionStatus(id, 'approved');
-
-    // 开始执行
-    await startRecoveryAction(id);
-
-    // 执行动作
-    if (action.level === 'L1_harmless') {
-      const result = await executeL1Action(action);
-      await updateRecoveryActionStatus(id, result.success ? 'succeeded' : 'failed', result);
-    } else if (action.level === 'L2_controlled') {
-      const result = await executeL2Action(action);
-      await updateRecoveryActionStatus(id, result.success ? 'succeeded' : 'failed', result);
-    }
-
-    const finalAction = await getRecoveryAction(id);
+    const finalAction = await approveRecoveryActionWorkflow(id, {
+      tenant_id: scope.tenant_id,
+      project_id: scope.project_id,
+    });
     return { action: finalAction };
   });
 
@@ -236,20 +184,15 @@ export default async function recoveryRoutes(fastify: FastifyInstance) {
       throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
     }
 
-    const action = await getRecoveryActionWithScope(id, scope.tenant_id, scope.project_id);
-
-    if (!action) {
-      throw new NotFoundError('Recovery action', id);
-    }
-
-    // 更新状态为已回滚
-    await updateRecoveryActionStatus(id, 'rolled_back', {
-      success: true,
-      output: `Rolled back by ${scope.actor_id || actor_id}: ${reason}`,
-      duration_ms: 0,
+    const finalAction = await rollbackRecoveryActionWorkflow({
+      actionId: id,
+      scope: {
+        tenant_id: scope.tenant_id,
+        project_id: scope.project_id,
+      },
+      actorId: scope.actor_id || actor_id,
+      reason,
     });
-
-    const finalAction = await getRecoveryAction(id);
     return { action: finalAction };
   });
 

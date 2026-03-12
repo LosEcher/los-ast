@@ -9,20 +9,10 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   createApproval,
   getApprovalWithScope,
-  processApproval,
   queryApprovals,
   getApprovalStats,
 } from '../../services/approval/store.js';
-import { PERSISTENCE_CONFIG } from '../../config/index.js';
-import { runInSqliteTransaction } from '../../persistence/sqlite-database.js';
-import {
-  executeL1Action,
-  executeL2Action,
-  getRecoveryAction,
-  getRecoveryActionWithScope,
-  startRecoveryAction,
-  updateRecoveryActionStatus,
-} from '../../services/recovery/store.js';
+import { processApprovalWorkflow } from '../../services/approval/workflow.js';
 import { NotFoundError, ValidationError } from '../../types/errors.js';
 import { MemoryCache } from '../../utils/cache.js';
 
@@ -82,6 +72,10 @@ const approvalIdParamsSchema = {
     id: { type: 'string', minLength: 1 },
   },
 } as const;
+
+function invalidateApprovalStatsCache(scope: { tenant_id: string; project_id: string }): void {
+  statsCache.delete(`approval:stats:${scope.tenant_id}:${scope.project_id}`);
+}
 
 // 查询参数验证函数
 function parseApprovalStatus(value: string | undefined): ApprovalStatus | undefined {
@@ -157,6 +151,10 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
         project_id: scope.project_id!,
       }, // 强制使用验证后的 scope
     }, scope.actor_id);
+    invalidateApprovalStatsCache({
+      tenant_id: scope.tenant_id,
+      project_id: scope.project_id,
+    });
 
     reply.status(201);
     return { approval };
@@ -223,51 +221,20 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      let linkedRecoveryAction = null;
-      if (existing.item_type === 'recovery_action') {
-        linkedRecoveryAction = await getRecoveryActionWithScope(existing.item_id, scope.tenant_id, scope.project_id);
-        if (!linkedRecoveryAction) {
-          throw new NotFoundError('Recovery action', existing.item_id);
-        }
-      }
-
-      const approval = await runApprovalMutation(async () => {
-        const processed = await processApproval(id, {
-          ...body,
-          actor_id: actorId,
-        });
-
-        if (linkedRecoveryAction) {
-          if (body.action === 'approve') {
-            await updateRecoveryActionStatus(linkedRecoveryAction.action_id, 'approved');
-          } else {
-            await updateRecoveryActionStatus(linkedRecoveryAction.action_id, 'failed', {
-              success: false,
-              error: `Approval rejected by ${actorId}${body.comment ? `: ${body.comment}` : ''}`,
-              duration_ms: 0,
-            });
-          }
-        }
-
-        return processed;
+      const approval = await processApprovalWorkflow({
+        approval: existing,
+        actorId,
+        request: body,
+        scope: {
+          tenant_id: scope.tenant_id,
+          project_id: scope.project_id,
+        },
       });
 
-      if (
-        linkedRecoveryAction &&
-        body.action === 'approve' &&
-        (linkedRecoveryAction.level === 'L1_harmless' || linkedRecoveryAction.level === 'L2_controlled')
-      ) {
-        await startRecoveryAction(linkedRecoveryAction.action_id);
-        const approvedAction = await getRecoveryAction(linkedRecoveryAction.action_id);
-
-        if (approvedAction?.level === 'L1_harmless') {
-          const result = await executeL1Action(approvedAction);
-          await updateRecoveryActionStatus(approvedAction.action_id, result.success ? 'succeeded' : 'failed', result);
-        } else if (approvedAction?.level === 'L2_controlled') {
-          const result = await executeL2Action(approvedAction);
-          await updateRecoveryActionStatus(approvedAction.action_id, result.success ? 'succeeded' : 'failed', result);
-        }
-      }
+      invalidateApprovalStatsCache({
+        tenant_id: scope.tenant_id,
+        project_id: scope.project_id,
+      });
 
       return { approval };
     } catch (error) {
@@ -303,12 +270,4 @@ export default async function approvalRoutes(fastify: FastifyInstance) {
     statsCache.set(cacheKey, stats, 30000);
     return { stats };
   });
-}
-
-async function runApprovalMutation<T>(callback: () => T | Promise<T>): Promise<T> {
-  if (PERSISTENCE_CONFIG.experimentalStoreBackend !== 'sqlite') {
-    return callback();
-  }
-
-  return runInSqliteTransaction(async () => callback());
 }

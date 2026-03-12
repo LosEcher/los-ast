@@ -204,6 +204,69 @@ describe('Experimental Routes Tests', () => {
         expect(body.stats).toBeDefined();
       });
 
+      it('GET /experimental/approvals/stats should invalidate cached values after approval mutations', async () => {
+        const scope = {
+          tenant_id: 'test-approval-cache',
+          project_id: 'test-approval-cache',
+          actor_id: 'actor-cache',
+        };
+
+        const initialStatsResponse = await app.inject({
+          method: 'GET',
+          url: `/experimental/approvals/stats?scope=${encodeURIComponent(JSON.stringify(scope))}`,
+        });
+        expect(initialStatsResponse.statusCode).toBe(200);
+        expect(JSON.parse(initialStatsResponse.body).stats.total).toBe(0);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/experimental/approvals',
+          payload: {
+            scope,
+            item_type: 'config_change',
+            item_id: 'cfg-1',
+            title: 'Cache invalidation approval',
+            description: 'Create approval should invalidate stats cache',
+            risk_level: 'medium',
+            timeout_seconds: 60,
+          },
+        });
+
+        expect(createResponse.statusCode).toBe(201);
+        const approvalId = JSON.parse(createResponse.body).approval.approval_id;
+
+        const afterCreateStatsResponse = await app.inject({
+          method: 'GET',
+          url: `/experimental/approvals/stats?scope=${encodeURIComponent(JSON.stringify(scope))}`,
+        });
+        expect(afterCreateStatsResponse.statusCode).toBe(200);
+        const afterCreateStats = JSON.parse(afterCreateStatsResponse.body).stats;
+        expect(afterCreateStats.total).toBe(1);
+        expect(afterCreateStats.by_status.pending).toBe(1);
+
+        const processResponse = await app.inject({
+          method: 'POST',
+          url: `/experimental/approvals/${approvalId}/process`,
+          payload: {
+            scope,
+            action: 'approve',
+            comment: 'Cache should refresh',
+          },
+        });
+
+        expect(processResponse.statusCode).toBe(200);
+
+        const afterProcessStatsResponse = await app.inject({
+          method: 'GET',
+          url: `/experimental/approvals/stats?scope=${encodeURIComponent(JSON.stringify(scope))}`,
+        });
+        expect(afterProcessStatsResponse.statusCode).toBe(200);
+        const afterProcessStats = JSON.parse(afterProcessStatsResponse.body).stats;
+        expect(afterProcessStats.total).toBe(1);
+        expect(afterProcessStats.by_status.pending).toBe(0);
+        expect(afterProcessStats.by_status.approved).toBe(1);
+      });
+
       it('POST /experimental/approvals should reject malformed payloads at runtime schema boundary', async () => {
         const response = await app.inject({
           method: 'POST',
