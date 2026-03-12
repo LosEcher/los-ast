@@ -9,7 +9,9 @@ function touchLru(map, key) {
   return value
 }
 
-export function createParseCache({ maxEntries = 128 } = {}) {
+export const DEFAULT_PARSE_CACHE_MAX_ENTRIES = 128
+
+export function createParseCache({ maxEntries = DEFAULT_PARSE_CACHE_MAX_ENTRIES } = {}) {
   const entries = new Map()
   const stats = { hits: 0, misses: 0, evictions: 0 }
 

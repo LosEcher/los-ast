@@ -188,6 +188,23 @@ paths:
                       requestId: "req-123"
                       timestamp: "2026-03-07T12:00:00.000Z"
                       retryable: false
+        '401':
+          description: 身份验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingJwt:
+                  summary: 缺少 JWT
+                  value:
+                    error:
+                      category: "AUTHENTICATION"
+                      code: "MISSING_JWT"
+                      message: "JWT token is required in production environment"
+                      requestId: "req-123"
+                      timestamp: "2026-03-07T12:00:00.000Z"
+                      retryable: false
         '408':
           description: 扫描超时
           content:
@@ -200,14 +217,11 @@ paths:
                   value:
                     error:
                       category: "TIMEOUT"
-                      code: "SCAN_TIMEOUT"
-                      message: "Scan exceeded maximum duration of 30000ms"
+                      code: "REQUEST_TIMEOUT"
+                      message: "Operation exceeded 30000ms limit"
                       requestId: "req-123"
                       timestamp: "2026-03-07T12:00:00.000Z"
                       retryable: true
-                      details:
-                        limit_ms: 30000
-                        elapsed_ms: 30001
         '413':
           description: 扫描结果过大
           content:
@@ -220,14 +234,14 @@ paths:
                   value:
                     error:
                       category: "SCAN_TOO_LARGE"
-                      code: "RESPONSE_TOO_LARGE"
-                      message: "Response size exceeds 10MB limit"
+                      code: "SCAN_TOO_LARGE"
+                      message: "Estimated 1524 files exceeds limit 1000. Use smaller include patterns or async task mode."
                       requestId: "req-123"
                       timestamp: "2026-03-07T12:00:00.000Z"
-                      retryable: true
+                      retryable: false
                       details:
-                        limit_bytes: 10485760
-                        actual_bytes: 15242880
+                        limit: 1000
+                        estimated: 1524
         '503':
           description: Core 未就绪（显式降级）
           content:
@@ -1069,7 +1083,7 @@ components:
           properties:
             category:
               type: string
-              enum: [VALIDATION, SCOPE, TIMEOUT, SCAN_TOO_LARGE, NOT_FOUND, SERVICE_UNAVAILABLE, INTERNAL]
+              enum: [VALIDATION, SCOPE, AUTHENTICATION, TIMEOUT, SCAN_TOO_LARGE, NOT_FOUND, SERVICE_UNAVAILABLE, INTERNAL]
             code:
               type: string
             message:

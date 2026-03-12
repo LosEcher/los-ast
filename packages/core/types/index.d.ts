@@ -2,6 +2,10 @@
  * Core Façade 版本
  */
 export declare const CORE_FACADE_VERSION: string;
+export declare const DEFAULT_EXCERPT_LENGTH: number;
+export declare const EXPLAIN_EXCERPT_LENGTH: number;
+export declare const PARSE_FAILURE_SAMPLE_LIMIT: number;
+export declare const DEFAULT_PARSE_CACHE_MAX_ENTRIES: number;
 
 /**
  * 初始化 Core 模块
@@ -243,5 +247,5 @@ export interface ParseCache {
   snapshotStats(): ParseCacheStats;
 }
 
-export declare function createParseCache(): ParseCache;
+export declare function createParseCache(options?: { maxEntries?: number }): ParseCache;
 export declare const defaultParseCache: ParseCache;

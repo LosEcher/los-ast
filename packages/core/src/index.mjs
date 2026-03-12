@@ -34,9 +34,21 @@ export function isReady() {
 // 导出原有模块
 export { registerLanguages, languageFromFilePath } from './languages.mjs'
 export { loadRuleFiles } from './rules.mjs'
-export { discoverFiles, scan, fix, explainAtPosition } from './runner.mjs'
+export {
+  discoverFiles,
+  scan,
+  fix,
+  explainAtPosition,
+  DEFAULT_EXCERPT_LENGTH,
+  EXPLAIN_EXCERPT_LENGTH,
+  PARSE_FAILURE_SAMPLE_LIMIT,
+} from './runner.mjs'
 export { toJsonLines, toMarkdownFix, toMarkdownScan } from './report.mjs'
-export { createParseCache, defaultParseCache } from './parse-cache.mjs'
+export {
+  createParseCache,
+  defaultParseCache,
+  DEFAULT_PARSE_CACHE_MAX_ENTRIES,
+} from './parse-cache.mjs'
 
 // 默认初始化（向后兼容）
 initializeCore().catch(console.error);

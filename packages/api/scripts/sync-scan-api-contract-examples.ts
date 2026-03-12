@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildOutputSchema } from '@los-ast/ai';
+import { DEFAULT_PARSE_CACHE_MAX_ENTRIES, PARSE_FAILURE_SAMPLE_LIMIT } from '@los-ast/core';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -77,11 +78,11 @@ function buildGeneratedExamples(): string {
         hits: 15,
         misses: 27,
         entries: 27,
-        maxEntries: 100,
+        maxEntries: DEFAULT_PARSE_CACHE_MAX_ENTRIES,
       },
       parseFailures: {
         count: 1,
-        sampleLimit: 20,
+        sampleLimit: PARSE_FAILURE_SAMPLE_LIMIT,
         truncated: false,
         byLanguage: {
           JavaScript: 1,

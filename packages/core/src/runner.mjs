@@ -17,7 +17,10 @@ function toIsoNow(deterministic = true) {
   return new Date().toISOString()
 }
 
-function clampExcerpt(text, max = 240) {
+export const DEFAULT_EXCERPT_LENGTH = 240
+export const EXPLAIN_EXCERPT_LENGTH = 400
+
+function clampExcerpt(text, max = DEFAULT_EXCERPT_LENGTH) {
   if (text.length <= max) return text
   return `${text.slice(0, max)}…`
 }
@@ -100,7 +103,7 @@ function deterministicSort(a, b) {
   return a.range.start.column - b.range.start.column
 }
 
-const PARSE_FAILURE_SAMPLE_LIMIT = 20
+export const PARSE_FAILURE_SAMPLE_LIMIT = 20
 
 export async function discoverFiles({ rootDir, include, ignore }) {
   const patterns = include && include.length ? include : ['**/*']
@@ -389,7 +392,7 @@ export async function explainAtPosition({
         severity: rule.severity,
         message: rule.message,
         range: r,
-        excerpt: clampExcerpt(node.text(), 400),
+        excerpt: clampExcerpt(node.text(), EXPLAIN_EXCERPT_LENGTH),
         fingerprint,
       })
     }

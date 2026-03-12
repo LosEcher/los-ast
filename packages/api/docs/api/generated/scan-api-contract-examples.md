@@ -71,7 +71,7 @@
       "hits": 15,
       "misses": 27,
       "entries": 27,
-      "maxEntries": 100
+      "maxEntries": 128
     },
     "parseFailures": {
       "count": 1,

@@ -26,7 +26,13 @@ import {
   SCAN_REQUEST_PROPERTY_KEYS,
   scanResponseDataSchema,
 } from '../../src/routes/core/scan-contract.js';
+import {
+  SCAN_ENDPOINT_ERROR_REFERENCE,
+  SCAN_ERROR_CATEGORY_VALUES,
+  SCAN_LIMIT_REFERENCE,
+} from '../../src/routes/core/scan-doc-contract.js';
 import { buildOutputSchema } from '@los-ast/ai';
+import { DEFAULT_PARSE_CACHE_MAX_ENTRIES, PARSE_FAILURE_SAMPLE_LIMIT } from '@los-ast/core';
 
 // __dirname is /Users/echerlos/Downloads/projects/los-ast/packages/api/tests/contract
 // Need to go up 4 levels to reach repo root: tests -> api -> packages -> packages -> repo root
@@ -285,6 +291,10 @@ describe('CLI/API Parity', () => {
         path.join(testRootDir, 'packages/api/docs/api/generated/scan-api-contract-examples.md'),
         'utf8'
       );
+      const generatedApiContractOperationalSections = await fs.readFile(
+        path.join(testRootDir, 'packages/api/docs/api/generated/scan-api-contract-operational-sections.md'),
+        'utf8'
+      );
       const openApiDoc = await fs.readFile(
         path.join(testRootDir, 'docs/api/openapi.yaml'),
         'utf8'
@@ -371,10 +381,26 @@ describe('CLI/API Parity', () => {
       expect(generatedApiContractExamples).toMatch(/"impactHint": "medium"/);
       expect(generatedApiContractExamples).toMatch(/"diff": null/);
       expect(generatedApiContractExamples).toMatch(/"applied": false/);
+      expect(generatedApiContractExamples).toMatch(new RegExp(`"maxEntries": ${DEFAULT_PARSE_CACHE_MAX_ENTRIES}`));
+      expect(generatedApiContractExamples).toMatch(new RegExp(`"sampleLimit": ${PARSE_FAILURE_SAMPLE_LIMIT}`));
+      expect(generatedApiContractOperationalSections).toMatch(/@generated scan-api-contract-ops:begin/);
+      expect(generatedApiContractOperationalSections).toMatch(/### Error Code Reference/);
+      expect(generatedApiContractOperationalSections).toMatch(/## Limits and Constraints/);
+      for (const category of SCAN_ERROR_CATEGORY_VALUES) {
+        expect(generatedApiContractOperationalSections).toContain(`'${category}'`);
+      }
+      for (const entry of SCAN_ENDPOINT_ERROR_REFERENCE) {
+        expect(generatedApiContractOperationalSections).toContain(`| ${entry.httpStatus} | ${entry.category} | \`${entry.code}\` |`);
+      }
+      for (const entry of SCAN_LIMIT_REFERENCE) {
+        expect(generatedApiContractOperationalSections).toContain(`| ${entry.name} | ${entry.value} |`);
+      }
       expect(apiContract).toContain('<!-- @generated scan-api-contract:begin -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract:end -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract-examples:begin -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract-examples:end -->');
+      expect(apiContract).toContain('<!-- @generated scan-api-contract-ops:begin -->');
+      expect(apiContract).toContain('<!-- @generated scan-api-contract-ops:end -->');
 
       expect(scanContractReference.request.required).toEqual(['project']);
       expect(scanContractReference.request.baseProperties).toEqual([...SCAN_REQUEST_BASE_PROPERTY_KEYS]);
@@ -410,6 +436,10 @@ describe('CLI/API Parity', () => {
       expect(openApiDoc).toMatch(/applied:/);
       expect(openApiDoc).toMatch(/governanceDomain:/);
       expect(openApiDoc).toMatch(/impactHint:/);
+      expect(openApiDoc).toMatch(/AUTHENTICATION/);
+      expect(openApiDoc).toMatch(/'401':/);
+      expect(openApiDoc).toMatch(/code: "REQUEST_TIMEOUT"/);
+      expect(openApiDoc).toMatch(/code: "SCAN_TOO_LARGE"/);
       expect(openApiDoc).toMatch(/nullable: true/);
 
       expect(outputSchemaDoc).toMatch(/findingSource/);

@@ -25,6 +25,7 @@ POST /scan
 > OpenAPI 生成片段见 [scan-openapi-components.yaml](/Users/echerlos/Downloads/projects/los-ast/docs/api/generated/scan-openapi-components.yaml)。
 > API_CONTRACT 生成片段见 [scan-api-contract-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-sections.md)。
 > API_CONTRACT 示例片段见 [scan-api-contract-examples.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-examples.md)。
+> API_CONTRACT 运行约束片段见 [scan-api-contract-operational-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-operational-sections.md)。
 
 ### Headers
 
@@ -176,7 +177,7 @@ Current `data` properties:
       "hits": 15,
       "misses": 27,
       "entries": 27,
-      "maxEntries": 100
+      "maxEntries": 128
     },
     "parseFailures": {
       "count": 1,
@@ -232,15 +233,16 @@ interface ApiError {
   details?: Record<string, unknown>;
 }
 
+<!-- @generated scan-api-contract-ops:begin -->
 type ErrorCategory =
-  | 'VALIDATION'      // Input validation failure
-  | 'SCOPE'           // Scope/permission error
-  | 'TIMEOUT'         // Request timeout
-  | 'SCAN_TOO_LARGE'  // Response exceeds size limit
-  | 'NOT_FOUND'       // Resource not found
-  | 'SERVICE_UNAVAILABLE'; // Core not ready / explicit fallback
-  | 'INTERNAL';       // Internal server error
-```
+  | 'VALIDATION'
+  | 'SCOPE'
+  | 'AUTHENTICATION'
+  | 'TIMEOUT'
+  | 'SCAN_TOO_LARGE'
+  | 'NOT_FOUND'
+  | 'SERVICE_UNAVAILABLE'
+  | 'INTERNAL';
 
 ### Error Code Reference
 
@@ -249,14 +251,29 @@ type ErrorCategory =
 | 400 | VALIDATION | `INVALID_PROJECT` | Project field missing or invalid |
 | 400 | VALIDATION | `INVALID_SCAN_INPUT` | Neither `rootDir` nor any native contract/schema input set was provided |
 | 400 | VALIDATION | `INVALID_ROOTDIR` | rootDir field missing or invalid when the request implies AST/code scanning |
-| 413 | SCAN_TOO_LARGE | `SCAN_TOO_LARGE` | Response size exceeds limit |
-| 503 | SERVICE_UNAVAILABLE | `CORE_NOT_READY` | Core is not ready, explicit fallback path |
+| 401 | AUTHENTICATION | `MISSING_JWT` / `INVALID_JWT` / `JWT_EXPIRED` / `UNVERIFIED_IDENTITY_DISABLED` | Identity or JWT verification failed when the identity plugin is enforced |
 | 403 | SCOPE | `SCOPE_ERROR` | Scope/permission issue |
 | 404 | NOT_FOUND | `RESOURCE_NOT_FOUND` | Requested resource not found |
 | 404 | NOT_FOUND | `ROUTE_NOT_FOUND` | API endpoint not found |
 | 408 | TIMEOUT | `REQUEST_TIMEOUT` | Scan exceeded time limit |
+| 413 | SCAN_TOO_LARGE | `SCAN_TOO_LARGE` | Response size exceeds limit |
 | 500 | INTERNAL | `INTERNAL_ERROR` | Unexpected server error |
 | 500 | INTERNAL | `UNKNOWN_ERROR` | Unknown error type |
+| 503 | SERVICE_UNAVAILABLE | `CORE_NOT_READY` | Core is not ready, explicit fallback path |
+
+Authentication note: when the identity plugin is enforced, `/scan` may also surface additional `401 AUTHENTICATION` codes from JWT or local identity verification.
+
+## Limits and Constraints
+
+| Constraint | Value | Description |
+|------------|-------|-------------|
+| Max Files (Sync) | 1000 | Maximum files per synchronous scan |
+| Response Size | 10MB | Maximum JSON response size |
+| Timeout | 30s | Maximum scan duration |
+| Excerpt Length | 240 chars | Default maximum finding excerpt length |
+| Cache Entries | 128 | Default parse cache capacity exposed by `parseCache.maxEntries` |
+| Parse Failure Samples | 20 | Maximum parse failure samples included when `includeStats=true` |
+<!-- @generated scan-api-contract-ops:end -->
 
 ### Readiness & Explicit Degradation Contract
 
@@ -278,16 +295,6 @@ type ErrorCategory =
   }
 }
 ```
-
-## Limits and Constraints
-
-| Constraint | Value | Description |
-|------------|-------|-------------|
-| Max Files (Sync) | 1,000 | Maximum files per synchronous scan |
-| Response Size | 10MB | Maximum JSON response size |
-| Timeout | 30s | Maximum scan duration |
-| Excerpt Length | 240 chars | Maximum finding excerpt length |
-| Cache Entries | 100 | Maximum parse cache entries |
 
 ## Governance Scope Note (March 2026)
 
