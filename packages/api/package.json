@@ -19,6 +19,8 @@
     "check:scan-api-contract-examples": "tsx scripts/sync-scan-api-contract-examples.ts --check",
     "generate:scan-api-contract-operational-sections": "tsx scripts/sync-scan-api-contract-operational-sections.ts",
     "check:scan-api-contract-operational-sections": "tsx scripts/sync-scan-api-contract-operational-sections.ts --check",
+    "generate:scan-api-contract-governance-sections": "tsx scripts/sync-scan-api-contract-governance-sections.ts",
+    "check:scan-api-contract-governance-sections": "tsx scripts/sync-scan-api-contract-governance-sections.ts --check",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:smoke": "vitest run tests/smoke",

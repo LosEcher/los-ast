@@ -295,6 +295,10 @@ describe('CLI/API Parity', () => {
         path.join(testRootDir, 'packages/api/docs/api/generated/scan-api-contract-operational-sections.md'),
         'utf8'
       );
+      const generatedApiContractGovernanceSections = await fs.readFile(
+        path.join(testRootDir, 'packages/api/docs/api/generated/scan-api-contract-governance-sections.md'),
+        'utf8'
+      );
       const openApiDoc = await fs.readFile(
         path.join(testRootDir, 'docs/api/openapi.yaml'),
         'utf8'
@@ -395,12 +399,22 @@ describe('CLI/API Parity', () => {
       for (const entry of SCAN_LIMIT_REFERENCE) {
         expect(generatedApiContractOperationalSections).toContain(`| ${entry.name} | ${entry.value} |`);
       }
+      expect(generatedApiContractGovernanceSections).toMatch(/@generated scan-api-contract-governance:begin/);
+      expect(generatedApiContractGovernanceSections).toMatch(/## Governance Scope Note \(March 2026\)/);
+      expect(generatedApiContractGovernanceSections).toMatch(/## CLI\/API Parity/);
+      expect(generatedApiContractGovernanceSections).toMatch(/los-ast scan --root \/path --include "src\/\*\*\/\*\.ts" --format jsonl/);
+      expect(generatedApiContractGovernanceSections).toMatch(/CLI runs in local mode and does not wrap findings in a `data` envelope/);
+      expect(generatedApiContractGovernanceSections).toMatch(/`contract` 域已支持最小接入/);
+      expect(generatedApiContractGovernanceSections).toMatch(/`schema` 域已支持最小接入/);
+      expect(generatedApiContractGovernanceSections).toMatch(/`contract\/schema` 域已支持最小对比/);
       expect(apiContract).toContain('<!-- @generated scan-api-contract:begin -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract:end -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract-examples:begin -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract-examples:end -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract-ops:begin -->');
       expect(apiContract).toContain('<!-- @generated scan-api-contract-ops:end -->');
+      expect(apiContract).toContain('<!-- @generated scan-api-contract-governance:begin -->');
+      expect(apiContract).toContain('<!-- @generated scan-api-contract-governance:end -->');
 
       expect(scanContractReference.request.required).toEqual(['project']);
       expect(scanContractReference.request.baseProperties).toEqual([...SCAN_REQUEST_BASE_PROPERTY_KEYS]);

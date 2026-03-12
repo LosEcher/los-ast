@@ -26,6 +26,7 @@ POST /scan
 > API_CONTRACT 生成片段见 [scan-api-contract-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-sections.md)。
 > API_CONTRACT 示例片段见 [scan-api-contract-examples.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-examples.md)。
 > API_CONTRACT 运行约束片段见 [scan-api-contract-operational-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-operational-sections.md)。
+> API_CONTRACT 治理/CLI 说明片段见 [scan-api-contract-governance-sections.md](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-api-contract-governance-sections.md)。
 
 ### Headers
 
@@ -296,9 +297,10 @@ Authentication note: when the identity plugin is enforced, `/scan` may also surf
 }
 ```
 
+<!-- @generated scan-api-contract-governance:begin -->
 ## Governance Scope Note (March 2026)
 
-`/scan` 当前已补齐代码层扫描能力，并支持最小化 `contractArtifacts/schemaArtifacts` 直通，以及 `openApiDocuments/openApiComparisons/schemaDocuments/schemaComparisons` 的原生输入。默认输出的 `findingSource` 为 `ast`，并可与 `contract/schema` findings 并行返回。  
+`/scan` 当前已补齐代码层扫描能力，并支持最小化 `contractArtifacts/schemaArtifacts` 直通，以及 `openApiDocuments/openApiComparisons/schemaDocuments/schemaComparisons` 的原生输入。默认输出的 `findingSource` 为 `ast`，并可与 `contract/schema` findings 并行返回。
 
 | 维度 | 当前状态 | 说明 |
 |------|----------|------|
@@ -329,12 +331,13 @@ CLI options map to API fields:
 | CLI Option | API Field | Notes |
 |------------|-----------|-------|
 | `--root <dir>` | `rootDir` | Resolved to absolute path |
-| `--project <name>` | `project` | Defaults to 'custom' |
+| `--project <name>` | `project` | Defaults to `'custom'` |
 | `--include <glob>` | `include` | Array of glob patterns |
 | `--ignore <glob>` | `ignore` | Array of glob patterns |
-| `--rules <glob>` | `rules` | Rule file patterns (optional) |
+| `--rules <glob>` | `rules` | Rule file patterns (optional addon patterns) |
 | `--deterministic` | `deterministic` | CLI flag opt-in; API 默认为 false |
-| N/A | `scope` | CLI runs in local mode |
+| N/A | `scope` | CLI runs in local mode and does not wrap findings in a `data` envelope |
+<!-- @generated scan-api-contract-governance:end -->
 
 ## Version Stability Guarantee
 
