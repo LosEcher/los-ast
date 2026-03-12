@@ -1,5 +1,8 @@
 import path from 'node:path'
 import fs from 'node:fs'
+import { getBuiltInRulePackPattern } from '@los-ast/rules'
+
+const lsclawGovernancePattern = getBuiltInRulePackPattern('lsclaw-governance')
 
 // 默认项目配置（向后兼容）
 const DEFAULT_PROJECTS = {
@@ -20,7 +23,10 @@ const DEFAULT_PROJECTS = {
     rootDir: '/Users/echerlos/Downloads/projects/lsclaw',
     include: ['control-plane/src/**/*.{mjs,js,ts}', 'control-plane/scripts/**/*.{mjs,js,ts}', 'config/**/*.{json,md}'],
     ignore: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
-    ruleGlobs: ['rules/projects/lsclaw/**/*.{yml,yaml}', 'rules/languages/**/*.{yml,yaml}'],
+    ruleGlobs: [
+      ...(lsclawGovernancePattern ? [`rules/${lsclawGovernancePattern}`] : []),
+      'rules/languages/**/*.{yml,yaml}',
+    ],
   },
   fullstackframe: {
     project: 'fullstackframe',

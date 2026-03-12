@@ -255,6 +255,62 @@ describe('API Contract Tests', () => {
       });
     });
 
+    it('POST /scan should preserve parseFailures stats in contract response', async () => {
+      vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 2,
+        findings: [],
+        parseFailures: {
+          count: 1,
+          sampleLimit: 20,
+          byLanguage: {
+            javascript: 1,
+          },
+          samples: [
+            {
+              file: '/tmp/broken.js',
+              language: 'javascript',
+              error: 'Unexpected token',
+            },
+          ],
+        },
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          includeStats: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.parseFailures).toMatchObject({
+        count: 1,
+        sampleLimit: 20,
+        byLanguage: {
+          javascript: 1,
+        },
+        samples: [
+          {
+            file: '/tmp/broken.js',
+            language: 'javascript',
+            error: 'Unexpected token',
+          },
+        ],
+      });
+    });
+
     it('POST /scan should preserve schema artifact findingSource as schema in contract response', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,
@@ -424,6 +480,79 @@ describe('API Contract Tests', () => {
       });
     });
 
+    it('POST /scan should accept native-only contract input without rootDir', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 0,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'openapi-inline',
+            ruleId: 'contract/openapi-operation-id',
+            findingSource: 'contract',
+            severity: 'warning',
+            message: 'OpenAPI operation POST /users is missing operationId',
+            file: '/tmp/openapi.yaml',
+            language: 'contract',
+            range: {
+              start: { line: 1, column: 0, index: 0 },
+              end: { line: 1, column: 1, index: 1 },
+            },
+            excerpt: 'POST /users',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'openapi-contract-native-only-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        rootDir: undefined,
+        openApiDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data.filesScanned).toBe(0);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'contract',
+        ruleId: 'contract/openapi-operation-id',
+        language: 'contract',
+      });
+    });
+
     it('POST /scan should accept openApiComparisons as native contract comparison input', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,
@@ -576,6 +705,123 @@ describe('API Contract Tests', () => {
         findingSource: 'schema',
         ruleId: 'schema/prisma-sensitive-nullable',
         language: 'schema',
+      });
+    });
+
+    it('POST /scan should preserve separate contract/schema finding channels when both native inputs are present', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 2,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'openapi-inline',
+            ruleId: 'contract/openapi-operation-id',
+            findingSource: 'contract',
+            severity: 'warning',
+            message: 'OpenAPI operation POST /users is missing operationId',
+            file: '/tmp/openapi.yaml',
+            language: 'contract',
+            range: {
+              start: { line: 1, column: 0, index: 0 },
+              end: { line: 1, column: 1, index: 1 },
+            },
+            excerpt: 'POST /users',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'contract-mixed-1',
+          },
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '2026-03-11T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: 'schema-inline',
+            ruleId: 'schema/prisma-sensitive-nullable',
+            findingSource: 'schema',
+            severity: 'warning',
+            message: 'Sensitive field User.email should not be optional',
+            file: '/tmp/schema.prisma',
+            language: 'schema',
+            range: {
+              start: { line: 1, column: 0, index: 0 },
+              end: { line: 1, column: 1, index: 1 },
+            },
+            excerpt: 'email String?',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'schema-mixed-1',
+          },
+        ],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          scope: {
+            tenant_id: 'test-tenant',
+            project_id: 'test-project',
+            actor_id: 'test-user',
+          },
+          project: 'test',
+          rootDir: process.cwd(),
+          include: ['packages/core/src/**/*.mjs'],
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+          schemaDocuments: [
+            {
+              source: 'schema-inline',
+              file: '/tmp/schema.prisma',
+              content: 'model User { id String @id email String? }',
+              format: 'prisma',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        openApiDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
+        schemaDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'schema-inline',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+          }),
+        ]),
+      }));
+
+      const body = JSON.parse(response.body);
+      expect(body.data.findings).toHaveLength(2);
+      expect(body.data.findings[0]).toMatchObject({
+        findingSource: 'contract',
+        ruleId: 'contract/openapi-operation-id',
+        language: 'contract',
+        file: '/tmp/openapi.yaml',
+      });
+      expect(body.data.findings[1]).toMatchObject({
+        findingSource: 'schema',
+        ruleId: 'schema/prisma-sensitive-nullable',
+        language: 'schema',
+        file: '/tmp/schema.prisma',
       });
     });
 

@@ -13,12 +13,16 @@ import * as core from '@los-ast/core';
 vi.mock('@los-ast/core', () => ({
   scan: vi.fn(),
   isReady: vi.fn().mockReturnValue(true),
+  discoverFiles: vi.fn().mockResolvedValue([]),
+  loadRuleFiles: vi.fn().mockResolvedValue([]),
 }));
 
 describe('ScanService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(core.isReady).mockReturnValue(true);
+    vi.mocked(core.discoverFiles).mockResolvedValue([] as any);
+    vi.mocked(core.loadRuleFiles).mockResolvedValue([] as any);
   });
 
   describe('execute', () => {
@@ -172,6 +176,119 @@ describe('ScanService', () => {
       expect(result.findings.every((finding) => finding.findingSource === 'contract')).toBe(true);
     });
 
+    it('should allow native-only contract scans without rootDir and skip core.scan', async () => {
+      const result = await scanService.execute({
+        project: 'test-project',
+        openApiDocuments: [
+          {
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            content: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      responses:',
+              "        '400':",
+              '          description: bad request',
+            ].join('\n'),
+            format: 'yaml',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(core.scan).not.toHaveBeenCalled();
+      expect(result.filesScanned).toBe(0);
+      expect(result.findings).toHaveLength(3);
+      expect(result.findings.every((finding) => finding.findingSource === 'contract')).toBe(true);
+    });
+
+    it('should allow native-only scans when core is not ready', async () => {
+      vi.mocked(core.isReady).mockReturnValue(false);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        schemaDocuments: [
+          {
+            source: 'schema-inline',
+            file: '/tmp/schema.sql',
+            content: [
+              'CREATE TABLE users (',
+              '  email TEXT,',
+              '  status TEXT NOT NULL,',
+              '  created_at TIMESTAMP NOT NULL,',
+              '  password TEXT NOT NULL',
+              ');',
+            ].join('\n'),
+            format: 'sql',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(core.scan).not.toHaveBeenCalled();
+      expect(result.filesScanned).toBe(0);
+      expect(result.findings.every((finding) => finding.findingSource === 'schema')).toBe(true);
+    });
+
+    it('should allow clean native-only documents without rootDir even when they emit no findings', async () => {
+      const result = await scanService.execute({
+        project: 'test-project',
+        openApiDocuments: [
+          {
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            content: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      operationId: createUser',
+              '      security:',
+              '        - bearerAuth: []',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              'components:',
+              '  securitySchemes:',
+              '    bearerAuth:',
+              '      type: http',
+              '      scheme: bearer',
+            ].join('\n'),
+            format: 'yaml',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(core.scan).not.toHaveBeenCalled();
+      expect(result.filesScanned).toBe(0);
+      expect(result.findings).toHaveLength(0);
+    });
+
+    it('should reject native-only requests without rootDir when code-scan config is present', async () => {
+      await expect(
+        scanService.execute({
+          project: 'test-project',
+          rules: ['rules/projects/lsclaw-governance/**/*.yml'],
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+          signal: new AbortController().signal,
+        })
+      ).rejects.toMatchObject({
+        code: 'INVALID_ROOTDIR',
+      });
+
+      expect(core.scan).not.toHaveBeenCalled();
+    });
+
     it('should reject invalid openApiDocuments', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,
@@ -228,9 +345,15 @@ describe('ScanService', () => {
               '            application/json:',
               '              schema:',
               '                type: object',
+              '                required: [id]',
               '                properties:',
               '                  id: { type: string }',
               '                  nickname: { type: string }',
+              '  /sessions:',
+              '    get:',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
             ].join('\n'),
             current: [
               'openapi: 3.0.3',
@@ -245,7 +368,7 @@ describe('ScanService', () => {
               '              type: object',
               '              required: [email]',
               '              properties:',
-              '                email: { type: string }',
+              '                email: { type: integer }',
               '      responses:',
               "        '200':",
               '          description: ok',
@@ -262,11 +385,1219 @@ describe('ScanService', () => {
       });
 
       expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-field-type-change',
+        'contract/openapi-breaking-request-field-drop',
         'contract/openapi-breaking-request-required-add',
         'contract/openapi-breaking-response-field-type-change',
+        'contract/openapi-breaking-response-required-drop',
         'contract/openapi-breaking-response-field-drop',
+        'contract/openapi-breaking-operation-drop',
       ]);
       expect(result.findings.every((finding) => finding.findingSource === 'contract')).toBe(true);
+      expect(result.findings[3].excerpt).toContain('response[200].id');
+    });
+
+    it('should resolve local refs and allOf shapes in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-ref',
+            file: '/tmp/openapi-ref.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    ProfileBase:',
+              '      type: object',
+              '      properties:',
+              '        age: { type: integer }',
+              '    UserInput:',
+              '      allOf:',
+              "        - $ref: '#/components/schemas/ProfileBase'",
+              '        - type: object',
+              '          properties:',
+              '            email: { type: string }',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              "              $ref: '#/components/schemas/UserInput'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    ProfileBase:',
+              '      type: object',
+              '      properties:',
+              '        age: { type: string }',
+              '    UserInput:',
+              '      allOf:',
+              "        - $ref: '#/components/schemas/ProfileBase'",
+              '        - type: object',
+              '          properties:',
+              '            email: { type: string }',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              "              $ref: '#/components/schemas/UserInput'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-field-type-change',
+      ]);
+      expect(result.findings[0].message).toContain('request field age type from integer to string');
+    });
+
+    it('should resolve common fields across oneOf variants in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-oneof',
+            file: '/tmp/openapi-oneof.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              oneOf:',
+              '                - type: object',
+              '                  required: [kind, age]',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    age: { type: integer }',
+              '                    email: { type: string }',
+              '                - type: object',
+              '                  required: [kind, age]',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    age: { type: integer }',
+              '                    phone: { type: string }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              oneOf:',
+              '                - type: object',
+              '                  required: [kind, age]',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    age: { type: string }',
+              '                    email: { type: string }',
+              '                - type: object',
+              '                  required: [kind, age]',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    age: { type: string }',
+              '                    phone: { type: string }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-field-type-change',
+      ]);
+      expect(result.findings[0].message).toContain('request field age type from integer to string');
+    });
+
+    it('should compare top-level array item object shapes in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-array',
+            file: '/tmp/openapi-array.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: array',
+              '              items:',
+              '                type: object',
+              '                properties:',
+              '                  age: { type: integer }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: array',
+              '                items:',
+              '                  type: object',
+              '                  required: [id]',
+              '                  properties:',
+              '                    id: { type: string }',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: array',
+              '              items:',
+              '                type: object',
+              '                properties:',
+              '                  age: { type: string }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: array',
+              '                items:',
+              '                  type: object',
+              '                  properties:',
+              '                    id: { type: string }',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-field-type-change',
+        'contract/openapi-breaking-response-required-drop',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request[].age');
+      expect(result.findings[1].excerpt).toContain('response[200][].id');
+    });
+
+    it('should resolve local refs across oneOf response variants in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-response-oneof-ref',
+            file: '/tmp/openapi-response-oneof-ref.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    UserA:',
+              '      type: object',
+              '      required: [kind, age]',
+              '      properties:',
+              '        kind: { type: string }',
+              '        age: { type: integer }',
+              '        email: { type: string }',
+              '    UserB:',
+              '      type: object',
+              '      required: [kind, age]',
+              '      properties:',
+              '        kind: { type: string }',
+              '        age: { type: integer }',
+              '        phone: { type: string }',
+              'paths:',
+              '  /users:',
+              '    get:',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                oneOf:',
+              "                  - $ref: '#/components/schemas/UserA'",
+              "                  - $ref: '#/components/schemas/UserB'",
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    UserA:',
+              '      type: object',
+              '      required: [kind]',
+              '      properties:',
+              '        kind: { type: string }',
+              '        age: { type: string }',
+              '        email: { type: string }',
+              '    UserB:',
+              '      type: object',
+              '      required: [kind, age]',
+              '      properties:',
+              '        kind: { type: string }',
+              '        age: { type: string }',
+              '        phone: { type: string }',
+              'paths:',
+              '  /users:',
+              '    get:',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                oneOf:',
+              "                  - $ref: '#/components/schemas/UserA'",
+              "                  - $ref: '#/components/schemas/UserB'",
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-response-field-type-change',
+        'contract/openapi-breaking-response-required-drop',
+      ]);
+      expect(result.findings[0].message).toContain('response field age type from integer to string');
+      expect(result.findings[0].excerpt).toContain('response[200].age');
+    });
+
+    it('should compare nested object and array item paths in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-nested',
+            file: '/tmp/openapi-nested.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [profile]',
+              '              properties:',
+              '                profile:',
+              '                  type: object',
+              '                  required: [age]',
+              '                  properties:',
+              '                    age: { type: integer }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [users]',
+              '                properties:',
+              '                  users:',
+              '                    type: array',
+              '                    items:',
+              '                      type: object',
+              '                      required: [id]',
+              '                      properties:',
+              '                        id: { type: string }',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [profile]',
+              '              properties:',
+              '                profile:',
+              '                  type: object',
+              '                  required: [age]',
+              '                  properties:',
+              '                    age: { type: string }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [users]',
+              '                properties:',
+              '                  users:',
+              '                    type: array',
+              '                    items:',
+              '                      type: object',
+              '                      properties:',
+              '                        id: { type: string }',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-field-type-change',
+        'contract/openapi-breaking-response-required-drop',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request.profile.age');
+      expect(result.findings[1].excerpt).toContain('response[200].users[].id');
+    });
+
+    it('should resolve nested ref, allOf and oneOf array paths in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-nested-composed',
+            file: '/tmp/openapi-nested-composed.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    BaseProfile:',
+              '      type: object',
+              '      required: [age]',
+              '      properties:',
+              '        age: { type: integer }',
+              '    ExtendedProfile:',
+              '      allOf:',
+              "        - $ref: '#/components/schemas/BaseProfile'",
+              '        - type: object',
+              '          properties:',
+              '            nickname: { type: string }',
+              '    UserA:',
+              '      type: object',
+              '      required: [id]',
+              '      properties:',
+              '        id: { type: integer }',
+              '        email: { type: string }',
+              '    UserB:',
+              '      type: object',
+              '      required: [id]',
+              '      properties:',
+              '        id: { type: integer }',
+              '        phone: { type: string }',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [profile]',
+              '              properties:',
+              '                profile:',
+              "                  $ref: '#/components/schemas/ExtendedProfile'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [users]',
+              '                properties:',
+              '                  users:',
+              '                    type: array',
+              '                    items:',
+              '                      oneOf:',
+              "                        - $ref: '#/components/schemas/UserA'",
+              "                        - $ref: '#/components/schemas/UserB'",
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    BaseProfile:',
+              '      type: object',
+              '      required: [age]',
+              '      properties:',
+              '        age: { type: string }',
+              '    ExtendedProfile:',
+              '      allOf:',
+              "        - $ref: '#/components/schemas/BaseProfile'",
+              '        - type: object',
+              '          properties:',
+              '            nickname: { type: string }',
+              '    UserA:',
+              '      type: object',
+              '      required: [id]',
+              '      properties:',
+              '        id: { type: string }',
+              '        email: { type: string }',
+              '    UserB:',
+              '      type: object',
+              '      required: [id]',
+              '      properties:',
+              '        id: { type: string }',
+              '        phone: { type: string }',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [profile]',
+              '              properties:',
+              '                profile:',
+              "                  $ref: '#/components/schemas/ExtendedProfile'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [users]',
+              '                properties:',
+              '                  users:',
+              '                    type: array',
+              '                    items:',
+              '                      oneOf:',
+              "                        - $ref: '#/components/schemas/UserA'",
+              "                        - $ref: '#/components/schemas/UserB'",
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-field-type-change',
+        'contract/openapi-breaking-response-field-type-change',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request.profile.age');
+      expect(result.findings[1].excerpt).toContain('response[200].users[].id');
+    });
+
+    it('should compare additionalProperties map-like paths in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-map-like',
+            file: '/tmp/openapi-map-like.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [metadata]',
+              '              properties:',
+              '                metadata:',
+              '                  type: object',
+              '                  additionalProperties:',
+              '                    type: integer',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [profiles]',
+              '                properties:',
+              '                  profiles:',
+              '                    type: object',
+              '                    additionalProperties:',
+              '                      type: object',
+              '                      required: [id]',
+              '                      properties:',
+              '                        id: { type: string }',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [metadata]',
+              '              properties:',
+              '                metadata:',
+              '                  type: object',
+              '                  additionalProperties:',
+              '                    type: string',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [profiles]',
+              '                properties:',
+              '                  profiles:',
+              '                    type: object',
+              '                    additionalProperties:',
+              '                      type: object',
+              '                      properties:',
+              '                        id: { type: string }',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-field-type-change',
+        'contract/openapi-breaking-response-required-drop',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request.metadata.*');
+      expect(result.findings[1].excerpt).toContain('response[200].profiles.*.id');
+    });
+
+    it('should compare nullable enum and default drift in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-value-semantics',
+            file: '/tmp/openapi-value-semantics.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [email]',
+              '              properties:',
+              '                status:',
+              '                  type: string',
+              '                  nullable: true',
+              '                  enum: [active, disabled, archived]',
+              '                  default: active',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  state:',
+              '                    type: string',
+              '                    nullable: true',
+              '                    enum: [queued, done]',
+              '                    default: queued',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              properties:',
+              '                status:',
+              '                  type: string',
+              '                  enum: [active, disabled]',
+              '                  default: disabled',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  state:',
+              '                    type: string',
+              '                    enum: [queued]',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-nullable-tighten',
+        'contract/openapi-breaking-request-enum-value-drop',
+        'contract/openapi-request-default-changed',
+        'contract/openapi-breaking-response-nullable-tighten',
+        'contract/openapi-breaking-response-enum-value-drop',
+        'contract/openapi-response-default-removed',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request.status');
+      expect(result.findings[4].excerpt).toContain('response[200].state');
+    });
+
+    it('should compare discriminator property and mapping drift in openApiComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-discriminator',
+            file: '/tmp/openapi-discriminator.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              oneOf:',
+              '                - type: object',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    type: { type: string }',
+              '                    id: { type: string }',
+              '                - type: object',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    type: { type: string }',
+              '                    id: { type: string }',
+              '              discriminator:',
+              '                propertyName: kind',
+              '                mapping:',
+              "                  admin: '#/components/schemas/AdminUser'",
+              "                  guest: '#/components/schemas/GuestUser'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                oneOf:',
+              '                  - type: object',
+              '                    properties:',
+              '                      status: { type: string }',
+              '                      id: { type: string }',
+              '                  - type: object',
+              '                    properties:',
+              '                      status: { type: string }',
+              '                      id: { type: string }',
+              '                discriminator:',
+              '                  propertyName: status',
+              '                  mapping:',
+              "                    active: '#/components/schemas/ActiveUser'",
+              "                    disabled: '#/components/schemas/DisabledUser'",
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              oneOf:',
+              '                - type: object',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    type: { type: string }',
+              '                    id: { type: string }',
+              '                - type: object',
+              '                  properties:',
+              '                    kind: { type: string }',
+              '                    type: { type: string }',
+              '                    id: { type: string }',
+              '              discriminator:',
+              '                propertyName: type',
+              '                mapping:',
+              "                  admin: '#/components/schemas/AdminUser'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                oneOf:',
+              '                  - type: object',
+              '                    properties:',
+              '                      status: { type: string }',
+              '                      id: { type: string }',
+              '                  - type: object',
+              '                    properties:',
+              '                      status: { type: string }',
+              '                      id: { type: string }',
+              '                discriminator:',
+              '                  propertyName: status',
+              '                  mapping:',
+              "                    active: '#/components/schemas/ActiveUser'",
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-discriminator-change',
+        'contract/openapi-breaking-request-discriminator-value-drop',
+        'contract/openapi-breaking-response-discriminator-value-drop',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request#discriminator.kind');
+      expect(result.findings[2].excerpt).toContain('response[200]#discriminator.status');
+    });
+
+    it('should downgrade added required request fields when a default is present', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-required-default',
+            file: '/tmp/openapi-required-default.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [email]',
+              '              properties:',
+              '                email: { type: string }',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [email, locale]',
+              '              properties:',
+              '                email: { type: string }',
+              '                locale:',
+              '                  type: string',
+              '                  default: zh-CN',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-request-required-add-with-default',
+      ]);
+      expect(result.findings[0].severity).toBe('warning');
+      expect(result.findings[0].excerpt).toContain('request.locale');
+    });
+
+    it('should compare allOf additionalProperties nullable drift across nested paths', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-cross-boundary',
+            file: '/tmp/openapi-cross-boundary.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    MetadataBase:',
+              '      type: object',
+              '      additionalProperties:',
+              '        type: string',
+              '        nullable: true',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [metadata]',
+              '              properties:',
+              '                metadata:',
+              '                  allOf:',
+              "                    - $ref: '#/components/schemas/MetadataBase'",
+              '                    - type: object',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    MetadataBase:',
+              '      type: object',
+              '      additionalProperties:',
+              '        type: string',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              required: [metadata]',
+              '              properties:',
+              '                metadata:',
+              '                  allOf:',
+              "                    - $ref: '#/components/schemas/MetadataBase'",
+              '                    - type: object',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-nullable-tighten',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request.metadata.*');
+    });
+
+    it('should compare nested discriminator paths inside object and array items', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-nested-discriminator',
+            file: '/tmp/openapi-nested-discriminator.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              properties:',
+              '                payload:',
+              '                  oneOf:',
+              '                    - type: object',
+              '                      properties:',
+              '                        kind: { type: string }',
+              '                        id: { type: string }',
+              '                    - type: object',
+              '                      properties:',
+              '                        kind: { type: string }',
+              '                        id: { type: string }',
+              '                  discriminator:',
+              '                    propertyName: kind',
+              '                    mapping:',
+              "                      a: '#/components/schemas/A'",
+              "                      b: '#/components/schemas/B'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  users:',
+              '                    type: array',
+              '                    items:',
+              '                      oneOf:',
+              '                        - type: object',
+              '                          properties:',
+              '                            status: { type: string }',
+              '                            id: { type: string }',
+              '                        - type: object',
+              '                          properties:',
+              '                            status: { type: string }',
+              '                            id: { type: string }',
+              '                      discriminator:',
+              '                        propertyName: status',
+              '                        mapping:',
+              "                          active: '#/components/schemas/ActiveUser'",
+              "                          disabled: '#/components/schemas/DisabledUser'",
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              properties:',
+              '                payload:',
+              '                  oneOf:',
+              '                    - type: object',
+              '                      properties:',
+              '                        kind: { type: string }',
+              '                        id: { type: string }',
+              '                    - type: object',
+              '                      properties:',
+              '                        kind: { type: string }',
+              '                        id: { type: string }',
+              '                  discriminator:',
+              '                    propertyName: kind',
+              '                    mapping:',
+              "                      a: '#/components/schemas/A'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  users:',
+              '                    type: array',
+              '                    items:',
+              '                      oneOf:',
+              '                        - type: object',
+              '                          properties:',
+              '                            status: { type: string }',
+              '                            id: { type: string }',
+              '                        - type: object',
+              '                          properties:',
+              '                            status: { type: string }',
+              '                            id: { type: string }',
+              '                      discriminator:',
+              '                        propertyName: state',
+              '                        mapping:',
+              "                          active: '#/components/schemas/ActiveUser'",
+              "                          disabled: '#/components/schemas/DisabledUser'",
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-discriminator-value-drop',
+        'contract/openapi-breaking-response-discriminator-change',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request.payload#discriminator.kind');
+      expect(result.findings[1].excerpt).toContain('response[200].users[]#discriminator.status');
+    });
+
+    it('should align response comparisons by success status code', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-status',
+            file: '/tmp/openapi-status.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [id]',
+              '                properties:',
+              '                  id: { type: string }',
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      responses:',
+              "        '201':",
+              '          description: created',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                required: [id]',
+              '                properties:',
+              '                  id: { type: string }',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-response-status-drop',
+      ]);
+      expect(result.findings[0].excerpt).toContain('response[200]');
     });
 
     it('should derive schema findings from schemaDocuments', async () => {
@@ -306,6 +1637,137 @@ describe('ScanService', () => {
       expect(result.findings.every((finding) => finding.findingSource === 'schema')).toBe(true);
     });
 
+    it('should keep contract and schema native inputs on separate finding channels', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiDocuments: [
+          {
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            content: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      responses:',
+              "        '400':",
+              '          description: bad request',
+            ].join('\n'),
+            format: 'yaml',
+          },
+        ],
+        schemaDocuments: [
+          {
+            source: 'schema-inline',
+            file: '/tmp/schema.sql',
+            content: [
+              'CREATE TABLE users (',
+              '  email TEXT,',
+              '  status TEXT NOT NULL,',
+              '  created_at TIMESTAMP NOT NULL,',
+              '  password TEXT NOT NULL',
+              ');',
+            ].join('\n'),
+            format: 'sql',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(7);
+
+      const contractFindings = result.findings.filter((finding) => finding.findingSource === 'contract');
+      const schemaFindings = result.findings.filter((finding) => finding.findingSource === 'schema');
+
+      expect(contractFindings).toHaveLength(3);
+      expect(schemaFindings).toHaveLength(4);
+      expect(contractFindings.every((finding) => finding.language === 'contract')).toBe(true);
+      expect(schemaFindings.every((finding) => finding.language === 'schema')).toBe(true);
+      expect(contractFindings.every((finding) => finding.file === '/tmp/openapi.yaml')).toBe(true);
+      expect(schemaFindings.every((finding) => finding.file === '/tmp/schema.sql')).toBe(true);
+      expect(contractFindings.every((finding) => finding.ruleId.startsWith('contract/'))).toBe(true);
+      expect(schemaFindings.every((finding) => finding.ruleId.startsWith('schema/'))).toBe(true);
+    });
+
+    it('should keep same-location findings separated by source with deterministic source ordering', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [
+          {
+            tool: 'los-ast',
+            version: 0,
+            timestamp: '1970-01-01T00:00:00.000Z',
+            project: 'test-project',
+            ruleFile: '/rules/ast.yml',
+            ruleId: 'ast/no-console',
+            severity: 'warning',
+            message: 'ast finding',
+            file: '/same/file.ts',
+            language: 'typescript',
+            range: {
+              start: { line: 10, column: 0, index: 100 },
+              end: { line: 10, column: 10, index: 110 },
+            },
+            excerpt: 'console.log',
+            hasFix: false,
+            proposedReplacement: null,
+            fingerprint: 'ast-1',
+            findingSource: 'ast',
+          },
+        ],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        deterministic: true,
+        contractArtifacts: [
+          {
+            source: 'contract-source',
+            ruleId: 'contract/demo',
+            severity: 'warning',
+            message: 'contract finding',
+            file: '/same/file.ts',
+            language: 'contract',
+            line: 10,
+            column: 0,
+            startIndex: 100,
+            endIndex: 110,
+            excerpt: 'contract finding',
+          },
+        ],
+        schemaArtifacts: [
+          {
+            source: 'schema-source',
+            ruleId: 'schema/demo',
+            severity: 'warning',
+            message: 'schema finding',
+            file: '/same/file.ts',
+            language: 'schema',
+            line: 10,
+            column: 0,
+            startIndex: 100,
+            endIndex: 110,
+            excerpt: 'schema finding',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.findingSource)).toEqual([
+        'ast',
+        'contract',
+        'schema',
+      ]);
+      expect(result.findings).toHaveLength(3);
+    });
+
     it('should reject schemaDocuments with unknown format', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,
@@ -325,6 +1787,29 @@ describe('ScanService', () => {
           signal: new AbortController().signal,
         })
       ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('should reject requests without rootDir when no native artifacts are provided', async () => {
+      await expect(
+        scanService.execute({
+          project: 'test-project',
+          signal: new AbortController().signal,
+        })
+      ).rejects.toMatchObject({
+        code: 'INVALID_SCAN_INPUT',
+      });
+    });
+
+    it('should reject rule-based scans without rootDir', async () => {
+      await expect(
+        scanService.execute({
+          project: 'test-project',
+          rules: ['rules/projects/lsclaw-governance/**/*.yml'],
+          signal: new AbortController().signal,
+        })
+      ).rejects.toMatchObject({
+        code: 'INVALID_ROOTDIR',
+      });
     });
 
     it('should derive breaking findings from schemaComparisons', async () => {
@@ -360,8 +1845,120 @@ describe('ScanService', () => {
       });
 
       expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/sql-breaking-primary-key-change',
         'schema/sql-breaking-drop-field',
         'schema/sql-breaking-type-change',
+        'schema/sql-breaking-nullability-tighten',
+      ]);
+    });
+
+    it('should flag added required schema fields without defaults as breaking', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-add-required',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id String @id',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              '  id String @id',
+              '  email String',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/prisma-breaking-add-required-field',
+      ]);
+      expect(result.findings[0].findingSource).toBe('schema');
+    });
+
+    it('should grade added required schema fields when a default is present', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-add-required-default',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id String @id',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              '  id String @id',
+              '  email String @default("demo@example.com")',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/prisma-add-required-field-with-default',
+      ]);
+      expect(result.findings[0].severity).toBe('warning');
+    });
+
+    it('should flag primary key drift from schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-primary-key',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL,',
+              '  email TEXT,',
+              '  PRIMARY KEY (id)',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL,',
+              '  email TEXT NOT NULL,',
+              '  PRIMARY KEY (email)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/sql-breaking-primary-key-change',
         'schema/sql-breaking-nullability-tighten',
       ]);
     });
@@ -409,6 +2006,163 @@ describe('ScanService', () => {
       expect(result.findings.map((finding) => finding.ruleId)).toEqual([
         'schema/prisma-breaking-enum-value-drop',
         'schema/prisma-default-removed',
+      ]);
+    });
+
+    it('should treat equivalent timestamp defaults as compatible in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-sql-defaults',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL DEFAULT gen_random_uuid(),',
+              '  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+              '  PRIMARY KEY (id)',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL DEFAULT gen_random_uuid(),',
+              '  created_at TIMESTAMP NOT NULL DEFAULT (now()),',
+              '  PRIMARY KEY (id)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
+    it('should treat equivalent sql timestamp and uuid defaults as compatible in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-sql-default-equivalence',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL DEFAULT uuid_generate_v4(),',
+              '  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(3),',
+              '  PRIMARY KEY (id)',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL DEFAULT gen_random_uuid(),',
+              '  created_at TIMESTAMP NOT NULL DEFAULT (now()),',
+              '  PRIMARY KEY (id)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
+    it('should grade field-level unique drift in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-unique-field',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id String @id',
+              '  email String @unique',
+              '  username String',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              '  id String @id',
+              '  email String',
+              '  username String @unique',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/prisma-unique-removed',
+        'schema/prisma-unique-added',
+      ]);
+      expect(result.findings.map((finding) => finding.severity)).toEqual(['info', 'warning']);
+    });
+
+    it('should grade composite unique drift in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-composite-unique',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL,',
+              '  email TEXT NOT NULL,',
+              '  tenant_id TEXT NOT NULL,',
+              '  PRIMARY KEY (id),',
+              '  UNIQUE (email, tenant_id)',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL,',
+              '  email TEXT NOT NULL,',
+              '  tenant_id TEXT NOT NULL,',
+              '  slug TEXT NOT NULL,',
+              '  PRIMARY KEY (id),',
+              '  UNIQUE (slug, tenant_id)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/sql-composite-unique-removed',
+        'schema/sql-composite-unique-added',
+        'schema/sql-breaking-add-required-field',
       ]);
     });
 
@@ -532,6 +2286,56 @@ describe('ScanService', () => {
         findingSource: 'schema',
         ruleId: 'schema/field-nullability',
       });
+    });
+
+    it('should not double count equivalent native and passthrough contract findings', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 0,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        openApiDocuments: [
+          {
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            content: [
+              'openapi: 3.0.3',
+              'paths:',
+              '  /users:',
+              '    post:',
+              "      responses: {'400': { description: bad request }}",
+            ].join('\n'),
+            format: 'yaml',
+          },
+        ],
+        contractArtifacts: [
+          {
+            source: 'manual-contract',
+            ruleId: 'contract/openapi-operation-id',
+            severity: 'warning',
+            message: 'OpenAPI operation POST /users is missing operationId',
+            file: '/tmp/openapi.yaml',
+            language: 'contract',
+            line: 1,
+            column: 0,
+            excerpt: 'POST /users',
+            governanceDomain: ['interface', 'backend'],
+            impactHint: 'medium',
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.filesScanned).toBe(0);
+      expect(result.findings).toHaveLength(3);
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-operation-id',
+        'contract/openapi-auth-required',
+        'contract/openapi-success-response',
+      ]);
+      expect(result.findings[0].ruleFile).toBe('manual-contract');
     });
   });
 

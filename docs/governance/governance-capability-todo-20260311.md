@@ -1,5 +1,7 @@
 # lsclaw / VPS Agent Web 治理能力对齐 TODO（阶段交付：2026-03-11）
 
+状态：阶段记录。当前执行请以 `docs/ACTIVE_TODO.md` 为准；本文件保留 2026-03-11 的治理阶段结论与后续入口。
+
 ## 一、当前定位（阶段性结论）
 
 - `los-ast` 当前**能稳定提供代码层治理**，是 `lsclaw` 和 `VPS Agent Web` 可复用的扫描内核。
@@ -23,10 +25,10 @@
 - [x] 更新 API/合同文档的发现字段说明。
 
 ### 2) 规则治理基础
-- [ ] 建立统一治理包目录：`rules/projects/lsclaw-governance/`
-- [ ] 先沉淀 Frontend / Backend / Database 三类代码层治理规则（可迭代扩展）
-- [ ] 在规则注释中加入 `governance` 元信息（domain / owner / impact / rationale）
-- [ ] 为规则包补充 `fixtures` 样例验证（下个阶段并行）
+- [x] 建立统一治理包目录：`rules/projects/lsclaw-governance/`
+- [x] 已沉淀 Frontend / Backend / Database 三类代码层治理规则（可迭代扩展）
+- [x] 已在规则中加入 `governance` 元信息（domain / owner / impact / rationale）
+- [x] 已为规则包补充最小 `fixtures` 样例验证与整包 threshold 基线
 
 ### 3) 接口与字段治理规划（P1+）
 - [ ] 定义“字段治理规则 DSL v1”与输入源：OpenAPI、Prisma/SQL、GraphQL/JSON Schema。
@@ -36,9 +38,9 @@
 ## 三、阶段验收标准（本轮）
 
 - [x] Core `/scan` 与 `/discover/symbols` 可继续稳定工作。
-- [ ] 规则治理包目录存在且可被 `scan` 加载。
-- [ ] 文档能回答“现在能做什么、不能做什么、何时能做”。
-- [ ] 下阶段已明确 2 条可执行输入源任务（如 OpenAPI 解析）。
+- [x] 规则治理包目录存在且可被 `scan` 加载。
+- [x] 文档能回答“现在能做什么、不能做什么、何时能做”。
+- [x] 下阶段已明确 2 条可执行输入源任务（如 OpenAPI 解析）。
 
 ## 四、下阶段TODO（按优先级）
 
@@ -56,8 +58,8 @@
 ### 2 阶段优先级（继续）
 
 1. **优先级高（2-5 天）**：  
-   - 建立 `rules/projects/lsclaw-governance/` 统一治理包并接入扫描规则源；  
-   - 固定规则发布版本与加载顺序（避免规则漂移）。
+   - 固定规则发布版本与加载顺序（避免规则漂移）；  
+   - 补规则来源可追溯字段在发布/装载链路中的消费说明。
 2. **优先级中（1-2 周）**：  
    - 引入 `contract` 输入源解析（OpenAPI / JSON Schema）最小管道；  
    - 输出统一 `findingSource=contract`（含 `governanceDomain/impactHint`）并补 `golden` 对齐。

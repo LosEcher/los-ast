@@ -1,0 +1,12 @@
+{
+  "profile": "openapi-native",
+  "findingSource": "contract",
+  "expectedRuleIds": [
+    "contract/openapi-breaking-request-nullable-tighten",
+    "contract/openapi-breaking-request-enum-value-drop",
+    "contract/openapi-request-default-changed",
+    "contract/openapi-breaking-response-nullable-tighten",
+    "contract/openapi-breaking-response-enum-value-drop",
+    "contract/openapi-response-default-removed"
+  ]
+}

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { scan, discoverFiles, isReady, loadRuleFiles } from '@los-ast/core';
 import { PARSER_CONFIG, SCAN_LIMITS } from '../config/index.js';
-import { CoreNotReadyError, ScanTooLargeError } from '../types/errors.js';
+import { CoreNotReadyError, ScanTooLargeError, ValidationError } from '../types/errors.js';
 import { parseArtifactInputs } from './artifact-parsers/index.js';
 function toIsoNowForContract(deterministic = false) {
     if (deterministic) {
@@ -78,7 +78,36 @@ function deterministicSortFindings(a, b) {
         return a.range.start.column - b.range.start.column;
     if (a.range.start.index !== b.range.start.index)
         return a.range.start.index - b.range.start.index;
+    const sourceOrder = { ast: 0, contract: 1, schema: 2 };
+    const aSource = sourceOrder[a.findingSource || 'ast'];
+    const bSource = sourceOrder[b.findingSource || 'ast'];
+    if (aSource !== bSource)
+        return aSource - bSource;
+    if (a.ruleId !== b.ruleId)
+        return a.ruleId.localeCompare(b.ruleId);
+    if (a.fingerprint !== b.fingerprint)
+        return a.fingerprint.localeCompare(b.fingerprint);
     return 0;
+}
+function hasScannableRootDir(rootDir) {
+    return typeof rootDir === 'string' && rootDir.trim().length > 0;
+}
+function hasNativeArtifactInputs(options) {
+    return [
+        options.openApiDocuments,
+        options.openApiComparisons,
+        options.schemaDocuments,
+        options.schemaComparisons,
+        options.contractArtifacts,
+        options.schemaArtifacts,
+    ].some((items) => Array.isArray(items) && items.length > 0);
+}
+function requiresCodeScan(options) {
+    return typeof options.rootDir !== 'undefined'
+        || (Array.isArray(options.include) && options.include.length > 0)
+        || (Array.isArray(options.ignore) && options.ignore.length > 0)
+        || (Array.isArray(options.rules) && options.rules.length > 0)
+        || options.includeStats === true;
 }
 function buildFindingsFromArtifacts({ project, contractArtifacts, schemaArtifacts, deterministic = false, defaultFindingSource, }) {
     const artifacts = defaultFindingSource === 'schema'
@@ -151,35 +180,6 @@ export class ScanService {
      */
     async execute(options) {
         const { project, rootDir, include, ignore, rules: rulePatterns, includeStats, deterministic, openApiDocuments, openApiComparisons, schemaDocuments, schemaComparisons, contractArtifacts, schemaArtifacts, signal, } = options;
-        // 检查 Core 是否已初始化
-        if (!isReady()) {
-            throw new CoreNotReadyError();
-        }
-        // 加载规则
-        const rules = rulePatterns && rulePatterns.length > 0
-            ? await loadRuleFiles(rulePatterns)
-            : [];
-        // 预估文件数量
-        const estimatedCount = await this.estimateFileCount(rootDir, include, ignore);
-        // 检查文件数限制（硬约束 #4）
-        if (estimatedCount > SCAN_LIMITS.maxFilesPerSyncScan) {
-            throw new ScanTooLargeError(SCAN_LIMITS.maxFilesPerSyncScan, estimatedCount);
-        }
-        // 检查取消信号
-        if (signal.aborted) {
-            throw new Error('Scan aborted');
-        }
-        // 执行扫描
-        const result = await scan({
-            project,
-            rootDir,
-            include,
-            ignore,
-            rules,
-            includeStats,
-            deterministic,
-            signal,
-        });
         const parsedArtifacts = parseArtifactInputs({
             openApiDocuments,
             openApiComparisons,
@@ -189,6 +189,61 @@ export class ScanService {
             schemaArtifacts,
             runtimeConfig: PARSER_CONFIG,
         });
+        const hasNativeArtifacts = hasNativeArtifactInputs({
+            openApiDocuments,
+            openApiComparisons,
+            schemaDocuments,
+            schemaComparisons,
+            contractArtifacts,
+            schemaArtifacts,
+        });
+        const shouldRunAstScan = requiresCodeScan({
+            rootDir,
+            include,
+            ignore,
+            rules: rulePatterns,
+            includeStats,
+        });
+        if (!shouldRunAstScan && !hasNativeArtifacts) {
+            throw new ValidationError('INVALID_SCAN_INPUT', 'either rootDir or native artifact inputs must be provided');
+        }
+        if (signal.aborted) {
+            throw new Error('Scan aborted');
+        }
+        let result = {
+            filesScanned: 0,
+            findings: [],
+        };
+        if (shouldRunAstScan) {
+            if (!hasScannableRootDir(rootDir)) {
+                throw new ValidationError('INVALID_ROOTDIR', 'rootDir must be a non-empty string');
+            }
+            // 检查 Core 是否已初始化
+            if (!isReady()) {
+                throw new CoreNotReadyError();
+            }
+            // 加载规则
+            const rules = rulePatterns && rulePatterns.length > 0
+                ? await loadRuleFiles(rulePatterns)
+                : [];
+            // 预估文件数量
+            const estimatedCount = await this.estimateFileCount(rootDir, include, ignore);
+            // 检查文件数限制（硬约束 #4）
+            if (estimatedCount > SCAN_LIMITS.maxFilesPerSyncScan) {
+                throw new ScanTooLargeError(SCAN_LIMITS.maxFilesPerSyncScan, estimatedCount);
+            }
+            // 执行扫描
+            result = await scan({
+                project,
+                rootDir,
+                include,
+                ignore,
+                rules,
+                includeStats,
+                deterministic,
+                signal,
+            });
+        }
         const contractFindings = buildFindingsFromArtifacts({
             project,
             contractArtifacts: parsedArtifacts.contractArtifacts,

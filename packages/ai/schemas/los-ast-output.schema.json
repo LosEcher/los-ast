@@ -11,6 +11,15 @@
     "project": { "type": "string" },
     "ruleFile": { "type": ["string", "null"] },
     "ruleId": { "type": "string" },
+    "findingSource": { "enum": ["ast", "contract", "schema"] },
+    "governanceDomain": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "impactHint": {
+      "type": ["string", "null"],
+      "enum": ["low", "medium", "high", null]
+    },
     "severity": { "enum": ["info", "warning", "error"] },
     "message": { "type": "string" },
     "file": { "type": "string" },

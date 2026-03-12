@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: Discriminator Example
+  version: 1.1.0
+paths:
+  /users:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties:
+                    kind: { type: string }
+                    type: { type: string }
+                    id: { type: string }
+                - type: object
+                  properties:
+                    kind: { type: string }
+                    type: { type: string }
+                    id: { type: string }
+              discriminator:
+                propertyName: type
+                mapping:
+                  admin: '#/components/schemas/AdminUser'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      status: { type: string }
+                      id: { type: string }
+                  - type: object
+                    properties:
+                      status: { type: string }
+                      id: { type: string }
+                discriminator:
+                  propertyName: status
+                  mapping:
+                    active: '#/components/schemas/ActiveUser'

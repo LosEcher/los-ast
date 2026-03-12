@@ -1,0 +1,45 @@
+{
+  "description": "Golden baseline for the lsclaw-governance rule pack.",
+  "project": "lsclaw-governance-pack",
+  "filesScanned": 5,
+  "expectedFindings": {
+    "patterns": [
+      {
+        "ruleId": "lsclaw-governance.frontend-http-client",
+        "messagePattern": "统一通过封装网络层",
+        "minimumOccurrences": 1
+      },
+      {
+        "ruleId": "lsclaw-governance.frontend-http-client-axios",
+        "messagePattern": "统一通过封装网络层",
+        "minimumOccurrences": 1
+      },
+      {
+        "ruleId": "lsclaw-governance.backend-route-handler",
+        "messagePattern": "显式处理异常",
+        "minimumOccurrences": 1
+      },
+      {
+        "ruleId": "lsclaw-governance.database-concat-query",
+        "messagePattern": "参数化查询",
+        "minimumOccurrences": 1
+      },
+      {
+        "ruleId": "lsclaw-governance.api-response-field-exposure",
+        "messagePattern": "DTO 映射",
+        "minimumOccurrences": 1
+      }
+    ],
+    "filesAffected": [
+      "src/backend.ts",
+      "src/database.ts",
+      "src/frontend-axios.ts",
+      "src/frontend-fetch.ts",
+      "src/interface.ts"
+    ]
+  },
+  "invariants": {
+    "tool": "los-ast",
+    "language": "TypeScript"
+  }
+}

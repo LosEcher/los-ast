@@ -1,6 +1,6 @@
 # Hub-Lite Route Evidence 验收说明
 
-更新时间：2026-03-11
+更新时间：2026-03-12
 
 ## 目的
 
@@ -36,11 +36,13 @@ node --test ./test/hub-lite-artifacts.test.mjs
 - 覆盖 `else / else if`
 - 覆盖简单 `&& / ||`
 - 覆盖 wrapped compound condition
-- 覆盖同文件 helper gate 正例与 unsafe helper 负例
+- 覆盖同文件 helper gate 正例、静态 alias 转发、helper 链转发与 unsafe helper 负例
+- 覆盖 `!(helper(...) && extra)` 这类带括号的 negated helper compound / early-return guard
+- 覆盖多 flag guard 的保守 `flag_set` 分层
 
 当前基线：
 
-- 2026-03-11：`13/13` 通过
+- 2026-03-12：`18/18` 通过
 
 ### L2: 构建验收
 
@@ -97,10 +99,9 @@ npm run test
 
 当前状态：
 
-- 2026-03-11：未通过
-- 阻塞点：`test/rules.test.mjs`
-- 失败用例：`governance metadata is projected into scan findings`
-- 结论：该阻塞不属于本轮 `hub-lite route evidence` 改动直接引入，但会阻止“仓库级完全验收”成立
+- 2026-03-11：通过
+- 结果：`test:core` 与 `test:api` 均通过
+- 结论：当前仓库默认测试入口可作为 `hub-lite route evidence` 的仓库级门禁依据
 
 ## 阶段完成判定
 
@@ -122,16 +123,17 @@ npm run test
 
 当前 `hub-lite route evidence` 阶段标记应为：
 
-- `phase_complete_verifiable`
+- `repo_gate_green`
 
 不应标记为：
 
-- `repo_gate_green`
+- `phase_complete_local`
+- `phase_complete_verifiable`
 
 原因：
 
 - `hub-lite` 相关能力线已经通过 L1/L2/L3
-- 仓库默认测试入口仍受独立的 `test:core` 既有失败阻塞
+- 仓库默认测试入口 L4 当前也已通过
 
 ## 建议测试时机
 
@@ -146,5 +148,4 @@ npm run test
 - 跑 `npm run test`
 
 4. 准备跑最终质量门禁时：
-- 先解决 `test:core` 既有失败
-- 再跑 `npm run quality-gate`
+- 直接跑 `npm run quality-gate`

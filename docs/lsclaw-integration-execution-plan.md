@@ -25,6 +25,7 @@
 - 统一契约基线：文档、类型、返回字段对齐。
 - 增加最小可回归链路：lint + test + typecheck + smoke。
 - 保持可灰度可回滚，不引入破坏性迁移。
+- 如消费 `hub-lite` 的 `structure-map.json`，只应把它视为“结构证据 + 最小 Fastify route bind/runtime 分层输出”；完整 route truth 仍需结合 OpenAPI、集成测试或外部 runtime probe 交叉验证。
 
 ## 任务拆分与验收
 

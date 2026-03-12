@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: Composed Example
+  version: 1.0.0
+components:
+  schemas:
+    BaseProfile:
+      type: object
+      required: [age]
+      properties:
+        age: { type: integer }
+    ExtendedProfile:
+      allOf:
+        - $ref: '#/components/schemas/BaseProfile'
+        - type: object
+          properties:
+            nickname: { type: string }
+    MetadataBase:
+      type: object
+      additionalProperties:
+        type: string
+        nullable: true
+    UserA:
+      type: object
+      properties:
+        status: { type: string }
+        id: { type: string }
+    UserB:
+      type: object
+      properties:
+        status: { type: string }
+        id: { type: string }
+paths:
+  /users:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile, email]
+              properties:
+                profile:
+                  $ref: '#/components/schemas/ExtendedProfile'
+                metadata:
+                  allOf:
+                    - $ref: '#/components/schemas/MetadataBase'
+                    - type: object
+                email:
+                  type: string
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/UserA'
+                        - $ref: '#/components/schemas/UserB'
+                      discriminator:
+                        propertyName: status
+                        mapping:
+                          active: '#/components/schemas/UserA'
+                          disabled: '#/components/schemas/UserB'
+                  state:
+                    type: string
+                    enum: [queued, done]

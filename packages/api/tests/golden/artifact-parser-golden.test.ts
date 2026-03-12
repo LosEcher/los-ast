@@ -123,4 +123,73 @@ describe('Artifact Parser Golden', () => {
     expect(result.contractArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
     expect(expected.findingSource).toBe('contract');
   });
+
+  it('openapi value-semantics comparison fixture should stay stable', () => {
+    const baseline = fs.readFileSync(path.join(fixturesDir, 'openapi-value-semantics-baseline.yaml'), 'utf8');
+    const current = fs.readFileSync(path.join(fixturesDir, 'openapi-value-semantics-current.yaml'), 'utf8');
+    const expected = JSON.parse(
+      fs.readFileSync(path.join(fixturesDir, 'openapi-value-semantics.expected.json'), 'utf8')
+    ) as ExpectedFixture;
+
+    const result = parseArtifactInputs({
+      openApiComparisons: [
+        {
+          source: 'openapi-value-semantics',
+          file: 'fixtures/artifact-parsers/openapi-value-semantics.yaml',
+          baseline,
+          current,
+          format: 'yaml',
+        },
+      ],
+    });
+
+    expect(result.contractArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
+    expect(expected.findingSource).toBe('contract');
+  });
+
+  it('openapi discriminator comparison fixture should stay stable', () => {
+    const baseline = fs.readFileSync(path.join(fixturesDir, 'openapi-discriminator-baseline.yaml'), 'utf8');
+    const current = fs.readFileSync(path.join(fixturesDir, 'openapi-discriminator-current.yaml'), 'utf8');
+    const expected = JSON.parse(
+      fs.readFileSync(path.join(fixturesDir, 'openapi-discriminator.expected.json'), 'utf8')
+    ) as ExpectedFixture;
+
+    const result = parseArtifactInputs({
+      openApiComparisons: [
+        {
+          source: 'openapi-discriminator',
+          file: 'fixtures/artifact-parsers/openapi-discriminator.yaml',
+          baseline,
+          current,
+          format: 'yaml',
+        },
+      ],
+    });
+
+    expect(result.contractArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
+    expect(expected.findingSource).toBe('contract');
+  });
+
+  it('openapi composed comparison fixture should stay stable', () => {
+    const baseline = fs.readFileSync(path.join(fixturesDir, 'openapi-composed-baseline.yaml'), 'utf8');
+    const current = fs.readFileSync(path.join(fixturesDir, 'openapi-composed-current.yaml'), 'utf8');
+    const expected = JSON.parse(
+      fs.readFileSync(path.join(fixturesDir, 'openapi-composed.expected.json'), 'utf8')
+    ) as ExpectedFixture;
+
+    const result = parseArtifactInputs({
+      openApiComparisons: [
+        {
+          source: 'openapi-composed',
+          file: 'fixtures/artifact-parsers/openapi-composed.yaml',
+          baseline,
+          current,
+          format: 'yaml',
+        },
+      ],
+    });
+
+    expect(result.contractArtifacts.map((item) => item.ruleId)).toEqual(expected.expectedRuleIds);
+    expect(expected.findingSource).toBe('contract');
+  });
 });

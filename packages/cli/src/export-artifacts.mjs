@@ -333,13 +333,35 @@ function stripWrappingParens(expression) {
 function invertBooleanExpression(expression) {
   const normalized = stripWrappingParens(expression)
   if (!normalized) return ''
+
+  const andTerms = splitTopLevelLogical(normalized, '&&')
+  if (andTerms.length > 1) {
+    return andTerms
+      .map((term) => formatBooleanTermForJoin(invertBooleanExpression(term), '||'))
+      .join(' || ')
+  }
+
+  const orTerms = splitTopLevelLogical(normalized, '||')
+  if (orTerms.length > 1) {
+    return orTerms
+      .map((term) => formatBooleanTermForJoin(invertBooleanExpression(term), '&&'))
+      .join(' && ')
+  }
+
   if (normalized.startsWith('!')) {
     return stripWrappingParens(normalized.slice(1))
   }
-  if (normalized.includes('&&') || normalized.includes('||')) {
-    return `!(${normalized})`
-  }
+
   return `!${normalized}`
+}
+
+function formatBooleanTermForJoin(term, joinOperator) {
+  const normalized = stripWrappingParens(term)
+  if (!normalized) return ''
+  if (joinOperator === '&&' && splitTopLevelLogical(normalized, '||').length > 1) {
+    return `(${normalized})`
+  }
+  return normalized
 }
 
 function extractFunctionScopes(source) {
@@ -498,25 +520,192 @@ function isSafeBooleanHelperExpression(expression, params) {
   return identifiers.every((identifier) => params.includes(identifier))
 }
 
+function splitTopLevelStatements(source) {
+  const statements = []
+  let current = ''
+  let parenDepth = 0
+  let bracketDepth = 0
+  let braceDepth = 0
+  let templateDepth = 0
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inTemplate = false
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    const next = source[index + 1]
+    const prev = source[index - 1]
+
+    if (inSingleQuote) {
+      current += char
+      if (char === "'" && prev !== '\\') inSingleQuote = false
+      continue
+    }
+
+    if (inDoubleQuote) {
+      current += char
+      if (char === '"' && prev !== '\\') inDoubleQuote = false
+      continue
+    }
+
+    if (inTemplate) {
+      current += char
+      if (char === '`' && prev !== '\\' && templateDepth === 0) {
+        inTemplate = false
+        continue
+      }
+      if (char === '$' && next === '{') {
+        templateDepth += 1
+        current += next
+        index += 1
+        continue
+      }
+      if (char === '{' && templateDepth > 0) {
+        templateDepth += 1
+        continue
+      }
+      if (char === '}' && templateDepth > 0) {
+        templateDepth -= 1
+      }
+      continue
+    }
+
+    if (char === "'") {
+      inSingleQuote = true
+      current += char
+      continue
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true
+      current += char
+      continue
+    }
+
+    if (char === '`') {
+      inTemplate = true
+      current += char
+      continue
+    }
+
+    if (char === '(') {
+      parenDepth += 1
+      current += char
+      continue
+    }
+
+    if (char === ')') {
+      parenDepth = Math.max(0, parenDepth - 1)
+      current += char
+      continue
+    }
+
+    if (char === '[') {
+      bracketDepth += 1
+      current += char
+      continue
+    }
+
+    if (char === ']') {
+      bracketDepth = Math.max(0, bracketDepth - 1)
+      current += char
+      continue
+    }
+
+    if (char === '{') {
+      braceDepth += 1
+      current += char
+      continue
+    }
+
+    if (char === '}') {
+      braceDepth = Math.max(0, braceDepth - 1)
+      current += char
+      continue
+    }
+
+    if (parenDepth === 0 && bracketDepth === 0 && braceDepth === 0 && (char === ';' || char === '\n')) {
+      if (current.trim()) {
+        statements.push(current.trim())
+      }
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  if (current.trim()) {
+    statements.push(current.trim())
+  }
+
+  return statements
+}
+
+function extractSafeHelperExpression(body, params, helperFunctions = new Map()) {
+  const statements = splitTopLevelStatements(body).filter(Boolean)
+  if (statements.length === 0) return null
+
+  const localAliases = new Map()
+  const helperMap = helperFunctions instanceof Map ? helperFunctions : new Map()
+
+  for (let index = 0; index < statements.length; index += 1) {
+    const statement = statements[index]
+    const isLast = index === statements.length - 1
+
+    if (isLast) {
+      const returnMatch = /^return\s+([\s\S]+)$/.exec(statement)
+      if (!returnMatch) return null
+
+      const resolvedExpression = resolveGuardCondition(returnMatch[1], localAliases, helperMap)
+      return isSafeBooleanHelperExpression(resolvedExpression, params)
+        ? resolvedExpression
+        : null
+    }
+
+    const aliasMatch = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(statement)
+    if (!aliasMatch) return null
+
+    const aliasName = String(aliasMatch[1] || '').trim()
+    const aliasExpression = String(aliasMatch[2] || '').trim()
+    if (!aliasName || !aliasExpression) return null
+
+    const resolvedAlias = resolveGuardCondition(aliasExpression, localAliases, helperMap)
+    if (!isSafeBooleanHelperExpression(resolvedAlias, params)) return null
+    localAliases.set(aliasName, resolvedAlias)
+  }
+
+  return null
+}
+
 function extractBooleanHelperFunctions(source, functionScopes) {
   const helpers = new Map()
+  const remainingScopes = [...functionScopes]
 
-  for (const scope of functionScopes) {
-    const params = parseParameterNames(scope.paramsRaw)
-    if (params.length === 0) continue
+  for (let pass = 0; pass < functionScopes.length; pass += 1) {
+    let addedInPass = false
 
-    const body = stripComments(source.slice(scope.bodyStart + 1, scope.end)).trim()
-    const returnMatch = /^return\s+([\s\S]*?);?\s*$/.exec(body)
-    if (!returnMatch) continue
+    for (let index = remainingScopes.length - 1; index >= 0; index -= 1) {
+      const scope = remainingScopes[index]
+      const params = parseParameterNames(scope.paramsRaw)
+      if (params.length === 0) {
+        remainingScopes.splice(index, 1)
+        continue
+      }
 
-    const expression = String(returnMatch[1] || '').trim()
-    if (!expression) continue
-    if (!isSafeBooleanHelperExpression(expression, params)) continue
+      const body = stripComments(source.slice(scope.bodyStart + 1, scope.end)).trim()
+      const expression = extractSafeHelperExpression(body, params, helpers)
+      if (!expression) continue
 
-    helpers.set(scope.name, {
-      params,
-      expression,
-    })
+      helpers.set(scope.name, {
+        params,
+        expression,
+      })
+      remainingScopes.splice(index, 1)
+      addedInPass = true
+    }
+
+    if (!addedInPass) break
   }
 
   return helpers
@@ -557,6 +746,40 @@ function resolveGuardCondition(condition, aliases, helperFunctions = new Map()) 
 
   for (let step = 0; step < 8; step += 1) {
     const previous = resolved
+    const stripped = stripWrappingParens(resolved)
+    const andTerms = splitTopLevelLogical(stripped, '&&')
+    if (andTerms.length > 1) {
+      const resolvedTerms = andTerms.map((term) => resolveGuardCondition(term, aliasMap, helperMap))
+      const joined = joinGuardConditions(resolvedTerms)
+      if (joined && joined !== previous) {
+        resolved = joined
+        continue
+      }
+    }
+
+    const orTerms = splitTopLevelLogical(stripped, '||')
+    if (orTerms.length > 1) {
+      const resolvedTerms = orTerms.map((term) => resolveGuardCondition(term, aliasMap, helperMap))
+      const joined = resolvedTerms.join(' || ')
+      if (joined && joined !== previous) {
+        resolved = joined
+        continue
+      }
+    }
+
+    const negatedExpressionMatch = /^!\s*\(([\s\S]+)\)$/.exec(stripped)
+    if (negatedExpressionMatch) {
+      const innerExpression = stripWrappingParens(negatedExpressionMatch[1])
+      if (innerExpression) {
+        const resolvedInner = resolveGuardCondition(innerExpression, aliasMap, helperMap)
+        const inverted = invertBooleanExpression(resolvedInner)
+        if (inverted && inverted !== previous) {
+          resolved = inverted
+          continue
+        }
+      }
+    }
+
     const normalized = stripWrappingParens(resolved).replace(/\s+/g, '')
     const negatedAliasMatch = /^!([A-Za-z_$][\w$]*)$/.exec(normalized)
     if (negatedAliasMatch) {
@@ -1281,6 +1504,34 @@ function getRouteFlagActivation(normalizedCondition, guardExpression, extras = [
   }
 }
 
+function buildMultiFlagActivation(flagActivations, guardExpression, guardShape, additionalConditions = []) {
+  const uniqueFlags = []
+  const seenFlags = new Set()
+  let exposure
+
+  for (const activation of flagActivations) {
+    if (!activation?.flag || seenFlags.has(activation.flag)) continue
+    seenFlags.add(activation.flag)
+    uniqueFlags.push(activation.flag)
+    if (!exposure && activation.exposure) {
+      exposure = activation.exposure
+    }
+  }
+
+  if (uniqueFlags.length < 2) return null
+
+  return {
+    mode: 'flag_set',
+    flags: uniqueFlags,
+    default: false,
+    source: 'control_flow_guard',
+    guardExpression,
+    ...(guardShape ? { guardShape } : {}),
+    ...(additionalConditions.length > 0 ? { additionalConditions } : {}),
+    ...(exposure ? { exposure } : {}),
+  }
+}
+
 function classifyActivationFromGuard(controlFlowGuard) {
   if (!controlFlowGuard) return null
 
@@ -1294,6 +1545,25 @@ function classifyActivationFromGuard(controlFlowGuard) {
   if (controlFlowGuard.kind === 'block') {
     const andTerms = splitTopLevelLogical(effectiveCondition, '&&')
     if (andTerms.length > 1) {
+      const termActivations = andTerms
+        .map((term) => ({
+          term,
+          activation: getRouteFlagActivation(term, guardExpression),
+        }))
+        .filter((item) => item.activation)
+
+      const multiFlagActivation = buildMultiFlagActivation(
+        termActivations.map((item) => item.activation),
+        guardExpression,
+        'compound_and',
+        andTerms
+          .filter((term) => !getRouteFlagActivation(term, guardExpression))
+          .map((term) => stripWrappingParens(term)),
+      )
+      if (multiFlagActivation) {
+        return multiFlagActivation
+      }
+
       for (const term of andTerms) {
         const activation = getRouteFlagActivation(term, guardExpression)
         if (activation) {
@@ -1313,6 +1583,40 @@ function classifyActivationFromGuard(controlFlowGuard) {
   if (controlFlowGuard.kind === 'early_return') {
     const orTerms = splitTopLevelLogical(resolvedCondition, '||')
     if (orTerms.length > 1) {
+      const termActivations = orTerms
+        .map((term) => {
+          const normalizedTerm = stripWrappingParens(term)
+          const positiveTerm = normalizedTerm.startsWith('!')
+            ? stripWrappingParens(normalizedTerm.slice(1))
+            : ''
+          return {
+            term,
+            normalizedTerm,
+            activation: positiveTerm
+              ? getRouteFlagActivation(positiveTerm, guardExpression)
+              : null,
+          }
+        })
+        .filter((item) => item.activation)
+
+      const multiFlagActivation = buildMultiFlagActivation(
+        termActivations.map((item) => item.activation),
+        guardExpression,
+        'compound_or',
+        orTerms
+          .filter((term) => {
+            const normalizedTerm = stripWrappingParens(term)
+            const positiveTerm = normalizedTerm.startsWith('!')
+              ? stripWrappingParens(normalizedTerm.slice(1))
+              : ''
+            return !positiveTerm || !getRouteFlagActivation(positiveTerm, guardExpression)
+          })
+          .map((term) => invertBooleanExpression(stripWrappingParens(term))),
+      )
+      if (multiFlagActivation) {
+        return multiFlagActivation
+      }
+
       for (const term of orTerms) {
         const normalizedTerm = stripWrappingParens(term)
         const positiveTerm = normalizedTerm.startsWith('!')
@@ -1696,9 +2000,10 @@ async function probeLosAstApiRuntimeRoutes(rootDir, deterministic) {
   const distExperimentalIndex = path.join(rootDir, 'packages', 'api', 'dist', 'routes', 'experimental', 'index.js')
   const distVpsIndex = path.join(rootDir, 'packages', 'api', 'dist', 'routes', 'vps-agent-web', 'index.js')
   const distHealthCheck = path.join(rootDir, 'packages', 'api', 'dist', 'plugins', 'health-check.js')
+  const distCancellation = path.join(rootDir, 'packages', 'api', 'dist', 'plugins', 'cancellation.js')
   const distConfig = path.join(rootDir, 'packages', 'api', 'dist', 'config', 'index.js')
 
-  const requiredFiles = [distServer, distCoreIndex, distExperimentalIndex, distVpsIndex, distHealthCheck, distConfig]
+  const requiredFiles = [distServer, distCoreIndex, distExperimentalIndex, distVpsIndex, distHealthCheck, distCancellation, distConfig]
   for (const file of requiredFiles) {
     try {
       await fs.access(file)
@@ -1709,8 +2014,16 @@ async function probeLosAstApiRuntimeRoutes(rootDir, deterministic) {
 
   const FastifyModule = await import('fastify')
   const Fastify = FastifyModule.default
-  const [{ default: healthCheckPlugin }, coreIndex, experimentalIndex, { default: vpsAgentWebRoutes }, configModule] = await Promise.all([
+  const [
+    { default: healthCheckPlugin },
+    { default: cancellationPlugin },
+    coreIndex,
+    experimentalIndex,
+    { default: vpsAgentWebRoutes },
+    configModule,
+  ] = await Promise.all([
     import(pathToFileURL(distHealthCheck).href),
+    import(pathToFileURL(distCancellation).href),
     import(pathToFileURL(distCoreIndex).href),
     import(pathToFileURL(distExperimentalIndex).href),
     import(pathToFileURL(distVpsIndex).href),
@@ -1738,6 +2051,7 @@ async function probeLosAstApiRuntimeRoutes(rootDir, deterministic) {
 
   try {
     await app.register(healthCheckPlugin)
+    await app.register(cancellationPlugin)
     await app.register(coreIndex.scanRoutes, { prefix: '/scan' })
     await app.register(coreIndex.discoverRoutes, { prefix: '/discover' })
 

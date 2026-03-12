@@ -214,6 +214,59 @@ describe('API Integration Tests', () => {
       expect(body.data.findings[0].ruleId).toBe('schema/email-nullability');
     });
 
+    it('POST /scan should expose parse failure stats when scan service reports them', async () => {
+      vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 2,
+        findings: [],
+        parseFailures: {
+          count: 1,
+          sampleLimit: 20,
+          byLanguage: {
+            javascript: 1,
+          },
+          samples: [
+            {
+              file: '/tmp/broken.js',
+              language: 'javascript',
+              error: 'Unexpected token',
+            },
+          ],
+        },
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          includeStats: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.parseFailures).toMatchObject({
+        count: 1,
+        sampleLimit: 20,
+        byLanguage: {
+          javascript: 1,
+        },
+        samples: [
+          {
+            file: '/tmp/broken.js',
+            language: 'javascript',
+            error: 'Unexpected token',
+          },
+        ],
+      });
+    });
+
     it('POST /scan should forward openApiDocuments to scan service', async () => {
       const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
         filesScanned: 1,
@@ -244,6 +297,46 @@ describe('API Integration Tests', () => {
 
       expect(response.statusCode).toBe(200);
       expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        openApiDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
+      }));
+    });
+
+    it('POST /scan should allow native-only requests without rootDir', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 0,
+        findings: [],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        rootDir: undefined,
         openApiDocuments: expect.arrayContaining([
           expect.objectContaining({
             source: 'openapi-inline',
@@ -325,6 +418,61 @@ describe('API Integration Tests', () => {
 
       expect(response.statusCode).toBe(200);
       expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        schemaDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'schema-inline',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+          }),
+        ]),
+      }));
+    });
+
+    it('POST /scan should forward contract and schema native inputs together without dropping either channel', async () => {
+      const executeSpy = vi.spyOn(scanService, 'execute').mockResolvedValueOnce({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rootDir: '/test',
+          openApiDocuments: [
+            {
+              source: 'openapi-inline',
+              file: '/tmp/openapi.yaml',
+              content: 'openapi: 3.0.3\npaths: {}\n',
+              format: 'yaml',
+            },
+          ],
+          schemaDocuments: [
+            {
+              source: 'schema-inline',
+              file: '/tmp/schema.prisma',
+              content: 'model User { id String @id email String? }',
+              format: 'prisma',
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        openApiDocuments: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'openapi-inline',
+            file: '/tmp/openapi.yaml',
+            format: 'yaml',
+          }),
+        ]),
         schemaDocuments: expect.arrayContaining([
           expect.objectContaining({
             source: 'schema-inline',
@@ -429,6 +577,51 @@ describe('API Integration Tests', () => {
         code: 'CORE_NOT_READY',
       });
       expect(executeSpy).toHaveBeenCalled();
+    });
+
+    it('POST /scan should return 400 when rootDir is missing and no native artifacts are provided', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error).toMatchObject({
+        category: 'VALIDATION',
+        code: 'INVALID_SCAN_INPUT',
+      });
+    });
+
+    it('POST /scan should still require rootDir when rulePack implies code scan', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/scan',
+        payload: {
+          scope: {
+            tenant_id: 'test',
+            project_id: 'test',
+            actor_id: 'test',
+          },
+          project: 'test',
+          rulePack: 'lsclaw-governance',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error).toMatchObject({
+        category: 'VALIDATION',
+        code: 'INVALID_ROOTDIR',
+      });
     });
   });
 

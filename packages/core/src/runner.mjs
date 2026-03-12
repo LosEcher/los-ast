@@ -100,6 +100,8 @@ function deterministicSort(a, b) {
   return a.range.start.column - b.range.start.column
 }
 
+const PARSE_FAILURE_SAMPLE_LIMIT = 20
+
 export async function discoverFiles({ rootDir, include, ignore }) {
   const patterns = include && include.length ? include : ['**/*']
   const files = await fg(patterns, {
@@ -136,6 +138,7 @@ export async function scan({
 
   const files = await discoverFiles({ rootDir, include, ignore })
   const findings = []
+  const parseFailures = []
 
   for (const file of files) {
     // 检查取消信号
@@ -152,7 +155,12 @@ export async function scan({
     try {
       const parsed = await parseCache.parseFile(file, language, { cacheAst: true })
       root = parsed.root
-    } catch {
+    } catch (error) {
+      parseFailures.push({
+        file,
+        language: String(language),
+        error: error instanceof Error ? error.message : String(error),
+      })
       continue
     }
 
@@ -202,7 +210,22 @@ export async function scan({
   }
 
   const res = { filesScanned: files.length, findings }
-  if (includeStats) res.parseCache = parseCache.snapshotStats()
+  if (includeStats) {
+    res.parseCache = parseCache.snapshotStats()
+    if (parseFailures.length > 0) {
+      const byLanguage = {}
+      for (const failure of parseFailures) {
+        byLanguage[failure.language] = (byLanguage[failure.language] || 0) + 1
+      }
+      res.parseFailures = {
+        count: parseFailures.length,
+        sampleLimit: PARSE_FAILURE_SAMPLE_LIMIT,
+        truncated: parseFailures.length > PARSE_FAILURE_SAMPLE_LIMIT,
+        byLanguage,
+        samples: parseFailures.slice(0, PARSE_FAILURE_SAMPLE_LIMIT),
+      }
+    }
+  }
   return res
 }
 

@@ -1,7 +1,7 @@
 import type { ScanResult, ContractArtifactFindingInput, SchemaArtifactFindingInput, OpenApiComparisonInput, OpenApiDocumentInput, SchemaComparisonInput, SchemaDocumentInput } from '@los-ast/shared/types';
 export interface ScanServiceOptions {
     project: string;
-    rootDir: string;
+    rootDir?: string;
     include?: string[];
     ignore?: string[];
     rules?: string[];

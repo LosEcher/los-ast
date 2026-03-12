@@ -1,9 +1,9 @@
 {
   "phaseId": "hub-lite-route-evidence-20260311",
   "phaseName": "Hub-Lite Route Evidence",
-  "updatedAt": "2026-03-11",
-  "status": "phase_complete_verifiable",
-  "repoGate": "blocked_by_existing_core_test_failure",
+  "updatedAt": "2026-03-12",
+  "status": "repo_gate_green",
+  "repoGate": "pass",
   "scope": {
     "artifacts": [
       "route_declares",
@@ -22,6 +22,10 @@
       "compound_or_guard",
       "wrapped_compound_guard",
       "same_file_single_return_helper_guard",
+      "same_file_static_alias_helper_guard",
+      "same_file_helper_chain_guard",
+      "negated_helper_compound_guard",
+      "multi_flag_guard_set",
       "unsafe_helper_fallback"
     ]
   },
@@ -29,7 +33,7 @@
     "l1_hub_lite_artifacts": {
       "command": "node --test ./test/hub-lite-artifacts.test.mjs",
       "status": "pass",
-      "result": "13/13"
+      "result": "18/18"
     },
     "l2_api_build": {
       "command": "npm run build:api",
@@ -38,12 +42,12 @@
     "l3_api_tests": {
       "command": "npm run test:api",
       "status": "pass",
-      "result": "21 files, 166 tests"
+      "result": "21 files, 230 tests"
     },
     "l4_repo_tests": {
       "command": "npm run test",
-      "status": "blocked",
-      "blockingTest": "test/rules.test.mjs :: governance metadata is projected into scan findings"
+      "status": "pass",
+      "result": "core 11 tests + api 21 files / 230 tests"
     }
   },
   "evidenceCounts": {
@@ -61,7 +65,7 @@
   },
   "releaseRecommendation": {
     "mergeable": true,
-    "qualityGateReady": false,
-    "reason": "Capability-line acceptance passed, but repo-wide default test entry is still blocked by an unrelated existing core test failure."
+    "qualityGateReady": true,
+    "reason": "Capability-line acceptance and repo-wide default test entry are both green."
   }
 }

@@ -75,10 +75,12 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 - VPS Agent Web 请求示例与错误映射：[vps-agent-web-examples-errors.md](docs/api/vps-agent-web-examples-errors.md)
 - 输出格式（JSONL）：[OUTPUT_SCHEMA.md](docs/ai/OUTPUT_SCHEMA.md)
 - 规则编写规范：[RULE_AUTHORING.md](docs/rules/RULE_AUTHORING.md)
+- 规则来源追溯：[RULE_TRACEABILITY.md](docs/rules/RULE_TRACEABILITY.md)
 - 治理能力与待办：
   - [治理对齐 TODO（阶段文档）](docs/governance/governance-capability-todo-20260311.md)
   - [治理规则集元信息模板](docs/governance/rule-set-metadata-template.md)
   - [Stage1 落地交付总结](docs/governance/stage1-governance-delivery-20260311.md)
+  - [Stage2 验证证明](docs/governance/stage2-governance-verification-20260311.md)
 - 项目适配器：
   - [cantool.md](docs/adapters/cantool.md)
   - [lsclaw.md](docs/adapters/lsclaw.md)

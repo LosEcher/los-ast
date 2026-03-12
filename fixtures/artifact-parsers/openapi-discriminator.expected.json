@@ -1,0 +1,9 @@
+{
+  "profile": "openapi-native",
+  "findingSource": "contract",
+  "expectedRuleIds": [
+    "contract/openapi-breaking-request-discriminator-change",
+    "contract/openapi-breaking-request-discriminator-value-drop",
+    "contract/openapi-breaking-response-discriminator-value-drop"
+  ]
+}

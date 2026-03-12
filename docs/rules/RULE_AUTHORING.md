@@ -47,6 +47,13 @@ constraints:
   - `governance.impact`: `high`/`medium`/`low`
   - `governance.rationale`: 规则存在原因
 - findingSource（可选）：规则归属来源标签（规划中），用于区分 `ast`、`contract`、`schema`
+
+补充说明：
+
+- 装载后 `ruleFile` 会由 loader 自动写入为 YAML 绝对路径，无需在规则中手写。
+- `governance.domain` 会进入 finding 的 `governanceDomain`。
+- `governance.impact` 会进入 finding 的 `impactHint`；非法值会在加载期回退为 `medium`。
+- 规则来源追溯与装载链路详见 `docs/rules/RULE_TRACEABILITY.md`。
 ## 幂等性与可测试性
 
 - fix 规则必须在 `fixtures/` 下提供 `before` 与 `after`。

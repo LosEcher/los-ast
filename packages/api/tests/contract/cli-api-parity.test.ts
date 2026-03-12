@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import fs from 'node:fs/promises';
 import path from 'path';
 import errorHandlerPlugin from '../../src/plugins/error-handler';
 import requestIdPlugin from '../../src/plugins/request-id';
@@ -255,6 +256,44 @@ describe('CLI/API Parity', () => {
       for (const finding of apiBody.data.findings) {
         expect(finding.project).toBe(testProject);
       }
+    });
+  });
+
+  describe('Documentation Drift Guards', () => {
+    it('shared type, API contract, and OpenAPI docs should all declare current scan/finding fields', async () => {
+      const sharedTypes = await fs.readFile(
+        path.join(testRootDir, 'packages/shared/src/types/api.ts'),
+        'utf8'
+      );
+      const apiContract = await fs.readFile(
+        path.join(testRootDir, 'packages/api/docs/api/API_CONTRACT.md'),
+        'utf8'
+      );
+      const openApiDoc = await fs.readFile(
+        path.join(testRootDir, 'docs/api/openapi.yaml'),
+        'utf8'
+      );
+
+      expect(sharedTypes).toMatch(/rootDir\?: string;/);
+      expect(sharedTypes).toMatch(/parseFailures\?: \{/);
+      expect(sharedTypes).toMatch(/governanceDomain\?: string\[\] \| null;/);
+      expect(sharedTypes).toMatch(/impactHint\?: 'low' \| 'medium' \| 'high' \| null;/);
+      expect(sharedTypes).toMatch(/diff\?: string \| null;/);
+      expect(sharedTypes).toMatch(/applied\?: boolean;/);
+
+      expect(apiContract).toMatch(/rootDir\?: string;/);
+      expect(apiContract).toMatch(/parseFailures\?: \{/);
+      expect(apiContract).toMatch(/governanceDomain\?: string\[\] \| null;/);
+      expect(apiContract).toMatch(/impactHint\?: 'low' \| 'medium' \| 'high' \| null;/);
+      expect(apiContract).toMatch(/diff\?: string \| null;/);
+      expect(apiContract).toMatch(/applied\?: boolean;/);
+
+      expect(openApiDoc).toMatch(/parseFailures:/);
+      expect(openApiDoc).toMatch(/diff:/);
+      expect(openApiDoc).toMatch(/applied:/);
+      expect(openApiDoc).toMatch(/governanceDomain:/);
+      expect(openApiDoc).toMatch(/impactHint:/);
+      expect(openApiDoc).toMatch(/nullable: true/);
     });
   });
 });

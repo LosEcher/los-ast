@@ -53,6 +53,9 @@ export interface CoreFinding {
   project: string;
   ruleFile: string | null;
   ruleId: string;
+  findingSource?: 'ast' | 'contract' | 'schema';
+  governanceDomain?: string[] | null;
+  impactHint?: 'low' | 'medium' | 'high' | null;
   severity: 'error' | 'warning' | 'info';
   message: string;
   file: string;
@@ -61,6 +64,8 @@ export interface CoreFinding {
   excerpt: string;
   hasFix: boolean;
   proposedReplacement: string | null;
+  diff?: string | null;
+  applied?: boolean;
   fingerprint: string;
 }
 

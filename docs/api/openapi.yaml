@@ -916,7 +916,7 @@ components:
                         minimum: 0
         includeStats:
           type: boolean
-          description: 是否包含解析缓存统计
+          description: 是否包含解析统计（parseCache / parseFailures）
           default: false
 
     ScanResponse:
@@ -940,8 +940,35 @@ components:
                   type: integer
                 misses:
                   type: integer
-                size:
+                entries:
                   type: integer
+                maxEntries:
+                  type: integer
+            parseFailures:
+              type: object
+              description: 解析失败统计（仅 includeStats=true 且存在失败文件）
+              properties:
+                count:
+                  type: integer
+                sampleLimit:
+                  type: integer
+                truncated:
+                  type: boolean
+                byLanguage:
+                  type: object
+                  additionalProperties:
+                    type: integer
+                samples:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      file:
+                        type: string
+                      language:
+                        type: string
+                      error:
+                        type: string
 
     Finding:
       type: object
@@ -991,12 +1018,26 @@ components:
         proposedReplacement:
           type: string
           nullable: true
+        diff:
+          type: string
+          nullable: true
+        applied:
+          type: boolean
         fingerprint:
           type: string
         findingSource:
           type: string
           enum: [ast, contract, schema]
           description: finding 来源标签（ast=代码扫描，contract/schema=治理输入）
+        governanceDomain:
+          type: array
+          nullable: true
+          items:
+            type: string
+        impactHint:
+          type: string
+          nullable: true
+          enum: [low, medium, high]
 
     Range:
       type: object

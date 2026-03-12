@@ -26,13 +26,27 @@ export function toJsonLines(records, deterministic = false) {
   return records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '')
 }
 
-export function toMarkdownScan({ project, filesScanned, findings }) {
+export function toMarkdownScan({ project, filesScanned, findings, parseFailures }) {
   const lines = []
   lines.push(`# los-ast scan report`)
   lines.push('')
   lines.push(`- project: ${project}`)
   lines.push(`- filesScanned: ${filesScanned}`)
   lines.push(`- findings: ${findings.length}`)
+  if (parseFailures) {
+    lines.push(`- parseFailures: ${parseFailures.count}`)
+    if (parseFailures.byLanguage && Object.keys(parseFailures.byLanguage).length > 0) {
+      const byLanguage = Object.entries(parseFailures.byLanguage)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([language, count]) => `${language}:${count}`)
+        .join(', ')
+      lines.push(`- parseFailuresByLanguage: ${byLanguage}`)
+    }
+    lines.push(`- parseFailureSamples: ${parseFailures.samples.length}/${parseFailures.sampleLimit}`)
+    if (parseFailures.truncated) {
+      lines.push(`- parseFailureSamplesTruncated: true`)
+    }
+  }
   lines.push('')
   for (const f of findings) {
     lines.push(`## ${f.ruleId}`)
@@ -73,4 +87,3 @@ export function toMarkdownFix({ project, filesScanned, changesApplied, results }
   }
   return lines.join('\n')
 }
-

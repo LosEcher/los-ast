@@ -24,9 +24,11 @@ export interface VerifiedScope {
 export interface ScanParams {
   scope: Scope;
   project: string;
-  rootDir: string;
+  rootDir?: string;
   include?: string[];
   ignore?: string[];
+  rules?: string[];
+  rulePack?: string;
   includeStats?: boolean;
   deterministic?: boolean;
   openApiDocuments?: OpenApiDocumentInput[];
@@ -103,6 +105,9 @@ export interface Finding {
   project: string;
   ruleFile: string | null;
   ruleId: string;
+  findingSource?: FindingSource;
+  governanceDomain?: string[] | null;
+  impactHint?: 'low' | 'medium' | 'high' | null;
   severity: 'info' | 'warning' | 'error';
   message: string;
   file: string;
@@ -111,10 +116,9 @@ export interface Finding {
   excerpt: string;
   hasFix: boolean;
   proposedReplacement: string | null;
+  diff?: string | null;
+  applied?: boolean;
   fingerprint: string;
-  findingSource?: FindingSource;
-  governanceDomain?: string[];
-  impactHint?: 'low' | 'medium' | 'high';
 }
 
 export interface ScanResult {
@@ -125,6 +129,17 @@ export interface ScanResult {
     misses: number;
     entries: number;
     maxEntries: number;
+  };
+  parseFailures?: {
+    count: number;
+    sampleLimit: number;
+    truncated: boolean;
+    byLanguage: Record<string, number>;
+    samples: Array<{
+      file: string;
+      language: string;
+      error: string;
+    }>;
   };
 }
 

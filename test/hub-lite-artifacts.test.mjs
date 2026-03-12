@@ -902,9 +902,9 @@ function helperWithSideEffect(experimentalEnabled, allowPreview) {
   return experimentalEnabled && hasPreviewAccess(allowPreview)
 }
 
-function helperWithMultipleStatements(experimentalEnabled) {
-  const ready = experimentalEnabled
-  return ready
+function helperWithConditional(experimentalEnabled) {
+  if (experimentalEnabled) return true
+  return false
 }
 
 export async function buildServer(server) {
@@ -914,7 +914,7 @@ export async function buildServer(server) {
     await server.register(unsafeRoutes, { prefix: '/experimental' })
   }
 
-  if (helperWithMultipleStatements(ROUTE_CONFIG.enableExperimental)) {
+  if (helperWithConditional(ROUTE_CONFIG.enableExperimental)) {
     await server.register(unsafeRoutes, { prefix: '/experimental-multi' })
   }
 }
@@ -944,17 +944,491 @@ export async function buildServer(server) {
   const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
   const mounts = structureMap.route_mounts.filter((item) => item.target === 'unsafeRoutes')
   const sideEffectMount = mounts.find((item) => item.resolvedPrefix === '/experimental')
-  const multiStatementMount = mounts.find((item) => item.resolvedPrefix === '/experimental-multi')
+  const conditionalMount = mounts.find((item) => item.resolvedPrefix === '/experimental-multi')
 
   assert.equal(sideEffectMount.controlFlowGuard.condition, 'helperWithSideEffect(ROUTE_CONFIG.enableExperimental, allowPreview)')
   assert.equal(sideEffectMount.controlFlowGuard.effectiveCondition, 'helperWithSideEffect(ROUTE_CONFIG.enableExperimental, allowPreview)')
   assert.equal(sideEffectMount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
   assert.equal(sideEffectMount.activation.source, undefined)
 
-  assert.equal(multiStatementMount.controlFlowGuard.condition, 'helperWithMultipleStatements(ROUTE_CONFIG.enableExperimental)')
-  assert.equal(multiStatementMount.controlFlowGuard.effectiveCondition, 'helperWithMultipleStatements(ROUTE_CONFIG.enableExperimental)')
-  assert.equal(multiStatementMount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
-  assert.equal(multiStatementMount.activation.source, undefined)
+  assert.equal(conditionalMount.controlFlowGuard.condition, 'helperWithConditional(ROUTE_CONFIG.enableExperimental)')
+  assert.equal(conditionalMount.controlFlowGuard.effectiveCondition, 'helperWithConditional(ROUTE_CONFIG.enableExperimental)')
+  assert.equal(conditionalMount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+  assert.equal(conditionalMount.activation.source, undefined)
+})
+
+test('hub-lite artifact export resolves same-file helper guard forwarding through static aliases', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-helper-alias-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-helper-alias-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/preview.ts',
+    `export default async function previewRoutes(fastify) {
+  fastify.get('/feed', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import previewRoutes from './routes/preview.js'
+
+function shouldMountPreview(experimentalEnabled, allowPreview) {
+  const previewReady = experimentalEnabled && allowPreview
+  return previewReady
+}
+
+export async function buildServer(server) {
+  const allowPreview = server.hasDecorator('preview')
+
+  if (shouldMountPreview(ROUTE_CONFIG.enableExperimental, allowPreview)) {
+    await server.register(previewRoutes, { prefix: '/experimental-preview' })
+  }
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'previewRoutes')
+
+  assert.equal(mount.controlFlowGuard.condition, 'shouldMountPreview(ROUTE_CONFIG.enableExperimental, allowPreview)')
+  assert.equal(mount.controlFlowGuard.effectiveCondition, 'ROUTE_CONFIG.enableExperimental && allowPreview')
+  assert.equal(mount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+  assert.equal(mount.activation.source, 'control_flow_guard')
+  assert.equal(mount.activation.guardShape, 'compound_and')
+  assert.deepEqual(mount.activation.additionalConditions, ['allowPreview'])
+})
+
+test('hub-lite artifact export resolves chained same-file helper guard forwarding', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-helper-chain-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-helper-chain-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/preview.ts',
+    `export default async function previewRoutes(fastify) {
+  fastify.get('/feed', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import previewRoutes from './routes/preview.js'
+
+function previewFlag(experimentalEnabled, allowPreview) {
+  return experimentalEnabled && allowPreview
+}
+
+function shouldMountPreview(experimentalEnabled, allowPreview) {
+  return previewFlag(experimentalEnabled, allowPreview)
+}
+
+export async function buildServer(server) {
+  const allowPreview = server.hasDecorator('preview')
+
+  if (shouldMountPreview(ROUTE_CONFIG.enableExperimental, allowPreview)) {
+    await server.register(previewRoutes, { prefix: '/experimental-preview' })
+  }
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'previewRoutes')
+
+  assert.equal(mount.controlFlowGuard.condition, 'shouldMountPreview(ROUTE_CONFIG.enableExperimental, allowPreview)')
+  assert.equal(mount.controlFlowGuard.effectiveCondition, 'ROUTE_CONFIG.enableExperimental && allowPreview')
+  assert.equal(mount.activation.flag, 'ENABLE_EXPERIMENTAL_ROUTES')
+  assert.equal(mount.activation.source, 'control_flow_guard')
+  assert.equal(mount.activation.guardShape, 'compound_and')
+  assert.deepEqual(mount.activation.additionalConditions, ['allowPreview'])
+})
+
+test('hub-lite artifact export keeps multi-flag guards in conservative flag-set mode', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-multi-flag-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-multi-flag-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+  enableInternal: false,
+  enableVpsAgentWeb: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/dual.ts',
+    `export default async function dualRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/bridge.ts',
+    `export default async function bridgeRoutes(fastify) {
+  fastify.get('/ping', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import dualRoutes from './routes/dual.js'
+import bridgeRoutes from './routes/bridge.js'
+
+export async function buildServer(server) {
+  const allowPreview = server.hasDecorator('preview')
+  const maintenanceMode = server.hasDecorator('maintenance')
+
+  if (ROUTE_CONFIG.enableExperimental && ROUTE_CONFIG.enableInternal && allowPreview) {
+    await server.register(dualRoutes, { prefix: '/internal' })
+  }
+
+  if (!ROUTE_CONFIG.enableExperimental || !ROUTE_CONFIG.enableVpsAgentWeb || maintenanceMode) {
+    return
+  }
+
+  await server.register(bridgeRoutes, { prefix: '/vps-agent-web' })
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mountByTarget = Object.fromEntries(
+    structureMap.route_mounts.map((item) => [item.target, item])
+  )
+  const bindByPath = Object.fromEntries(
+    structureMap.route_binds.map((item) => [item.path, item])
+  )
+
+  assert.equal(mountByTarget.dualRoutes.activation.mode, 'flag_set')
+  assert.deepEqual(
+    mountByTarget.dualRoutes.activation.flags,
+    ['ENABLE_EXPERIMENTAL_ROUTES', 'ENABLE_INTERNAL_ROUTES']
+  )
+  assert.equal(mountByTarget.dualRoutes.activation.flag, undefined)
+  assert.equal(mountByTarget.dualRoutes.activation.guardShape, 'compound_and')
+  assert.deepEqual(mountByTarget.dualRoutes.activation.additionalConditions, ['allowPreview'])
+  assert.equal(bindByPath['/internal/status'].evidence.activation.mode, 'flag_set')
+
+  assert.equal(mountByTarget.bridgeRoutes.activation.mode, 'flag_set')
+  assert.deepEqual(
+    mountByTarget.bridgeRoutes.activation.flags,
+    ['ENABLE_EXPERIMENTAL_ROUTES', 'ENABLE_VPS_AGENT_WEB_ROUTES']
+  )
+  assert.equal(mountByTarget.bridgeRoutes.activation.guardShape, 'compound_or')
+  assert.deepEqual(mountByTarget.bridgeRoutes.activation.additionalConditions, ['!maintenanceMode'])
+  assert.equal(bindByPath['/vps-agent-web/ping'].evidence.activation.mode, 'flag_set')
+})
+
+test('hub-lite artifact export resolves helper calls embedded in compound guard expressions', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-helper-compound-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-helper-compound-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+  enableInternal: false,
+  enableVpsAgentWeb: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/internal.ts',
+    `export default async function internalRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/bridge.ts',
+    `export default async function bridgeRoutes(fastify) {
+  fastify.get('/ping', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import internalRoutes from './routes/internal.js'
+import bridgeRoutes from './routes/bridge.js'
+
+function previewGate(experimentalEnabled, allowPreview) {
+  const ready = experimentalEnabled && allowPreview
+  return ready
+}
+
+function vpsGate(vpsEnabled, maintenanceMode) {
+  return !vpsEnabled || maintenanceMode
+}
+
+export async function buildServer(server) {
+  const allowPreview = server.hasDecorator('preview')
+  const maintenanceMode = server.hasDecorator('maintenance')
+  const adminMode = server.hasDecorator('admin')
+
+  if (previewGate(ROUTE_CONFIG.enableExperimental, allowPreview) && ROUTE_CONFIG.enableInternal && adminMode) {
+    await server.register(internalRoutes, { prefix: '/internal' })
+  }
+
+  if (vpsGate(ROUTE_CONFIG.enableVpsAgentWeb, maintenanceMode) || !ROUTE_CONFIG.enableExperimental) {
+    return
+  }
+
+  await server.register(bridgeRoutes, { prefix: '/vps-agent-web' })
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mountByTarget = Object.fromEntries(
+    structureMap.route_mounts.map((item) => [item.target, item])
+  )
+
+  assert.equal(
+    mountByTarget.internalRoutes.controlFlowGuard.effectiveCondition,
+    'ROUTE_CONFIG.enableExperimental && allowPreview && ROUTE_CONFIG.enableInternal && adminMode'
+  )
+  assert.equal(mountByTarget.internalRoutes.activation.mode, 'flag_set')
+  assert.deepEqual(
+    mountByTarget.internalRoutes.activation.flags,
+    ['ENABLE_EXPERIMENTAL_ROUTES', 'ENABLE_INTERNAL_ROUTES']
+  )
+  assert.deepEqual(
+    mountByTarget.internalRoutes.activation.additionalConditions,
+    ['allowPreview', 'adminMode']
+  )
+
+  assert.equal(
+    mountByTarget.bridgeRoutes.controlFlowGuard.resolvedCondition,
+    '!ROUTE_CONFIG.enableVpsAgentWeb || maintenanceMode || !ROUTE_CONFIG.enableExperimental'
+  )
+  assert.equal(
+    mountByTarget.bridgeRoutes.controlFlowGuard.effectiveCondition,
+    'ROUTE_CONFIG.enableVpsAgentWeb && !maintenanceMode && ROUTE_CONFIG.enableExperimental'
+  )
+  assert.equal(mountByTarget.bridgeRoutes.activation.mode, 'flag_set')
+  assert.deepEqual(
+    mountByTarget.bridgeRoutes.activation.flags,
+    ['ENABLE_VPS_AGENT_WEB_ROUTES', 'ENABLE_EXPERIMENTAL_ROUTES']
+  )
+})
+
+test('hub-lite artifact export resolves negated helper chains in early-return guards', () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'los-ast-helper-negated-fixture-'))
+  const outputDir = mkdtempSync(join(tmpdir(), 'los-ast-helper-negated-output-'))
+  const repoRoot = process.cwd()
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/config/index.ts',
+    `export const ROUTE_CONFIG = {
+  enableExperimental: false,
+  enableInternal: false,
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/routes/internal.ts',
+    `export default async function internalRoutes(fastify) {
+  fastify.get('/status', async () => ({ ok: true }))
+}
+`
+  )
+
+  writeFixtureFile(
+    fixtureRoot,
+    'src/server.ts',
+    `import { ROUTE_CONFIG } from './config/index.js'
+import internalRoutes from './routes/internal.js'
+
+function previewGate(experimentalEnabled, allowPreview) {
+  return experimentalEnabled && allowPreview
+}
+
+function internalGate(experimentalEnabled, allowPreview, adminMode) {
+  return previewGate(experimentalEnabled, allowPreview) && adminMode
+}
+
+export async function buildServer(server) {
+  const allowPreview = server.hasDecorator('preview')
+  const adminMode = server.hasDecorator('admin')
+
+  if (!(internalGate(ROUTE_CONFIG.enableExperimental, allowPreview, adminMode) && ROUTE_CONFIG.enableInternal)) {
+    return
+  }
+
+  await server.register(internalRoutes, { prefix: '/internal' })
+}
+`
+  )
+
+  execFileSync(
+    process.execPath,
+    [
+      './packages/cli/src/export-artifacts.mjs',
+      '--root',
+      fixtureRoot,
+      '--project',
+      'custom',
+      '--include',
+      'src/**/*.ts',
+      '--output-dir',
+      outputDir,
+      '--deterministic',
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }
+  )
+
+  const structureMap = JSON.parse(readFileSync(join(outputDir, 'structure-map.json'), 'utf-8'))
+  const mount = structureMap.route_mounts.find((item) => item.target === 'internalRoutes')
+  const bind = structureMap.route_binds.find((item) => item.path === '/internal/status')
+
+  assert.equal(
+    mount.controlFlowGuard.resolvedCondition,
+    '!ROUTE_CONFIG.enableExperimental || !allowPreview || !adminMode || !ROUTE_CONFIG.enableInternal'
+  )
+  assert.equal(
+    mount.controlFlowGuard.effectiveCondition,
+    'ROUTE_CONFIG.enableExperimental && allowPreview && adminMode && ROUTE_CONFIG.enableInternal'
+  )
+  assert.equal(mount.activation.mode, 'flag_set')
+  assert.deepEqual(
+    mount.activation.flags,
+    ['ENABLE_EXPERIMENTAL_ROUTES', 'ENABLE_INTERNAL_ROUTES']
+  )
+  assert.equal(mount.activation.guardShape, 'compound_or')
+  assert.deepEqual(mount.activation.additionalConditions, ['allowPreview', 'adminMode'])
+  assert.equal(bind.evidence.activation.mode, 'flag_set')
 })
 
 test('hub-lite artifact export probes los-ast api runtime routes using actual default route wiring', () => {

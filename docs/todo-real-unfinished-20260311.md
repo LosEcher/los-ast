@@ -1,5 +1,7 @@
 # los-ast 真实未完成待办（2026-03-11）
 
+状态：阶段记录。当前执行顺序与能力边界以 `docs/ACTIVE_TODO.md` 为准；本文件保留 2026-03-11 当天的复核证据与中期迁移事项。
+
 ## 范围说明
 
 本清单仅保留“代码/测试/文档中仍未收口”的事项；已完成项不重复列入。  
@@ -31,32 +33,10 @@
 
 ### P1（两周内完成）
 
-1. P1-3 配置校验增强（Zod）
-- 要点：
-  - 用 schema 化方式统一关键环境变量校验。
-  - 对关键变量（JWT、Scope、签名、开关）覆盖类型、范围、组合约束。
-  - 兼容旧部署参数，避免启动即全面失败。
-- 复核关键点：
-  - 启动失败需输出定位具体配置项的报错（非模糊 500）。
-  - 非法/缺失/冲突用例需有单测闭环。
-  - 非生产兼容模式与生产模式行为边界明确（尤其 `DEV_ALLOW_UNVERIFIED_IDENTITY`）。
-   - 已落地：`packages/api/src/config/index.ts` + `packages/api/tests/unit/config/config-validation.test.ts`。
-
-2. P1-4 Cancellation 插件去重重构（已完成）
-- 要点：
-  - 去掉重复取消控制路径，统一 `withCancellation` 与 `preHandler` 处理。
-  - 明确 client cancel 与 server timeout 的错误语义与清理流程。
-- 复核关键点：
-  - `408`（server timeout）与断连取消行为回归验证。
-  - 并发与高频请求下无监听器泄漏、无重复回调。
-  - 与现有 `scan` / `discover` / `attribution` 场景 smoke/集成测试兼容。
-- 说明：`preHandler` 仅创建一次 abort 上下文，`withCancellation` 只处理错误映射。`scan`/`discover` 已改为统一包装。
-- 复核结果：
-  - `packages/api/src/plugins/cancellation.ts`：
-    - preHandler 与 `withCancellation` 共用 `cancellationContext`，移除重复 controller。
-    - 超时触发返回 `TimeoutError`，经 error-handler 映射为 `408 REQUEST_TIMEOUT`。
-    - 客户端断连不再误报业务错误。
-  - `packages/api/tests/unit/plugins/cancellation.test.ts`：补充 408 与客户端断连回归测试。
+1. 当前无新增 P1 剩余项
+- `P1-3` 配置校验增强（Zod）已完成，落地于 `packages/api/src/config/index.ts` 与 `packages/api/tests/unit/config/config-validation.test.ts`。
+- `P1-4` Cancellation 插件去重重构已完成，`scan/discover` 已统一使用 `withCancellation`。
+- 当前短期执行应回到 `docs/ACTIVE_TODO.md` 中的文档边界收口、`route_runtime_deltas` 细化与规则包治理。
 
 ### P2（里程碑迁移项）
 
@@ -114,8 +94,8 @@
 
 ### 建议执行顺序（最小闭环）
 
-1. `P1-3/P1-4` 已完成，建议立即补齐压测与稳定性复核证据。
-2. P2 项目独立排期，按里程碑推进。
+1. 以 `docs/ACTIVE_TODO.md` 为唯一执行源，先完成文档/边界收口。
+2. 同步补齐压测与稳定性复核证据，再推进 P2 独立里程碑。
 
 ### 下一阶段（2026-03-11 继续）
 
@@ -125,18 +105,18 @@
   - 完成最低可用的治理输入流水线（至少可从 OpenAPI/Schema 文件映射为 artifact）。
 
 #### 本阶段待办（优先级）
-1. [ ] 规则治理包化
-   - 建立 `rules/projects/lsclaw-governance/` 目录结构与加载策略。
-   - 增加版本声明（规则来源、签名、更新时间）。
-   - 产出 `scan` 加载路径与回归用例。
+1. [ ] 规则治理包化（第二步）
+   - 固定 `lsclaw-governance` 的版本声明、加载顺序与规则来源可追溯说明。
+   - 最小整包 fixtures 基线已完成：`fixtures/golden/lsclaw-governance-pack/` + `test/rules.test.mjs`。
+   - 补“规则来源可追溯”证据（规则包版本、更新时间、回归入口）。
 2. [ ] OpenAPI/IDL 入口最小实现
    - 支持 `contractArtifacts` 的可重复转换路径，避免上游重复上报同一 finding。
-   - 增加契约/集成用例：contract 与 schema 同时存在时字段不串通道。
+   - 已补契约/集成用例：contract 与 schema 同时存在时字段不串通道。
 3. [ ] Schema 入口最小实现（阶段化）
    - 支持基础 SQL/Prisma 元信息提取样例（字段 nullable/类型/主键一致性线）。
    - 输出 `findingSource=schema`，并记录 `governanceDomain/impactHint`。
 
 #### 阶段验收
-- [ ] `contract test` 与 `integration test` 中 contract/schema 来源路径各至少 1 条验收用例稳定通过。
-- [ ] `docs` 中明确：当前可支持项目层（代码治理）能力边界与“接口/字段治理”的排期。
-- [ ] 产出 1 份阶段演进证明（包含执行脚本/输出路径）并进入 P2 追踪。
+- [x] `contract test` 与 `integration test` 中 contract/schema 来源路径各至少 1 条验收用例稳定通过。
+- [x] `docs` 中明确：当前可支持项目层（代码治理）能力边界与“接口/字段治理”的排期；执行源已收口到 `docs/ACTIVE_TODO.md`。
+- [x] 产出 1 份阶段演进证明（包含执行脚本/输出路径）并进入 P2 追踪：`docs/governance/stage2-governance-verification-20260311.md`

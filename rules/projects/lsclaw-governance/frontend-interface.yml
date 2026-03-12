@@ -6,6 +6,8 @@
     any:
       - pattern: fetch($URL)
       - pattern: fetch($URL, $OPTIONS)
+      - pattern: window.fetch($URL)
+      - pattern: window.fetch($URL, $OPTIONS)
   governance:
     domain: frontend
     owner: platform
@@ -18,13 +20,16 @@
   message: "前端建议统一通过封装网络层发起 HTTP 调用，避免散落的 fetch/axios 调用"
   rule:
     any:
-      - pattern: axios.$METHOD($URL)
-      - pattern: axios.$METHOD($URL, $ARGS)
+      - pattern: $CLIENT.$METHOD($URL)
+      - pattern: $CLIENT.$METHOD($URL, $ARGS)
   constraints:
     - name: METHOD
       regex: "^(get|post|put|patch|delete)$"
       mode: any
       flags: "i"
+    - name: CLIENT
+      regex: "^(?:axios|client|http|(?:api|http|request|rest)[A-Z_$][\\w$]*|[A-Za-z_$][\\w$]*(?:Api|Client|Http|Request|Rest))$"
+      mode: any
   governance:
     domain: frontend
     owner: platform

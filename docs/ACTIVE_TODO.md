@@ -46,13 +46,28 @@
 
 1. 原生 contract 输入源
 - 已完成 `openApiDocuments -> contract findings` 最小闭环。
-- 已完成最小 `openApiComparisons -> contract compatibility findings` 闭环，当前覆盖请求必填字段新增、响应字段删除、响应字段类型变化。
+- 已完成最小 `openApiComparisons -> contract compatibility findings` 闭环，当前覆盖 operation 删除、请求字段删除/类型变化/必填新增、success response 状态码删除、响应字段删除/类型变化、响应 required -> optional 变化。
+- 已补本地 `#/components/schemas/*` 与简单 `allOf` 合并后的 comparison 识别。
+- 已补 `oneOf/anyOf` 分支中公共字段的最小 comparison 归一，当前 request/response 都有回归覆盖，且支持配合本地 `#/components/schemas/*` 使用。
+- 已补 object 嵌套路径与 `array.items` 路径的 request/response comparison 识别，如 `request.profile.age`、`response[200].users[].id`。
+- 已有回归覆盖嵌套路径里的本地 `$ref`、简单 `allOf` 与 `oneOf` 数组项组合场景。
+- 已补 `additionalProperties` map-like object 路径识别，如 `request.metadata.*`、`response[200].profiles.*.id`。
+- 已补最小值语义 comparison：`nullable` 收紧、`enum` 值删除、`default` 删除/变更。
+- 已补对应 OpenAPI value-semantics golden fixture，固定输出顺序与规则面。
+- 已补最小 `discriminator` comparison：`propertyName` 变化与 mapping 值删除。
+- 已补 `discriminator` golden fixture 与综合 OpenAPI comparison fixture。
+- 已显式固定同位置多来源 finding 的 deterministic 排序为 `ast -> contract -> schema`。
+- 已同步 core/evidence 输出类型中的 `findingSource / governanceDomain / impactHint / diff / applied` 字段声明。
+- 已补 parser capability matrix 与 finding attribution 说明文档。
+- 响应 comparison 当前已按 success status/default 对齐，避免 `200` 与 `201` 被误当同一 response shape 比较。
 - 下一步扩展到更细粒度的 schema / field 语义规则与 `$ref` 展开。
 
 2. 原生 schema 输入源
 - 已完成 `schemaDocuments -> schema findings` 最小闭环。
 - 当前覆盖主键缺失、敏感字段可空、生命周期默认值、审计时间默认值 4 类基础检查。
-- 已完成最小 `schemaComparisons -> compatibility findings` 闭环，当前覆盖字段删除、类型变化、可空性收紧、enum 值删除、默认值变化分级。
+- 已完成最小 `schemaComparisons -> compatibility findings` 闭环，当前覆盖字段删除、类型变化、可空性收紧、新增必填字段无 default、enum 值删除、默认值变化分级。
+- 已补时间默认值函数与常见 UUID 默认值函数的最小等价归一（如 `CURRENT_TIMESTAMP` / `now()`、`uuid_generate_v4()` / `gen_random_uuid()`）。
+- 已补主键变化、字段/组合唯一键 drift comparison，以及“新增必填字段但带 default”的降级提示。
 - 下一步扩展到更细的兼容性等级与方言等价规则。
 
 3. 输入层结构收口
@@ -61,6 +76,10 @@
 - 已补 parser capability metadata 与 profile-level fixtures。
 - 已补 parser registry 的启停开关与 profile version/stability 元数据。
 - 已补 profile 级 golden 用例。
+- 已支持 native-only `contract/schema` 请求绕过 AST 扫描主链；`rootDir` 仅在代码扫描时必填。
+- 已补 native parser 产物与 passthrough artifact 的去重，避免相同 finding 双计数。
+- 已补 AST parse-failure stats，可在 `includeStats=true` 时观察被跳过的解析失败文件。
+- 已补 parse-failure telemetry 聚合：`sampleLimit`、`byLanguage` 与统一 Markdown 展示已收口。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划
@@ -108,9 +127,10 @@
   - 支持同文件、单一 `return`、参数与实参一一映射的 helper boolean gate
   - 当前 helper 展开仅限静态可替换表达式，不处理多语句或有副作用函数
 - 第十一阶段优先补更复杂控制流：
-  - 非字面静态 helper 转发后的 gate 识别
+  - 已补非字面静态 helper 转发后的 gate 识别（局部静态 alias + return、同文件 helper 链）
+  - 已补带外层否定与括号的 helper compound / early-return guard 归因
   - 更复杂 `else if` 链与布尔表达式归因
-  - 多 flag 组合场景下的保守分层策略
+  - 已补多 flag 组合场景下的保守分层策略（`activation.mode=flag_set`）
 - 第十二阶段再考虑 Express/前端 router 等其他框架。
 - 验收：`route_binds` 不只“有值”，还要能解释“为什么存在 / 受什么条件控制 / 与 runtime 真相还差哪一层证据”。
 
@@ -119,11 +139,17 @@
 - 固定 `rules/projects/lsclaw-governance/` 的组织方式。
 - 已完成前端 HTTP 治理规则的第一阶段语义收口：
   - `frontend-interface.yml` 已拆分为 `fetch` 与 `axios method` 两条规则，保留原 `id` 给 `fetch` 以维持兼容。
-  - 已补常见直接调用形态覆盖：`fetch(url)`、`fetch(url, options)`、`axios.{get,post,put,patch,delete}(url[, args])`。
+  - 已补常见直接调用形态覆盖：`fetch(url)`、`fetch(url, options)`、`window.fetch(url)`、`axios.{get,post,put,patch,delete}(url[, args])`、常见 `apiClient/client/http/httpClient/requestClient/restClient` 实例名，以及受限泛化对象名（如 `billingApi.get(...)`、`requestGateway.post(...)`）。
   - 已补针对性回归测试与负例保护，避免 helper 调用（如 `axios.create(...)`）误报。
   - 已在规则文档中补充“不要在 capture 不共享的 `any` 规则上挂分支特有 constraint”的编写约束。
+- 已补最小整包 fixtures 基线：
+  - 新增 `fixtures/golden/lsclaw-governance-pack/`。
+  - `test/rules.test.mjs` 已固定整包命中阈值：`total=5`，`severity={error:1,warning:3,info:1}`，`impactHint={high:1,medium:3,low:1}`。
+- 已补规则来源可追溯说明：
+  - 新增 `docs/rules/RULE_TRACEABILITY.md`，明确 `rulePack -> glob -> ruleFile -> finding` 的发布/装载链路。
+  - 已同步 README、RULESET、RULE_PACKS、RULE_AUTHORING、OUTPUT_SCHEMA 的入口与消费说明。
 - 下一步：
-  - 评估是否需要扩展到 `window.fetch(...)`、`apiClient.get(...)`、axios alias/client instance 等别名与封装场景。
+  - 评估是否要继续扩到任意对象名的 `.get/.post/...` 与更高层封装识别。
 - 验收：规则来源可追溯，规则漂移可定位。
 
 ## P2 中期优先级

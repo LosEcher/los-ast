@@ -10,6 +10,22 @@ type OpenApiObject = {
   openapi?: string;
   security?: unknown[];
   paths?: Record<string, Record<string, unknown>>;
+  components?: {
+    schemas?: Record<string, unknown>;
+  };
+};
+
+type ComparableField = {
+  defaultValue?: string;
+  enumValues: string[];
+  hasDefault: boolean;
+  nullable: boolean;
+  type: string;
+};
+
+type ComparableDiscriminator = {
+  mappingKeys: string[];
+  propertyName: string;
 };
 
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
@@ -120,6 +136,277 @@ function getSchemaObject(schema: unknown): Record<string, unknown> | undefined {
   return isRecord(schema) ? schema : undefined;
 }
 
+function resolveLocalSchemaRef(
+  document: OpenApiObject,
+  schema: unknown,
+  seen: Set<string> = new Set()
+): Record<string, unknown> | undefined {
+  const schemaObject = getSchemaObject(schema);
+  if (!schemaObject) {
+    return undefined;
+  }
+
+  const ref = typeof schemaObject.$ref === 'string' ? schemaObject.$ref : undefined;
+  if (!ref) {
+    return schemaObject;
+  }
+
+  const prefix = '#/components/schemas/';
+  if (!ref.startsWith(prefix)) {
+    return schemaObject;
+  }
+
+  const schemaName = ref.slice(prefix.length);
+  if (!schemaName || seen.has(schemaName)) {
+    return undefined;
+  }
+
+  const target = document.components?.schemas?.[schemaName];
+  if (!target) {
+    return undefined;
+  }
+
+  seen.add(schemaName);
+  return resolveLocalSchemaRef(document, target, seen) || getSchemaObject(target);
+}
+
+function resolveObjectSchema(
+  document: OpenApiObject,
+  schema: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (!schema) {
+    return undefined;
+  }
+
+  const resolved = resolveLocalSchemaRef(document, schema) || schema;
+  let mergedSchema = resolved;
+  const allOf = Array.isArray(resolved.allOf) ? resolved.allOf : [];
+
+  if (allOf.length > 0) {
+    const mergedProperties: Record<string, unknown> = {};
+    const mergedRequired = new Set<string>();
+    let mergedAdditionalProperties: unknown = undefined;
+
+    for (const subSchema of allOf) {
+      const resolvedSubSchema = resolveObjectSchema(document, getSchemaObject(subSchema));
+      if (!resolvedSubSchema) {
+        continue;
+      }
+
+      if (isRecord(resolvedSubSchema.properties)) {
+        Object.assign(mergedProperties, resolvedSubSchema.properties);
+      }
+
+      if (Array.isArray(resolvedSubSchema.required)) {
+        for (const requiredField of resolvedSubSchema.required) {
+          if (typeof requiredField === 'string') {
+            mergedRequired.add(requiredField);
+          }
+        }
+      }
+
+      if (typeof mergedAdditionalProperties === 'undefined' && typeof resolvedSubSchema.additionalProperties !== 'undefined') {
+        mergedAdditionalProperties = resolvedSubSchema.additionalProperties;
+      }
+    }
+
+    if (isRecord(resolved.properties)) {
+      Object.assign(mergedProperties, resolved.properties);
+    }
+
+    if (Array.isArray(resolved.required)) {
+      for (const requiredField of resolved.required) {
+        if (typeof requiredField === 'string') {
+          mergedRequired.add(requiredField);
+        }
+      }
+    }
+
+    if (typeof resolved.additionalProperties !== 'undefined') {
+      mergedAdditionalProperties = resolved.additionalProperties;
+    }
+
+    mergedSchema = {
+      ...resolved,
+      type: resolved.type || 'object',
+      properties: mergedProperties,
+      additionalProperties: mergedAdditionalProperties,
+      required: Array.from(mergedRequired),
+    };
+  }
+
+  const variantSchemas = Array.isArray(mergedSchema.oneOf)
+    ? mergedSchema.oneOf
+    : Array.isArray(mergedSchema.anyOf)
+      ? mergedSchema.anyOf
+      : [];
+  if (variantSchemas.length === 0) {
+    return mergedSchema;
+  }
+
+  const resolvedVariants = variantSchemas
+    .map((subSchema) => resolveObjectSchema(document, getSchemaObject(subSchema)))
+    .filter((subSchema): subSchema is Record<string, unknown> => !!subSchema && isRecord(subSchema.properties));
+  if (resolvedVariants.length === 0) {
+    return mergedSchema;
+  }
+
+  const directProperties = isRecord(mergedSchema.properties) ? { ...mergedSchema.properties } : {};
+  const directRequired = new Set(
+    Array.isArray(mergedSchema.required)
+      ? mergedSchema.required.filter((item): item is string => typeof item === 'string')
+      : []
+  );
+
+  const [firstVariant, ...restVariants] = resolvedVariants;
+  const commonProperties = new Map<string, unknown>(Object.entries(firstVariant.properties as Record<string, unknown>));
+  const commonRequired = new Set(
+    Array.isArray(firstVariant.required)
+      ? firstVariant.required.filter((item): item is string => typeof item === 'string')
+      : []
+  );
+
+  for (const variant of restVariants) {
+    const variantProperties = isRecord(variant.properties) ? variant.properties : {};
+    const variantRequired = new Set(
+      Array.isArray(variant.required)
+        ? variant.required.filter((item): item is string => typeof item === 'string')
+        : []
+    );
+
+    for (const [propertyName, propertySchema] of Array.from(commonProperties.entries())) {
+      const nextPropertySchema = variantProperties[propertyName];
+      if (!nextPropertySchema) {
+        commonProperties.delete(propertyName);
+        commonRequired.delete(propertyName);
+        continue;
+      }
+
+      if (inferSchemaType(document, propertySchema) !== inferSchemaType(document, nextPropertySchema)) {
+        commonProperties.delete(propertyName);
+        commonRequired.delete(propertyName);
+        continue;
+      }
+
+      if (!variantRequired.has(propertyName)) {
+        commonRequired.delete(propertyName);
+      }
+    }
+  }
+
+  for (const [propertyName, propertySchema] of commonProperties.entries()) {
+    directProperties[propertyName] = propertySchema;
+  }
+
+  const mergedRequired = new Set([...directRequired, ...commonRequired]);
+
+  return {
+    ...mergedSchema,
+    type: mergedSchema.type || 'object',
+    properties: directProperties,
+    required: Array.from(mergedRequired),
+  };
+}
+
+function inferSchemaType(
+  document: OpenApiObject,
+  schema: unknown
+): string {
+  const schemaObject = resolveObjectSchema(document, getSchemaObject(schema));
+  if (!schemaObject) {
+    return 'object';
+  }
+
+  if (typeof schemaObject.type === 'string') {
+    return schemaObject.type;
+  }
+
+  if (Array.isArray(schemaObject.enum)) {
+    return 'enum';
+  }
+
+  return 'object';
+}
+
+function inferNullable(
+  document: OpenApiObject,
+  schema: unknown
+): boolean {
+  const schemaObject = resolveObjectSchema(document, getSchemaObject(schema));
+  if (!schemaObject) {
+    return false;
+  }
+
+  if (schemaObject.nullable === true) {
+    return true;
+  }
+
+  return Array.isArray(schemaObject.type) && schemaObject.type.includes('null');
+}
+
+function normalizeEnumValues(values: unknown[] | undefined): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.map((value) => JSON.stringify(value)).sort();
+}
+
+function normalizeDefaultValue(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return JSON.stringify(value);
+}
+
+function getComparableDiscriminator(
+  schema: Record<string, unknown>
+): ComparableDiscriminator | undefined {
+  if (!isRecord(schema.discriminator)) {
+    return undefined;
+  }
+
+  const propertyName = typeof schema.discriminator.propertyName === 'string'
+    ? schema.discriminator.propertyName
+    : undefined;
+  if (!propertyName) {
+    return undefined;
+  }
+
+  const mappingKeys = isRecord(schema.discriminator.mapping)
+    ? Object.keys(schema.discriminator.mapping).sort()
+    : [];
+
+  return {
+    mappingKeys,
+    propertyName,
+  };
+}
+
+function getComparableField(
+  document: OpenApiObject,
+  schema: unknown
+): ComparableField {
+  const schemaObject = resolveObjectSchema(document, getSchemaObject(schema));
+  if (!schemaObject) {
+    return {
+      enumValues: [],
+      hasDefault: false,
+      nullable: false,
+      type: 'object',
+    };
+  }
+
+  return {
+    defaultValue: normalizeDefaultValue(schemaObject.default),
+    enumValues: normalizeEnumValues(Array.isArray(schemaObject.enum) ? schemaObject.enum : undefined),
+    hasDefault: Object.hasOwn(schemaObject, 'default'),
+    nullable: inferNullable(document, schemaObject),
+    type: inferSchemaType(document, schemaObject),
+  };
+}
+
 function getJsonContentSchema(container: unknown): Record<string, unknown> | undefined {
   if (!isRecord(container) || !isRecord(container.content)) {
     return undefined;
@@ -144,9 +431,10 @@ function getRequestSchema(operation: Record<string, unknown>): Record<string, un
   return getJsonContentSchema(operation.requestBody);
 }
 
-function getSuccessResponseSchema(operation: Record<string, unknown>): Record<string, unknown> | undefined {
+function getSuccessResponseSchemas(operation: Record<string, unknown>): Map<string, Record<string, unknown>> {
+  const schemas = new Map<string, Record<string, unknown>>();
   if (!isRecord(operation.responses)) {
-    return undefined;
+    return schemas;
   }
 
   for (const [status, response] of Object.entries(operation.responses)) {
@@ -156,46 +444,179 @@ function getSuccessResponseSchema(operation: Record<string, unknown>): Record<st
 
     const schema = getJsonContentSchema(response);
     if (schema) {
-      return schema;
+      schemas.set(status, schema);
     }
   }
 
-  return undefined;
+  return schemas;
 }
 
-function getTopLevelObjectShape(schema: Record<string, unknown> | undefined): {
-  properties: Map<string, string>;
+function collectComparableFields(
+  document: OpenApiObject,
+  schema: Record<string, unknown> | undefined,
+  pathPrefix: string,
+  ancestorRequired: boolean,
+  properties: Map<string, ComparableField>,
+  discriminators: Map<string, ComparableDiscriminator>,
+  required: Set<string>
+): void {
+  const resolvedSchema = resolveObjectSchema(document, schema);
+  if (!resolvedSchema) {
+    return;
+  }
+
+  const discriminator = getComparableDiscriminator(resolvedSchema);
+  if (discriminator) {
+    discriminators.set(pathPrefix, discriminator);
+  }
+
+  if (resolvedSchema.type === 'array') {
+    const arrayPath = `${pathPrefix}[]`;
+    const itemSchema = resolveObjectSchema(document, getSchemaObject(resolvedSchema.items));
+    if (!itemSchema) {
+      properties.set(arrayPath, {
+        enumValues: [],
+        hasDefault: false,
+        nullable: false,
+        type: 'object',
+      });
+      if (ancestorRequired) {
+        required.add(arrayPath);
+      }
+      return;
+    }
+
+    if (itemSchema.type === 'object' && isRecord(itemSchema.properties)) {
+      collectComparableFields(document, itemSchema, arrayPath, ancestorRequired, properties, discriminators, required);
+      return;
+    }
+
+    if (itemSchema.type === 'array') {
+      collectComparableFields(document, itemSchema, arrayPath, ancestorRequired, properties, discriminators, required);
+      return;
+    }
+
+    properties.set(arrayPath, getComparableField(document, itemSchema));
+    if (ancestorRequired) {
+      required.add(arrayPath);
+    }
+    return;
+  }
+
+  if (resolvedSchema.type === 'object' && isRecord(resolvedSchema.properties)) {
+    const directRequired = new Set(
+      Array.isArray(resolvedSchema.required)
+        ? resolvedSchema.required.filter((item): item is string => typeof item === 'string')
+        : []
+    );
+
+    for (const [propertyName, propertySchema] of Object.entries(resolvedSchema.properties)) {
+      const nextPath = pathPrefix ? `${pathPrefix}.${propertyName}` : propertyName;
+      const propertyRequired = ancestorRequired && directRequired.has(propertyName);
+      collectComparableFields(
+        document,
+        getSchemaObject(propertySchema),
+        nextPath,
+        propertyRequired,
+        properties,
+        discriminators,
+        required
+      );
+    }
+
+    const additionalPropertiesSchema = getSchemaObject(resolvedSchema.additionalProperties);
+    if (additionalPropertiesSchema) {
+      const wildcardPath = pathPrefix ? `${pathPrefix}.*` : '*';
+      collectComparableFields(
+        document,
+        additionalPropertiesSchema,
+        wildcardPath,
+        ancestorRequired,
+        properties,
+        discriminators,
+        required
+      );
+    }
+    return;
+  }
+
+  if (resolvedSchema.type === 'object') {
+    const additionalPropertiesSchema = getSchemaObject(resolvedSchema.additionalProperties);
+    if (additionalPropertiesSchema) {
+      const wildcardPath = pathPrefix ? `${pathPrefix}.*` : '*';
+      collectComparableFields(
+        document,
+        additionalPropertiesSchema,
+        wildcardPath,
+        ancestorRequired,
+        properties,
+        discriminators,
+        required
+      );
+      return;
+    }
+  }
+
+  if (!pathPrefix) {
+    return;
+  }
+
+  properties.set(pathPrefix, getComparableField(document, resolvedSchema));
+  if (ancestorRequired) {
+    required.add(pathPrefix);
+  }
+}
+
+function getComparableObjectShape(document: OpenApiObject, schema: Record<string, unknown> | undefined): {
+  discriminators: Map<string, ComparableDiscriminator>;
+  properties: Map<string, ComparableField>;
   required: Set<string>;
+  pathSuffix: string;
 } {
-  if (!schema || schema.type !== 'object' || !isRecord(schema.properties)) {
+  const resolvedSchema = resolveObjectSchema(document, schema);
+  if (!resolvedSchema) {
     return {
+      discriminators: new Map(),
       properties: new Map(),
       required: new Set(),
+      pathSuffix: '',
     };
   }
 
-  const properties = new Map<string, string>();
-  for (const [name, propertySchema] of Object.entries(schema.properties)) {
-    if (!isRecord(propertySchema)) {
-      continue;
-    }
+  const objectSchema = resolvedSchema.type === 'array'
+    ? resolveObjectSchema(document, getSchemaObject(resolvedSchema.items))
+    : resolvedSchema;
+  const pathSuffix = resolvedSchema.type === 'array' ? '[]' : '';
 
-    const propertyType =
-      typeof propertySchema.type === 'string'
-        ? propertySchema.type
-        : Array.isArray(propertySchema.enum)
-          ? 'enum'
-          : 'object';
-    properties.set(name, propertyType);
+  if (!objectSchema) {
+    return {
+      discriminators: new Map(),
+      properties: new Map(),
+      required: new Set(),
+      pathSuffix,
+    };
   }
 
-  const required = new Set(
-    Array.isArray(schema.required)
-      ? schema.required.filter((item): item is string => typeof item === 'string')
-      : []
-  );
+  const comparableProperties = new Map<string, ComparableField>();
+  const discriminators = new Map<string, ComparableDiscriminator>();
+  const required = new Set<string>();
+  collectComparableFields(document, objectSchema, '', true, comparableProperties, discriminators, required);
 
-  return { properties, required };
+  return { discriminators, properties: comparableProperties, required, pathSuffix };
+}
+
+function getResponseExcerptPrefix(status: string): string {
+  return `response[${status}]`;
+}
+
+function buildDiscriminatorExcerpt(
+  prefix: string,
+  pathSuffix: string,
+  schemaPath: string,
+  propertyName: string
+): string {
+  const path = schemaPath ? `.${schemaPath}` : '';
+  return `${prefix}${pathSuffix}${path}#discriminator.${propertyName}`;
 }
 
 export function buildContractArtifactsFromOpenApi(
@@ -317,14 +738,173 @@ export function buildContractArtifactsFromOpenApiComparisons(
     for (const [operationLabel, baselineOperation] of baselineOperations.entries()) {
       const currentOperation = currentOperations.get(operationLabel);
       if (!currentOperation) {
+        artifacts.push(buildContractFinding(
+          sourceLabel,
+          fileLabel,
+          findingLine,
+          'contract/openapi-breaking-operation-drop',
+          'error',
+          `OpenAPI operation ${operationLabel} was removed from current spec`,
+          operationLabel,
+          ['interface', 'backend'],
+          'high',
+        ));
         findingLine += 1;
         continue;
       }
 
-      const baselineRequestShape = getTopLevelObjectShape(getRequestSchema(baselineOperation));
-      const currentRequestShape = getTopLevelObjectShape(getRequestSchema(currentOperation));
+      const baselineRequestShape = getComparableObjectShape(baseline, getRequestSchema(baselineOperation));
+      const currentRequestShape = getComparableObjectShape(current, getRequestSchema(currentOperation));
+      for (const [schemaPath, baselineDiscriminator] of baselineRequestShape.discriminators.entries()) {
+        const currentDiscriminator = currentRequestShape.discriminators.get(schemaPath);
+        const requestExcerptPrefix = `${operationLabel} request`;
+        if (!currentDiscriminator || baselineDiscriminator.propertyName !== currentDiscriminator.propertyName) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-breaking-request-discriminator-change',
+            'error',
+            `OpenAPI operation ${operationLabel} changed request discriminator property at ${schemaPath || 'root'}`,
+            buildDiscriminatorExcerpt(
+              requestExcerptPrefix,
+              baselineRequestShape.pathSuffix,
+              schemaPath,
+              baselineDiscriminator.propertyName
+            ),
+            ['interface', 'backend'],
+            'high',
+          ));
+        }
+
+        if (!currentDiscriminator) {
+          continue;
+        }
+
+        const droppedRequestMappings = baselineDiscriminator.mappingKeys
+          .filter((value) => !currentDiscriminator.mappingKeys.includes(value));
+        if (droppedRequestMappings.length > 0) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-breaking-request-discriminator-value-drop',
+            'error',
+            `OpenAPI operation ${operationLabel} removed request discriminator values at ${schemaPath || 'root'}`,
+            `${buildDiscriminatorExcerpt(requestExcerptPrefix, baselineRequestShape.pathSuffix, schemaPath, baselineDiscriminator.propertyName)}: dropped ${droppedRequestMappings.join(', ')}`,
+            ['interface', 'backend'],
+            'high',
+          ));
+        }
+      }
+      for (const [fieldName, baselineField] of baselineRequestShape.properties.entries()) {
+        const currentField = currentRequestShape.properties.get(fieldName);
+        if (!currentField) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-breaking-request-field-drop',
+            'error',
+            `OpenAPI operation ${operationLabel} removed request field ${fieldName}`,
+            `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}`,
+            ['interface', 'backend'],
+            'high',
+          ));
+          continue;
+        }
+
+        if (baselineField.type !== currentField.type) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-breaking-request-field-type-change',
+            'error',
+            `OpenAPI operation ${operationLabel} changed request field ${fieldName} type from ${baselineField.type} to ${currentField.type}`,
+            `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: ${baselineField.type} -> ${currentField.type}`,
+            ['interface', 'backend'],
+            'high',
+          ));
+        }
+
+        if (baselineField.nullable && !currentField.nullable) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-breaking-request-nullable-tighten',
+            'error',
+            `OpenAPI operation ${operationLabel} changed request field ${fieldName} from nullable to non-nullable`,
+            `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: nullable -> non-nullable`,
+            ['interface', 'backend'],
+            'high',
+          ));
+        }
+
+        const droppedRequestEnumValues = baselineField.enumValues.filter((value) => !currentField.enumValues.includes(value));
+        if (droppedRequestEnumValues.length > 0) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-breaking-request-enum-value-drop',
+            'error',
+            `OpenAPI operation ${operationLabel} removed request enum values from field ${fieldName}`,
+            `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: dropped ${droppedRequestEnumValues.join(', ')}`,
+            ['interface', 'backend'],
+            'high',
+          ));
+        }
+
+        if (baselineField.hasDefault && !currentField.hasDefault) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-request-default-removed',
+            'warning',
+            `OpenAPI operation ${operationLabel} removed default from request field ${fieldName}`,
+            `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: default removed`,
+            ['interface', 'backend'],
+            'medium',
+          ));
+        } else if (
+          baselineField.hasDefault
+          && currentField.hasDefault
+          && baselineField.defaultValue !== currentField.defaultValue
+        ) {
+          artifacts.push(buildContractFinding(
+            sourceLabel,
+            fileLabel,
+            findingLine,
+            'contract/openapi-request-default-changed',
+            'warning',
+            `OpenAPI operation ${operationLabel} changed default for request field ${fieldName}`,
+            `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`,
+            ['interface', 'backend'],
+            'medium',
+          ));
+        }
+      }
       for (const requiredField of currentRequestShape.required) {
         if (!baselineRequestShape.required.has(requiredField)) {
+          const currentRequiredField = currentRequestShape.properties.get(requiredField);
+          if (currentRequiredField?.hasDefault) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-request-required-add-with-default',
+              'warning',
+              `OpenAPI operation ${operationLabel} added required request field ${requiredField} with a default`,
+              `${operationLabel} request${currentRequestShape.pathSuffix || baselineRequestShape.pathSuffix}.${requiredField}: required + default`,
+              ['interface', 'backend'],
+              'medium',
+            ));
+            continue;
+          }
+
           artifacts.push(buildContractFinding(
             sourceLabel,
             fileLabel,
@@ -332,44 +912,180 @@ export function buildContractArtifactsFromOpenApiComparisons(
             'contract/openapi-breaking-request-required-add',
             'error',
             `OpenAPI operation ${operationLabel} added required request field ${requiredField}`,
-            `${operationLabel} request.${requiredField}`,
+            `${operationLabel} request${currentRequestShape.pathSuffix || baselineRequestShape.pathSuffix}.${requiredField}`,
             ['interface', 'backend'],
             'high',
           ));
         }
       }
 
-      const baselineResponseShape = getTopLevelObjectShape(getSuccessResponseSchema(baselineOperation));
-      const currentResponseShape = getTopLevelObjectShape(getSuccessResponseSchema(currentOperation));
-      for (const [fieldName, baselineType] of baselineResponseShape.properties.entries()) {
-        const currentType = currentResponseShape.properties.get(fieldName);
-        if (!currentType) {
+      const baselineResponseSchemas = getSuccessResponseSchemas(baselineOperation);
+      const currentResponseSchemas = getSuccessResponseSchemas(currentOperation);
+      for (const [status, baselineResponseSchema] of baselineResponseSchemas.entries()) {
+        const currentResponseSchema = currentResponseSchemas.get(status);
+        if (!currentResponseSchema) {
           artifacts.push(buildContractFinding(
             sourceLabel,
             fileLabel,
             findingLine,
-            'contract/openapi-breaking-response-field-drop',
+            'contract/openapi-breaking-response-status-drop',
             'error',
-            `OpenAPI operation ${operationLabel} removed response field ${fieldName}`,
-            `${operationLabel} response.${fieldName}`,
+            `OpenAPI operation ${operationLabel} removed success response ${status}`,
+            `${operationLabel} ${getResponseExcerptPrefix(status)}`,
             ['interface', 'backend'],
             'high',
           ));
           continue;
         }
 
-        if (baselineType !== currentType) {
-          artifacts.push(buildContractFinding(
-            sourceLabel,
-            fileLabel,
-            findingLine,
-            'contract/openapi-breaking-response-field-type-change',
-            'error',
-            `OpenAPI operation ${operationLabel} changed response field ${fieldName} type from ${baselineType} to ${currentType}`,
-            `${operationLabel} response.${fieldName}: ${baselineType} -> ${currentType}`,
-            ['interface', 'backend'],
-            'high',
-          ));
+        const baselineResponseShape = getComparableObjectShape(baseline, baselineResponseSchema);
+        const currentResponseShape = getComparableObjectShape(current, currentResponseSchema);
+        const responseExcerptPrefix = getResponseExcerptPrefix(status);
+        for (const [schemaPath, baselineDiscriminator] of baselineResponseShape.discriminators.entries()) {
+          const currentDiscriminator = currentResponseShape.discriminators.get(schemaPath);
+          const responseBasePrefix = `${operationLabel} ${responseExcerptPrefix}`;
+          if (!currentDiscriminator || baselineDiscriminator.propertyName !== currentDiscriminator.propertyName) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-breaking-response-discriminator-change',
+              'error',
+              `OpenAPI operation ${operationLabel} changed response discriminator property at ${schemaPath || 'root'} on success response ${status}`,
+              buildDiscriminatorExcerpt(
+                responseBasePrefix,
+                baselineResponseShape.pathSuffix,
+                schemaPath,
+                baselineDiscriminator.propertyName
+              ),
+              ['interface', 'backend'],
+              'high',
+            ));
+          }
+
+          if (!currentDiscriminator) {
+            continue;
+          }
+
+          const droppedResponseMappings = baselineDiscriminator.mappingKeys
+            .filter((value) => !currentDiscriminator.mappingKeys.includes(value));
+          if (droppedResponseMappings.length > 0) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-breaking-response-discriminator-value-drop',
+              'error',
+              `OpenAPI operation ${operationLabel} removed response discriminator values at ${schemaPath || 'root'} on success response ${status}`,
+              `${buildDiscriminatorExcerpt(responseBasePrefix, baselineResponseShape.pathSuffix, schemaPath, baselineDiscriminator.propertyName)}: dropped ${droppedResponseMappings.join(', ')}`,
+              ['interface', 'backend'],
+              'high',
+            ));
+          }
+        }
+        for (const [fieldName, baselineField] of baselineResponseShape.properties.entries()) {
+          const currentField = currentResponseShape.properties.get(fieldName);
+          if (!currentField) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-breaking-response-field-drop',
+              'error',
+              `OpenAPI operation ${operationLabel} removed response field ${fieldName} from success response ${status}`,
+              `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}`,
+              ['interface', 'backend'],
+              'high',
+            ));
+            continue;
+          }
+
+          if (baselineField.type !== currentField.type) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-breaking-response-field-type-change',
+              'error',
+              `OpenAPI operation ${operationLabel} changed response field ${fieldName} type from ${baselineField.type} to ${currentField.type} on success response ${status}`,
+              `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: ${baselineField.type} -> ${currentField.type}`,
+              ['interface', 'backend'],
+              'high',
+            ));
+          }
+
+          if (baselineField.nullable && !currentField.nullable) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-breaking-response-nullable-tighten',
+              'error',
+              `OpenAPI operation ${operationLabel} changed response field ${fieldName} from nullable to non-nullable on success response ${status}`,
+              `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: nullable -> non-nullable`,
+              ['interface', 'backend'],
+              'high',
+            ));
+          }
+
+          const droppedResponseEnumValues = baselineField.enumValues.filter((value) => !currentField.enumValues.includes(value));
+          if (droppedResponseEnumValues.length > 0) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-breaking-response-enum-value-drop',
+              'error',
+              `OpenAPI operation ${operationLabel} removed response enum values from field ${fieldName} on success response ${status}`,
+              `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: dropped ${droppedResponseEnumValues.join(', ')}`,
+              ['interface', 'backend'],
+              'high',
+            ));
+          }
+
+          if (baselineField.hasDefault && !currentField.hasDefault) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-response-default-removed',
+              'warning',
+              `OpenAPI operation ${operationLabel} removed default from response field ${fieldName} on success response ${status}`,
+              `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: default removed`,
+              ['interface', 'backend'],
+              'medium',
+            ));
+          } else if (
+            baselineField.hasDefault
+            && currentField.hasDefault
+            && baselineField.defaultValue !== currentField.defaultValue
+          ) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-response-default-changed',
+              'warning',
+              `OpenAPI operation ${operationLabel} changed default for response field ${fieldName} on success response ${status}`,
+              `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`,
+              ['interface', 'backend'],
+              'medium',
+            ));
+          }
+
+          if (baselineResponseShape.required.has(fieldName) && !currentResponseShape.required.has(fieldName)) {
+            artifacts.push(buildContractFinding(
+              sourceLabel,
+              fileLabel,
+              findingLine,
+              'contract/openapi-breaking-response-required-drop',
+              'error',
+              `OpenAPI operation ${operationLabel} changed response field ${fieldName} from required to optional on success response ${status}`,
+              `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: required -> optional`,
+              ['interface', 'backend'],
+              'high',
+            ));
+          }
         }
       }
 

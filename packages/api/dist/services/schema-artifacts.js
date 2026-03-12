@@ -25,7 +25,22 @@ function normalizeDefaultValue(value) {
     if (!value) {
         return undefined;
     }
-    return value.trim().replace(/^["']|["']$/g, '').toLowerCase();
+    let normalized = value.trim().replace(/^["']|["']$/g, '');
+    while (normalized.startsWith('(') && normalized.endsWith(')')) {
+        normalized = normalized.slice(1, -1).trim();
+    }
+    normalized = normalized.toLowerCase();
+    if (normalized === 'now()'
+        || normalized === 'current_timestamp'
+        || normalized === 'current_timestamp()'
+        || /^current_timestamp\(\d+\)$/.test(normalized)) {
+        return '@current_timestamp';
+    }
+    if (normalized === 'gen_random_uuid()'
+        || normalized === 'uuid_generate_v4()') {
+        return '@generated_uuid';
+    }
+    return normalized;
 }
 function extractSqlTypeToken(definition) {
     const trimmed = definition.trim();
@@ -68,7 +83,7 @@ function parsePrismaEnums(content) {
     return enums;
 }
 function extractPrismaDefaultValue(rawLine) {
-    const match = rawLine.match(/@default\s*\(([^)]+)\)/);
+    const match = rawLine.match(/@default\s*\((.+)\)/);
     return normalizeDefaultValue(match?.[1]);
 }
 function parseSqlEntities(content) {
@@ -84,6 +99,7 @@ function parseSqlEntities(content) {
             .filter(Boolean);
         const fields = new Map();
         const tablePrimaryKeys = new Set();
+        const tableUniqueKeys = [];
         for (const rawLine of rawLines) {
             const normalizedLine = rawLine.replace(/,$/, '');
             const lowerLine = normalizedLine.toLowerCase();
@@ -92,6 +108,11 @@ function parseSqlEntities(content) {
                 for (const key of primaryKeyMatch[1].split(',').map((item) => cleanSqlIdentifier(item.trim()))) {
                     tablePrimaryKeys.add(key);
                 }
+                continue;
+            }
+            const uniqueMatch = lowerLine.match(/^unique\s*\((.+)\)$/i);
+            if (uniqueMatch) {
+                tableUniqueKeys.push(uniqueMatch[1].split(',').map((item) => cleanSqlIdentifier(item.trim())).filter(Boolean));
                 continue;
             }
             const columnMatch = normalizedLine.match(/^([`"\[\]\w]+)\s+(.+)$/);
@@ -110,6 +131,7 @@ function parseSqlEntities(content) {
                 hasDefault: /\bdefault\b/i.test(lowerLine),
                 defaultValue: extractSqlDefaultValue(definition),
                 primaryKey: /\bprimary\s+key\b/i.test(lowerLine),
+                unique: /\bunique\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine),
                 enumValues: parseSqlEnumValues(typeToken),
             });
         }
@@ -119,7 +141,7 @@ function parseSqlEntities(content) {
                 field.primaryKey = true;
             }
         }
-        entities.push({ name: tableName, fields });
+        entities.push({ name: tableName, fields, uniqueKeys: tableUniqueKeys });
     }
     return entities;
 }
@@ -137,7 +159,21 @@ function parsePrismaEntities(content) {
             .filter(Boolean)
             .filter((item) => !item.startsWith('//'));
         const fields = new Map();
+        const compositePrimaryKeys = new Set();
+        const compositeUniqueKeys = [];
         for (const rawLine of rawLines) {
+            const compositeIdMatch = rawLine.match(/^@@id\s*\(\s*\[([^\]]+)\]/);
+            if (compositeIdMatch) {
+                for (const key of compositeIdMatch[1].split(',').map((item) => item.trim()).filter(Boolean)) {
+                    compositePrimaryKeys.add(key);
+                }
+                continue;
+            }
+            const compositeUniqueMatch = rawLine.match(/^@@unique\s*\(\s*\[([^\]]+)\]/);
+            if (compositeUniqueMatch) {
+                compositeUniqueKeys.push(compositeUniqueMatch[1].split(',').map((item) => item.trim()).filter(Boolean));
+                continue;
+            }
             const fieldMatch = rawLine.match(/^(\w+)\s+([A-Za-z][A-Za-z0-9]*\??)/);
             if (!fieldMatch) {
                 continue;
@@ -150,10 +186,17 @@ function parsePrismaEntities(content) {
                 hasDefault: /@default\s*\(/.test(rawLine) || /@updatedAt\b/.test(rawLine),
                 defaultValue: extractPrismaDefaultValue(rawLine) || (/@updatedAt\b/.test(rawLine) ? '@updatedat' : undefined),
                 primaryKey: /@id\b/.test(rawLine),
+                unique: /@unique\b/.test(rawLine),
                 enumValues: enums.get(normalizedType),
             });
         }
-        entities.push({ name: modelName, fields });
+        for (const primaryKeyField of compositePrimaryKeys) {
+            const field = fields.get(primaryKeyField);
+            if (field) {
+                field.primaryKey = true;
+            }
+        }
+        entities.push({ name: modelName, fields, uniqueKeys: compositeUniqueKeys });
     }
     return entities;
 }
@@ -369,6 +412,9 @@ function diffEnumValues(baselineValues, currentValues) {
         added: Array.from(currentSet).filter((value) => !baselineSet.has(value)),
     };
 }
+function normalizeUniqueKey(key) {
+    return [...key].sort().join('|');
+}
 function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, currentEntities) {
     const artifacts = [];
     const currentByName = new Map(currentEntities.map((entity) => [entity.name, entity]));
@@ -379,6 +425,27 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
             artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-drop-entity`, `${prefix === 'sql' ? 'Table' : 'Model'} ${baselineEntity.name} was removed in current schema`, baselineEntity.name));
             line += 1;
             continue;
+        }
+        const baselinePrimaryKeys = Array.from(baselineEntity.fields.entries())
+            .filter(([, field]) => field.primaryKey)
+            .map(([fieldName]) => fieldName)
+            .sort();
+        const currentPrimaryKeys = Array.from(currentEntity.fields.entries())
+            .filter(([, field]) => field.primaryKey)
+            .map(([fieldName]) => fieldName)
+            .sort();
+        if (baselinePrimaryKeys.join('|') !== currentPrimaryKeys.join('|')) {
+            const baselineLabel = baselinePrimaryKeys.length > 0 ? baselinePrimaryKeys.join(', ') : 'none';
+            const currentLabel = currentPrimaryKeys.length > 0 ? currentPrimaryKeys.join(', ') : 'none';
+            artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-primary-key-change`, `${prefix === 'sql' ? 'Table' : 'Model'} ${baselineEntity.name} changed primary key from ${baselineLabel} to ${currentLabel}`, `${baselineEntity.name}: primary key ${baselineLabel} -> ${currentLabel}`));
+        }
+        const baselineUniqueKeys = (baselineEntity.uniqueKeys || []).map(normalizeUniqueKey).sort();
+        const currentUniqueKeys = (currentEntity.uniqueKeys || []).map(normalizeUniqueKey).sort();
+        for (const key of baselineUniqueKeys.filter((item) => !currentUniqueKeys.includes(item))) {
+            artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-composite-unique-removed`, 'info', `${prefix === 'sql' ? 'Table' : 'Model'} ${baselineEntity.name} removed unique constraint on [${key.replace(/\|/g, ', ')}]`, `${baselineEntity.name}: unique [${key.replace(/\|/g, ', ')}] removed`, 'low'));
+        }
+        for (const key of currentUniqueKeys.filter((item) => !baselineUniqueKeys.includes(item))) {
+            artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-composite-unique-added`, 'warning', `${prefix === 'sql' ? 'Table' : 'Model'} ${baselineEntity.name} added unique constraint on [${key.replace(/\|/g, ', ')}]`, `${baselineEntity.name}: unique [${key.replace(/\|/g, ', ')}] added`, 'medium'));
         }
         for (const [fieldName, baselineField] of baselineEntity.fields.entries()) {
             const currentField = currentEntity.fields.get(fieldName);
@@ -392,6 +459,12 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
             }
             if (baselineField.nullable && !currentField.nullable && !currentField.hasDefault) {
                 artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-nullability-tighten`, `Field ${baselineEntity.name}.${fieldName} changed from nullable to required without default`, `${baselineEntity.name}.${fieldName}`));
+            }
+            if (baselineField.unique && !currentField.unique) {
+                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-unique-removed`, 'info', `Field ${baselineEntity.name}.${fieldName} removed unique constraint`, `${baselineEntity.name}.${fieldName}: unique removed`, 'low'));
+            }
+            else if (!baselineField.unique && currentField.unique) {
+                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-unique-added`, 'warning', `Field ${baselineEntity.name}.${fieldName} added unique constraint`, `${baselineEntity.name}.${fieldName}: unique added`, 'medium'));
             }
             const enumDiff = diffEnumValues(baselineField.enumValues, currentField.enumValues);
             if (enumDiff.removed.length > 0) {
@@ -412,6 +485,18 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
                 currentField.defaultValue &&
                 baselineField.defaultValue !== currentField.defaultValue) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-changed`, 'warning', `Field ${baselineEntity.name}.${fieldName} changed default value from ${baselineField.defaultValue} to ${currentField.defaultValue}`, `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`, 'medium'));
+            }
+            line += 1;
+        }
+        for (const [fieldName, currentField] of currentEntity.fields.entries()) {
+            if (baselineEntity.fields.has(fieldName)) {
+                continue;
+            }
+            if (!currentField.nullable && !currentField.hasDefault) {
+                artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-add-required-field`, `Field ${baselineEntity.name}.${fieldName} was added as required without default`, `${baselineEntity.name}.${fieldName}`));
+            }
+            else if (!currentField.nullable && currentField.hasDefault) {
+                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-add-required-field-with-default`, 'warning', `Field ${baselineEntity.name}.${fieldName} was added as required with default ${currentField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: required with default`, 'medium'));
             }
             line += 1;
         }

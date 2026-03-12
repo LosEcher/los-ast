@@ -34,11 +34,11 @@ interface ScanRequest {
     mode?: 'local' | 'service';  // Execution mode
   };
   project: string;         // Project identifier (non-empty)
-  rootDir: string;         // Absolute path to scan root (non-empty)
+  rootDir?: string;        // Required for AST/code scanning; optional for native-only contract/schema inputs
   include?: string[];      // Glob patterns for file inclusion
   ignore?: string[];       // Glob patterns for file exclusion
   rules?: string[];        // Rule file glob patterns (default: auto-resolve)
-  includeStats?: boolean;  // Include parse cache statistics
+  includeStats?: boolean;  // Include parse cache/failure statistics
   deterministic?: boolean; // Default: true (stable sorting, fixed timestamps)
   openApiDocuments?: Array<{
     source?: string;                 // 来源标签
@@ -98,16 +98,18 @@ interface ScanRequest {
 | `scope.actor_id` | string | No | Actor ID for audit logging |
 | `scope.mode` | enum | No | `'local'` for development, `'service'` for production |
 | `project` | string | Yes | Project name identifier (1-128 chars) |
-| `rootDir` | string | Yes | Absolute filesystem path to scan |
+| `rootDir` | string | Conditional | Required for AST/code scanning. Optional when the request only contains native contract/schema inputs |
 | `include` | string[] | No | Glob patterns (fast-glob syntax), default: `['**/*']` |
 | `ignore` | string[] | No | Glob patterns to exclude |
-| `includeStats` | boolean | No | Include `parseCache` in response (default: false) |
+| `includeStats` | boolean | No | Include parse statistics in response (`parseCache` / `parseFailures`, default: false) |
 | `deterministic` | boolean | No | Produce deterministic output (default: true). When true: sorted keys, fixed epoch timestamp, truncated fingerprints |
 | `openApiDocuments` | object[] | No | Optional native OpenAPI inputs. Each document is parsed into `findingSource='contract'` findings before merge |
 | `openApiComparisons` | object[] | No | Optional baseline/current OpenAPI comparisons. Each pair is parsed into `findingSource='contract'` compatibility findings before merge |
 | `schemaDocuments` | object[] | No | Optional native SQL/Prisma inputs. Each document is parsed into `findingSource='schema'` findings before merge |
 | `schemaComparisons` | object[] | No | Optional baseline/current schema comparisons. Each pair is parsed into `findingSource='schema'` breaking-risk findings before merge |
 | `contractArtifacts` | object[] | No | Optional contract/scheme findings input. Each entry is normalized into `findingSource='contract'` findings |
+
+When `rootDir` is omitted, the request must provide at least one native input set: `openApiDocuments`, `openApiComparisons`, `schemaDocuments`, `schemaComparisons`, `contractArtifacts`, or `schemaArtifacts`. Native-only requests skip repository scanning and return `filesScanned: 0`.
 
 ### Example Request
 
@@ -142,6 +144,17 @@ interface ScanResponse {
       entries: number;       // Current cache entries
       maxEntries: number;    // Maximum cache capacity
     };
+    parseFailures?: {        // Present if includeStats=true and some files failed to parse
+      count: number;         // Total parse failures
+      sampleLimit: number;   // Maximum number of samples returned
+      truncated: boolean;    // Whether additional samples were omitted
+      byLanguage: Record<string, number>; // Aggregated parse failures by language
+      samples: Array<{
+        file: string;        // Failed file path
+        language: string;    // Parser language label
+        error: string;       // Parser error message
+      }>;
+    };
   };
 }
 
@@ -165,8 +178,10 @@ interface Finding {
   proposedReplacement: string | null;   // Suggested fix
   fingerprint: string;                  // SHA-256 hash for deduplication
   findingSource?: 'ast' | 'contract' | 'schema'; // Result source tag
-  governanceDomain?: string[];          // 可选治理域标签: frontend/backend/database/interface/quality...
-  impactHint?: 'low' | 'medium' | 'high'; // 可选风险提示
+  governanceDomain?: string[] | null;   // 可选治理域标签；未命中治理元信息时可能为 null
+  impactHint?: 'low' | 'medium' | 'high' | null; // 可选风险提示；未命中治理元信息时可能为 null
+  diff?: string | null;                 // Applied fix diff when present
+  applied?: boolean;                    // Whether a fix was written
 }
 ```
 
@@ -203,6 +218,21 @@ interface Finding {
       "misses": 27,
       "entries": 27,
       "maxEntries": 100
+    },
+    "parseFailures": {
+      "count": 1,
+      "sampleLimit": 20,
+      "truncated": false,
+      "byLanguage": {
+        "JavaScript": 1
+      },
+      "samples": [
+        {
+          "file": "/workspace/myapp/src/broken.js",
+          "language": "JavaScript",
+          "error": "Unexpected token"
+        }
+      ]
     }
   }
 }
@@ -242,7 +272,8 @@ type ErrorCategory =
 | HTTP Status | Category | Code | Description |
 |-------------|----------|------|-------------|
 | 400 | VALIDATION | `INVALID_PROJECT` | Project field missing or invalid |
-| 400 | VALIDATION | `INVALID_ROOTDIR` | rootDir field missing or invalid |
+| 400 | VALIDATION | `INVALID_SCAN_INPUT` | Neither `rootDir` nor any native contract/schema input set was provided |
+| 400 | VALIDATION | `INVALID_ROOTDIR` | rootDir field missing or invalid when the request implies AST/code scanning |
 | 413 | SCAN_TOO_LARGE | `SCAN_TOO_LARGE` | Response size exceeds limit |
 | 503 | SERVICE_UNAVAILABLE | `CORE_NOT_READY` | Core is not ready, explicit fallback path |
 | 403 | SCOPE | `SCOPE_ERROR` | Scope/permission issue |
@@ -290,12 +321,17 @@ type ErrorCategory =
 | 维度 | 当前状态 | 说明 |
 |------|----------|------|
 | 前端/后端接口治理 | 代码层可扫描（如调用方式、错误处理、网络层封装） | 可通过规则包持续补齐 |
-| 接口契约治理 | `contract` 域已支持最小接入 | 支持 `contractArtifacts` 直通、`openApiDocuments` 原生输入和 `openApiComparisons` 最小兼容性对比；更完整的 OpenAPI/IDL/Schema 提取器仍在后续阶段 |
+| 接口契约治理 | `contract` 域已支持最小接入 | 支持 `contractArtifacts` 直通、`openApiDocuments` 原生输入和 `openApiComparisons` 最小兼容性对比；当前已支持本地 `$ref`、简单 `allOf`、`oneOf/anyOf` 公共字段归一（含 response 侧本地 ref 组合场景）、success response 按状态码对齐，以及 object 嵌套路径、`array.items` 路径和 `additionalProperties` map-like 路径的 request/response comparison；嵌套路径中的本地 `$ref`、简单 `allOf` 与 `oneOf` 数组项组合也已有回归覆盖，更完整的 OpenAPI/IDL/Schema 提取器仍在后续阶段 |
 | 字段治理 | `schema` 域已支持最小接入 | 支持 `schemaArtifacts` 直通和 `schemaDocuments` 原生输入；当前先覆盖主键与敏感字段可空类问题 |
-| 兼容性治理 | `contract/schema` 域已支持最小对比 | `contract` 支持 `openApiComparisons` 的请求必填字段新增、响应字段删除/类型变化；`schema` 支持 `schemaComparisons` 的字段删除、类型变化、可空性收紧 |
+| 兼容性治理 | `contract/schema` 域已支持最小对比 | `contract` 支持 `openApiComparisons` 的 operation 删除、请求字段删除/类型变化/必填新增、请求新增必填字段带 default 的降级提示、响应字段删除/类型变化、响应 required -> optional 变化、最小值语义 comparison（`nullable` 收紧、`enum` 值删除、`default` 删除/变更），以及最小 `discriminator` comparison（`propertyName` 变化、mapping 值删除）；`schema` 支持 `schemaComparisons` 的字段删除、类型变化、主键变化、字段/组合唯一键 drift、可空性收紧、新增必填字段无 default，以及新增必填字段带 default 的降级提示 |
 | 数据库字段治理 | `schema` 域未内置 | 需要 schema/DDL 侧解析与字段变更语义模型 |
 
 `findingSource='contract'|'schema'` 是后续演进预留字段，与现有 `findingSource='ast'` 兼容。
+
+更多 parser 能力边界与发布说明见：
+
+- `docs/api/ARTIFACT_PARSER_CAPABILITIES.md`
+- `docs/rules/FINDING_ATTRIBUTION.md`
 
 ## CLI/API Parity
 

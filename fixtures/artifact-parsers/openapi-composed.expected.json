@@ -1,0 +1,11 @@
+{
+  "profile": "openapi-native",
+  "findingSource": "contract",
+  "expectedRuleIds": [
+    "contract/openapi-breaking-request-field-type-change",
+    "contract/openapi-breaking-request-nullable-tighten",
+    "contract/openapi-request-required-add-with-default",
+    "contract/openapi-breaking-response-discriminator-value-drop",
+    "contract/openapi-breaking-response-enum-value-drop"
+  ]
+}

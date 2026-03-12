@@ -1,15 +1,14 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { getBuiltInRulePackNames, getBuiltInRulePackPattern } from '@los-ast/rules';
+import type { ScanParams } from '@los-ast/shared/types';
 import { scanService } from '../../services/scan-service.js';
 import { SCAN_LIMITS } from '../../config/index.js';
 import { ValidationError, ScanTooLargeError } from '../../types/errors.js';
 
-type BuiltInRulePack = 'lsclaw-governance';
-
-const RULE_PACK_PATTERNS: Record<BuiltInRulePack, string> = {
-  'lsclaw-governance': 'projects/lsclaw-governance/**/*.yml',
-};
+type BuiltInRulePack = string;
+const BUILT_IN_RULE_PACK_NAMES = getBuiltInRulePackNames();
 
 function hasRuleCatalog(baseDir: string): boolean {
   const languageDir = path.join(baseDir, 'languages');
@@ -50,7 +49,7 @@ function resolveRulePackPatterns(rulePack?: BuiltInRulePack): string[] | undefin
     return undefined;
   }
 
-  const relativePattern = RULE_PACK_PATTERNS[rulePack];
+  const relativePattern = getBuiltInRulePackPattern(rulePack);
   if (!relativePattern) {
     return undefined;
   }
@@ -59,21 +58,8 @@ function resolveRulePackPatterns(rulePack?: BuiltInRulePack): string[] | undefin
 }
 
 // 请求体验证 schema
-interface ScanRequestBody {
-  scope: {
-    tenant_id?: string;
-    project_id?: string;
-    actor_id?: string;
-    mode?: 'local' | 'service';
-  };
-  project: string;
-  rootDir: string;
-  include?: string[];
-  ignore?: string[];
-  rules?: string[];  // 规则文件 glob 模式数组
+interface ScanRequestBody extends Omit<ScanParams, 'rulePack'> {
   rulePack?: BuiltInRulePack;
-  includeStats?: boolean;
-  deterministic?: boolean;
   openApiDocuments?: Array<{
     source?: string;
     file?: string;
@@ -140,6 +126,26 @@ interface ScanRequestBody {
   }>;
 }
 
+function hasNativeArtifactInputs(body: ScanRequestBody): boolean {
+  return [
+    body.openApiDocuments,
+    body.openApiComparisons,
+    body.schemaDocuments,
+    body.schemaComparisons,
+    body.contractArtifacts,
+    body.schemaArtifacts,
+  ].some((items) => Array.isArray(items) && items.length > 0);
+}
+
+function requiresCodeScan(body: ScanRequestBody, resolvedRules?: string[]): boolean {
+  return typeof body.rootDir !== 'undefined'
+    || (Array.isArray(body.include) && body.include.length > 0)
+    || (Array.isArray(body.ignore) && body.ignore.length > 0)
+    || (Array.isArray(body.rules) && body.rules.length > 0)
+    || (Array.isArray(resolvedRules) && resolvedRules.length > 0)
+    || body.includeStats === true;
+}
+
 export default async function scanRoutes(fastify: FastifyInstance) {
   // POST /scan - 执行同步扫描
   fastify.post(
@@ -149,7 +155,7 @@ export default async function scanRoutes(fastify: FastifyInstance) {
         description: '执行代码扫描',
         body: {
           type: 'object',
-          required: ['project', 'rootDir'],
+          required: ['project'],
           properties: {
             scope: {
               type: 'object',
@@ -167,8 +173,8 @@ export default async function scanRoutes(fastify: FastifyInstance) {
             rules: { type: 'array', items: { type: 'string' } },
             rulePack: {
               type: 'string',
-              enum: ['lsclaw-governance'],
-              description: '内置治理规则包。当前支持 lsclaw-governance。',
+              enum: BUILT_IN_RULE_PACK_NAMES,
+              description: `内置治理规则包。当前支持 ${BUILT_IN_RULE_PACK_NAMES.join(', ')}。`,
             },
             includeStats: { type: 'boolean' },
             deterministic: { type: 'boolean' },
@@ -340,6 +346,29 @@ export default async function scanRoutes(fastify: FastifyInstance) {
                   filesScanned: { type: 'number' },
                   findings: { type: 'array' },
                   parseCache: { type: 'object' },
+                  parseFailures: {
+                    type: 'object',
+                    properties: {
+                      count: { type: 'number' },
+                      sampleLimit: { type: 'number' },
+                      truncated: { type: 'boolean' },
+                      byLanguage: {
+                        type: 'object',
+                        additionalProperties: { type: 'number' },
+                      },
+                      samples: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            file: { type: 'string' },
+                            language: { type: 'string' },
+                            error: { type: 'string' },
+                          },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -366,14 +395,27 @@ export default async function scanRoutes(fastify: FastifyInstance) {
       const resolvedRules = rules && rules.length > 0
         ? rules
         : resolveRulePackPatterns(rulePack);
+      const body = request.body as ScanRequestBody;
+      const shouldRunCodeScan = requiresCodeScan(body, resolvedRules);
+      const hasNativeInputs = hasNativeArtifactInputs(body);
 
       // 验证必填字段
       if (!project || typeof project !== 'string') {
         throw new ValidationError('INVALID_PROJECT', 'project must be a non-empty string');
       }
 
-      if (!rootDir || typeof rootDir !== 'string') {
-        throw new ValidationError('INVALID_ROOTDIR', 'rootDir must be a non-empty string');
+      if (!shouldRunCodeScan && !hasNativeInputs) {
+        throw new ValidationError(
+          'INVALID_SCAN_INPUT',
+          'either rootDir or native artifact inputs must be provided'
+        );
+      }
+
+      if (shouldRunCodeScan && (!rootDir || typeof rootDir !== 'string')) {
+        throw new ValidationError(
+          'INVALID_ROOTDIR',
+          'rootDir must be a non-empty string'
+        );
       }
 
       // 执行扫描

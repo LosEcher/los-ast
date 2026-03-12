@@ -12,7 +12,7 @@
 
 ### `openapi-native`
 
-- `version`: `0.1.0`
+- `version`: `0.2.0`
 - `stability`: `preview`
 - `findingSource`: `contract`
 - `acceptedFormats`: `yaml`, `json`
@@ -20,26 +20,38 @@
   - 缺少 `operationId`
   - 变更类接口缺少 `security`
   - 缺少成功响应声明
-  - baseline/current 对比下的请求必填字段新增
-  - baseline/current 对比下的响应字段删除
-  - baseline/current 对比下的响应字段类型变化
+  - baseline/current 对比下的 operation 删除、请求字段删除/类型变化/必填新增
+  - baseline/current 对比下的 success response 状态码删除、响应字段删除/类型变化、response required -> optional
+  - 嵌套 object / `array.items` / `additionalProperties` 路径 comparison
+  - `nullable` / `enum` / `default` 值语义 comparison
+  - 最小 `discriminator` comparison
 - 当前限制：
   - 仅做启发式定位
   - 不解析远程 `$ref`
   - 对比依赖调用方提供 baseline/current 对
-  - 仅比较 top-level `application/json` schema
+  - 仅比较 `application/json` schema
+  - `oneOf/anyOf` 仍只按公共可比较字段归一
 - fixture：
   - `fixtures/artifact-parsers/openapi-minimal.yaml`
   - `fixtures/artifact-parsers/openapi-minimal.expected.json`
   - `fixtures/artifact-parsers/openapi-compare-baseline.yaml`
   - `fixtures/artifact-parsers/openapi-compare-current.yaml`
   - `fixtures/artifact-parsers/openapi-compare.expected.json`
+  - `fixtures/artifact-parsers/openapi-value-semantics-baseline.yaml`
+  - `fixtures/artifact-parsers/openapi-value-semantics-current.yaml`
+  - `fixtures/artifact-parsers/openapi-value-semantics.expected.json`
+  - `fixtures/artifact-parsers/openapi-discriminator-baseline.yaml`
+  - `fixtures/artifact-parsers/openapi-discriminator-current.yaml`
+  - `fixtures/artifact-parsers/openapi-discriminator.expected.json`
+  - `fixtures/artifact-parsers/openapi-composed-baseline.yaml`
+  - `fixtures/artifact-parsers/openapi-composed-current.yaml`
+  - `fixtures/artifact-parsers/openapi-composed.expected.json`
 - enable flag：
   - `ENABLE_OPENAPI_NATIVE_PARSER=true|false`
 
 ### `schema-native`
 
-- `version`: `0.1.0`
+- `version`: `0.2.0`
 - `stability`: `preview`
 - `findingSource`: `schema`
 - `acceptedFormats`: `sql`, `prisma`
@@ -50,13 +62,16 @@
   - 审计时间字段缺少默认值
   - baseline/current 对比下的字段删除
   - baseline/current 对比下的类型变化
+  - baseline/current 对比下的主键变化
+  - baseline/current 对比下的字段级 unique 与组合唯一键 drift
   - baseline/current 对比下的可空到必填收紧
+  - baseline/current 对比下的新增必填字段带 default 分级
   - baseline/current 对比下的 enum 值删除
   - baseline/current 对比下的默认值新增/删除/变化分级
 - 当前限制：
   - 仅做启发式解析
   - enum 仅支持 inline SQL `enum(...)` 与 Prisma `enum` block
-  - 默认值比较不做跨方言函数等价判断
+  - 默认值比较只做最小函数等价判断（如 `CURRENT_TIMESTAMP` / `now()`、`uuid_generate_v4()` / `gen_random_uuid()`）
 - fixture：
   - `fixtures/artifact-parsers/schema-minimal.sql`
   - `fixtures/artifact-parsers/schema-minimal.prisma`

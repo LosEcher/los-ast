@@ -82,6 +82,9 @@ export interface Finding {
   project: string;
   ruleFile: string | null;
   ruleId: string;
+  findingSource?: 'ast' | 'contract' | 'schema';
+  governanceDomain?: string[] | null;
+  impactHint?: 'low' | 'medium' | 'high' | null;
   severity: 'error' | 'warning' | 'info';
   message: string;
   file: string;
@@ -90,6 +93,8 @@ export interface Finding {
   excerpt: string;
   hasFix: boolean;
   proposedReplacement: string | null;
+  diff?: string | null;
+  applied?: boolean;
   fingerprint: string;
 }
 
@@ -100,10 +105,25 @@ export interface ParseCacheStats {
   maxEntries: number;
 }
 
+export interface ParseFailureSample {
+  file: string;
+  language: string;
+  error: string;
+}
+
+export interface ParseFailureStats {
+  count: number;
+  sampleLimit: number;
+  truncated: boolean;
+  byLanguage: Record<string, number>;
+  samples: ParseFailureSample[];
+}
+
 export interface ScanResult {
   filesScanned: number;
   findings: Finding[];
   parseCache?: ParseCacheStats;
+  parseFailures?: ParseFailureStats;
 }
 
 export declare function discoverFiles(options: {
