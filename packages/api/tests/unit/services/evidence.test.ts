@@ -13,6 +13,11 @@ vi.mock('../../../src/config/index.js', async () => {
       signingKey: 'test-signing-key-for-evidence-signatures',
       enableSignatures: true,
     },
+    PERSISTENCE_CONFIG: {
+      experimentalStoreBackend: 'memory',
+      experimentalStoreDir: undefined,
+      experimentalSqlitePath: undefined,
+    },
   };
 });
 

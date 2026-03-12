@@ -6,7 +6,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createKeyValueStore } from '../../../src/persistence/key-value-store.js';
-import { closeAllSqliteDatabases } from '../../../src/persistence/sqlite-database.js';
+import {
+  closeAllSqliteDatabases,
+  resolveSqliteDatabasePath,
+} from '../../../src/persistence/sqlite-database.js';
 
 const tempDirs: string[] = [];
 
@@ -110,7 +113,7 @@ describe('key value store persistence', () => {
     });
     store.set('persisted', { value: 'saved' });
 
-    const database = new DatabaseSync(sqlitePath);
+    const database = new DatabaseSync(resolveSqliteDatabasePath({ sqlitePath }));
     const row = database
       .prepare('SELECT version FROM schema_versions WHERE schema_name = ?')
       .get('key_value_store') as { version: number | bigint } | undefined;

@@ -1170,7 +1170,7 @@ describe('API Contract Tests', () => {
 
     it('should isolate knowledge query by scope (no cross-tenant leak)', async () => {
       // 创建租户 A 的提案
-      await app.inject({
+      const createTenantAProposal = await app.inject({
         method: 'POST',
         url: '/experimental/memory-proposals/proposals',
         headers: { 'Content-Type': 'application/json' },
@@ -1206,6 +1206,23 @@ describe('API Contract Tests', () => {
           },
         },
       });
+      expect(createTenantAProposal.statusCode).toBe(201);
+      const tenantAProposalId = JSON.parse(createTenantAProposal.body).proposal.proposal_id;
+
+      const validateTenantAProposal = await app.inject({
+        method: 'POST',
+        url: `/experimental/memory-proposals/proposals/${tenantAProposalId}/validate`,
+        headers: { 'Content-Type': 'application/json' },
+        payload: {
+          scope: {
+            tenant_id: 'tenant-a',
+            project_id: 'project-a',
+            actor_id: 'user-a',
+          },
+          approve: true,
+        },
+      });
+      expect(validateTenantAProposal.statusCode).toBe(200);
 
       // 租户 A 查询知识 - 应该能看到自己的数据
       const tenantAQuery = await app.inject({
@@ -1241,7 +1258,7 @@ describe('API Contract Tests', () => {
 
     it('should isolate stats by scope (no cross-tenant leak)', async () => {
       // 创建租户 A 的提案
-      await app.inject({
+      const createTenantAStatsProposal = await app.inject({
         method: 'POST',
         url: '/experimental/memory-proposals/proposals',
         headers: { 'Content-Type': 'application/json' },
@@ -1277,6 +1294,23 @@ describe('API Contract Tests', () => {
           },
         },
       });
+      expect(createTenantAStatsProposal.statusCode).toBe(201);
+      const tenantAStatsProposalId = JSON.parse(createTenantAStatsProposal.body).proposal.proposal_id;
+
+      const validateTenantAStatsProposal = await app.inject({
+        method: 'POST',
+        url: `/experimental/memory-proposals/proposals/${tenantAStatsProposalId}/validate`,
+        headers: { 'Content-Type': 'application/json' },
+        payload: {
+          scope: {
+            tenant_id: 'tenant-stats-a',
+            project_id: 'project-stats-a',
+            actor_id: 'user-a',
+          },
+          approve: true,
+        },
+      });
+      expect(validateTenantAStatsProposal.statusCode).toBe(200);
 
       // 租户 A 查询统计 - 应该能看到自己的数据
       const tenantAStats = await app.inject({
