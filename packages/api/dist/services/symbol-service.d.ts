@@ -17,6 +17,7 @@ export declare class SymbolService {
      * 使用 @ast-grep/napi 进行结构化解析
      */
     private extractSymbolsFromFileAST;
+    private extractSymbolsFromFileText;
 }
 export declare const symbolService: SymbolService;
 //# sourceMappingURL=symbol-service.d.ts.map

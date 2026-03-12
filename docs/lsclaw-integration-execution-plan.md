@@ -16,7 +16,7 @@
 
 ### 测试角色
 
-- 新增 `lsclaw adapter smoke`，验证可执行、可扫描、可返回机读结果。
+- 新增 `lsclaw adapter smoke`，分别验证 artifact contract 与 runtime smoke。
 - 将 smoke 纳入 CI，形成基础兼容门禁。
 - 为 evidence 产物补字段稳定性断言，防止下游消费回归。
 
@@ -33,9 +33,11 @@
 
 - 新增 smoke 测试：
   - Core `/scan` 使用 `fixtures/golden/lsclaw-sample`
-  - VPS `/vps-agent-web/attribution/analyze` 返回基础分析结构
+  - Core `/discover/symbols` 返回基础符号结果
+  - `hub-lite:artifacts` 同时产出 `scan-findings.jsonl`、`symbols.json`、`structure-map.json`
 - 验收：
   - ✅ 本地 `npm run test:api:smoke` 通过
+  - ✅ 本地独立 `lsclaw` adapter contract smoke 可执行
   - ✅ CI 新增 smoke job 并通过
 
 ### T2：evidence 契约固化 ✅
@@ -60,6 +62,7 @@
 ## 本轮实施范围
 
 - 执行 T1 + T2 + T3 的最小闭环，不触及持久化迁移与 provider 真正调用链。
+- 其中 `structure-map.json` 继续只承诺“结构证据 + 最小 Fastify route 分层输出”，不升级为 route truth 真源。
 
 ## 集成基线 (Round 1 - los-ast)
 

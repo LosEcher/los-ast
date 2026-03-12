@@ -30,6 +30,16 @@
 - `POST /scan`
 - `POST /discover/symbols`
 
+稳定 artifact 消费面：
+
+- `scan-findings.jsonl`
+- `symbols.json`
+- `structure-map.json`
+
+artifact 契约说明：
+
+- `docs/adapters/lsclaw-artifact-contract.md`
+
 推荐分工：
 
 - 代码治理：直接走 `rules + include/ignore`
@@ -115,3 +125,21 @@
 
 - `7` 个测试文件
 - `70` 个测试全部通过
+
+## `hub-lite:artifacts` 契约
+
+`lsclaw` 如需消费 `hub-lite:artifacts`，当前应只依赖稳定消费面，不应把 `structure-map.json` 当作完整 route truth。
+
+推荐命令：
+
+```bash
+npm run hub-lite:artifacts -- --root <workspace> --project lsclaw --include 'src/**/*.ts' --deterministic
+```
+
+说明：
+
+- 成功执行后应同时得到 `scan-findings.jsonl`、`symbols.json`、`structure-map.json`
+- 默认输出目录为 `<workspace>/logs/hub-lite-artifacts`
+- `structure-map.json` 当前是“结构证据 + 最小 Fastify route 分层输出”，不是 route truth 真源
+- `test:lsclaw:adapter:artifacts`、`test:lsclaw:adapter:runtime`、`test:lsclaw:adapter` 当前作为稳定 smoke 入口保留
+- 详见 `docs/adapters/lsclaw-artifact-contract.md`

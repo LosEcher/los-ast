@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { discoverFiles, isReady, languageFromFilePath, defaultParseCache } from '@los-ast/core';
 import { CoreNotReadyError } from '../types/errors.js';
 // AST-grep 规则定义 - 符号发现模式
@@ -64,6 +65,79 @@ const SYMBOL_RULES = [
         pattern: '(type_item name: (type_identifier) @name)',
     },
 ];
+const TEXT_SYMBOL_PATTERNS = [
+    {
+        kind: 'function',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        regex: /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm,
+    },
+    {
+        kind: 'function',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        regex: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/gm,
+    },
+    {
+        kind: 'class',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        regex: /^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)\b/gm,
+    },
+    {
+        kind: 'interface',
+        languages: ['typescript', 'tsx'],
+        regex: /^\s*(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)\b/gm,
+    },
+    {
+        kind: 'type',
+        languages: ['typescript', 'tsx'],
+        regex: /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\b/gm,
+    },
+    {
+        kind: 'variable',
+        languages: ['typescript', 'javascript', 'tsx', 'jsx'],
+        regex: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/gm,
+    },
+    {
+        kind: 'function',
+        languages: ['rust'],
+        regex: /^\s*(?:pub\s+)?fn\s+([A-Za-z_][\w]*)\s*\(/gm,
+    },
+    {
+        kind: 'class',
+        languages: ['rust'],
+        regex: /^\s*(?:pub\s+)?struct\s+([A-Za-z_][\w]*)\b/gm,
+    },
+    {
+        kind: 'interface',
+        languages: ['rust'],
+        regex: /^\s*(?:pub\s+)?trait\s+([A-Za-z_][\w]*)\b/gm,
+    },
+    {
+        kind: 'type',
+        languages: ['rust'],
+        regex: /^\s*(?:pub\s+)?type\s+([A-Za-z_][\w]*)\b/gm,
+    },
+];
+function toRange(source, index, length) {
+    const startPrefix = source.slice(0, index);
+    const startLine = startPrefix.split('\n').length;
+    const startColumn = index - (startPrefix.lastIndexOf('\n') + 1);
+    const endIndex = index + length;
+    const endPrefix = source.slice(0, endIndex);
+    const endLine = endPrefix.split('\n').length;
+    const endColumn = endIndex - (endPrefix.lastIndexOf('\n') + 1);
+    return {
+        start: {
+            line: startLine,
+            column: startColumn,
+            index,
+        },
+        end: {
+            line: endLine,
+            column: endColumn,
+            index: endIndex,
+        },
+    };
+}
 export class SymbolService {
     /**
      * 发现代码库中的符号定义
@@ -141,17 +215,18 @@ export class SymbolService {
         if (!language) {
             return symbols; // 不支持的文件类型
         }
+        const normalizedLanguage = String(language).toLowerCase();
         try {
             // 使用 core 的 parse-cache 解析文件
             const { root } = await defaultParseCache.parseFile(file, language, { cacheAst: true });
             // 应用符号发现规则
             for (const rule of SYMBOL_RULES) {
                 // 跳过不匹配当前语言的规则（语言值归一化为小写比较）
-                if (!rule.languages.includes(String(language).toLowerCase())) {
+                if (!rule.languages.includes(normalizedLanguage)) {
                     continue;
                 }
                 // 查找所有匹配的节点
-                const nodes = root.findAll({ rule: rule.pattern });
+                const nodes = root.findAll({ rule: { pattern: rule.pattern } });
                 for (const node of nodes) {
                     // 提取符号名称
                     const nameNode = node.getMatch('name');
@@ -185,6 +260,39 @@ export class SymbolService {
         catch (error) {
             // 解析失败则跳过该文件
             console.warn(`Failed to parse file ${file}:`, error);
+        }
+        if (symbols.length > 0) {
+            return symbols;
+        }
+        return this.extractSymbolsFromFileText(file, normalizedLanguage);
+    }
+    async extractSymbolsFromFileText(file, language) {
+        const source = await readFile(file, 'utf-8');
+        const symbols = [];
+        const seen = new Set();
+        for (const pattern of TEXT_SYMBOL_PATTERNS) {
+            if (!pattern.languages.includes(language)) {
+                continue;
+            }
+            pattern.regex.lastIndex = 0;
+            let match = pattern.regex.exec(source);
+            while (match) {
+                const name = String(match[1] ?? '').trim();
+                if (name) {
+                    const nameIndex = match.index + match[0].indexOf(name);
+                    const dedupeKey = `${pattern.kind}:${name}:${nameIndex}`;
+                    if (!seen.has(dedupeKey)) {
+                        seen.add(dedupeKey);
+                        symbols.push({
+                            name,
+                            kind: pattern.kind,
+                            file,
+                            range: toRange(source, nameIndex, name.length),
+                        });
+                    }
+                }
+                match = pattern.regex.exec(source);
+            }
         }
         return symbols;
     }

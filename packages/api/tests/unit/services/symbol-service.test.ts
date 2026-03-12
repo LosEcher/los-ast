@@ -55,17 +55,18 @@ describe('SymbolService', () => {
       vi.mocked(core.discoverFiles).mockResolvedValue(['/test/file.ts']);
 
       // Mock AST 解析结果
-      const mockNode = {
-        getMatch: (name: string) => name === 'name' ? { text: () => 'testFunc' } : null,
-        range: () => ({
-          start: { line: 1, column: 0, index: 0 },
-          end: { line: 1, column: 20, index: 20 },
-        }),
-      };
-
+      const findAll = vi.fn().mockReturnValue([
+        {
+          getMatch: (name: string) => name === 'name' ? { text: () => 'testFunc' } : null,
+          range: () => ({
+            start: { line: 1, column: 0, index: 0 },
+            end: { line: 1, column: 20, index: 20 },
+          }),
+        },
+      ]);
       vi.mocked(core.defaultParseCache.parseFile).mockResolvedValue({
         root: {
-          findAll: vi.fn().mockReturnValue([mockNode]),
+          findAll,
         },
       } as any);
 
@@ -77,6 +78,11 @@ describe('SymbolService', () => {
 
       expect(result.symbols.length).toBeGreaterThanOrEqual(1);
       expect(result.symbols.some(s => s.name === 'testFunc')).toBe(true);
+      expect(findAll).toHaveBeenCalledWith({
+        rule: {
+          pattern: '(function_declaration name: (identifier) @name)',
+        },
+      });
     });
 
     it('should apply limit and set truncated flag', async () => {

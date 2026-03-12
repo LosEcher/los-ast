@@ -69,6 +69,28 @@ describe('lsclaw Adapter Smoke Tests', () => {
     await app.close();
   });
 
+  it('GET /healthz/live should report live', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/healthz/live',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.status).toBe('alive');
+  });
+
+  it('GET /healthz/ready should report ready', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/healthz/ready',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.status).toBe('ready');
+  });
+
   it('POST /scan should scan lsclaw fixture successfully', async () => {
     const jwt = createJwt({
       sub: 'smoke-runner',
@@ -97,6 +119,37 @@ describe('lsclaw Adapter Smoke Tests', () => {
     expect(body.data).toBeDefined();
     expect(Array.isArray(body.data.findings)).toBe(true);
     expect(body.data.filesScanned).toBeGreaterThan(0);
+  });
+
+  it('POST /discover/symbols should return lsclaw fixture symbols', async () => {
+    const jwt = createJwt({
+      sub: 'smoke-runner',
+      tenant_id: 'tenant-smoke',
+      project_id: 'lsclaw-smoke',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/discover/symbols',
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        'x-request-id': `smoke-discover-${Date.now()}`,
+      },
+      payload: {
+        rootDir: lsclawFixtureRoot,
+        include: ['src/**/*.{ts,js,mjs}'],
+        limit: 50,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.data).toBeDefined();
+    expect(Array.isArray(body.data.symbols)).toBe(true);
+    expect(body.data.symbols.length).toBeGreaterThan(0);
+    expect(body.data.total).toBeGreaterThan(0);
+    expect(typeof body.data.truncated).toBe('boolean');
   });
 
   it('POST /vps-agent-web/attribution/analyze should return analysis payload', async () => {

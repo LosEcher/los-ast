@@ -104,6 +104,8 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 
 补充说明：当前 `hub-lite` 导出的 `structure-map.json` 适合用于“结构盘点 / 热点排序 / 边界证据”，并已支持 Fastify 四层路由证据输出：`route_declares`、`route_mounts`、`route_binds`、`route_runtime`，以及基础差异归因 `route_runtime_deltas`；其中静态层已能从 `if (!ROUTE_CONFIG.enableX) return;`、`const enabled = ROUTE_CONFIG.enableX` 后的 alias guard、`if (enabled) { register(...) }` 这类正向 block gate、`else / else if` 分支 route mount、带外层括号的简单 `&& / ||` 组合门禁，以及同文件单一 `return` helper gate 中提取 `control_flow_guard`，并在需要时保留 `guardShape` 与 `additionalConditions`；运行时层则按 `packages/api/dist` 的默认 flag wiring 做受控探针，不再强制挂载默认关闭路由，并会标出 `exact_match`、`auto_head`、`trailing_slash_variant` 等差异。但它还不适合作为完整“route truth 真源”，多框架、更复杂控制流和真实运行态仍需要结合 OpenAPI、集成测试或外部运行时探针交叉验证。
 
+`lsclaw` 如需稳定消费 `hub-lite:artifacts`，请以 [docs/adapters/lsclaw-artifact-contract.md](/Users/echerlos/Downloads/projects/los-ast/docs/adapters/lsclaw-artifact-contract.md) 为准；独立 smoke 入口见 `npm run test:lsclaw:adapter:artifacts`、`npm run test:lsclaw:adapter:runtime`。
+
 当前阶段验收说明见 [docs/hub-lite-route-evidence-acceptance.md](/Users/echerlos/Downloads/projects/los-ast/docs/hub-lite-route-evidence-acceptance.md)，阶段标记见 [docs/status/hub-lite-route-evidence.phase.json](/Users/echerlos/Downloads/projects/los-ast/docs/status/hub-lite-route-evidence.phase.json)。
 
 ## 部署入口

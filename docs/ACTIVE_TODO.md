@@ -8,6 +8,7 @@
 
 - `los-ast` 当前是代码治理与结构化扫描内核。
 - 稳定能力以 `core + cli + /healthz + /scan + /discover/symbols` 为主。
+- 面向 `lsclaw` 的稳定配合面当前还包括三条独立 smoke 脚本：`test:lsclaw:adapter:artifacts`、`test:lsclaw:adapter:runtime`、`test:lsclaw:adapter`。
 - `incident / approval / memory / attribution / recovery / vps-agent-web` 仍属于预览能力，不作为长期稳定边界承诺。
 - `contractArtifacts / schemaArtifacts` 已能进入统一 finding 管道；OpenAPI 与 SQL/Prisma 原生输入已完成最小接入。
 - `structure-map.json` 当前适合做“结构盘点 / 热点排序 / 边界证据”。
@@ -15,6 +16,7 @@
 - `structure-map.json` 仍不适合作为完整“route truth 真源”：更复杂布尔表达式、helper 转发、多框架场景仍需依赖运行时注册、OpenAPI、集成测试或人工证据交叉验证。
 - 当前阶段验收说明：`docs/hub-lite-route-evidence-acceptance.md`
 - 当前阶段标记：`docs/status/hub-lite-route-evidence.phase.json`
+- 如调整 `hub-lite:artifacts` 的文件名或 `structure-map.json` 顶层字段，需同步更新 `docs/adapters/lsclaw-artifact-contract.md` 并通知 `lsclaw` bump pin。
 
 ## P0 本周优先级
 
