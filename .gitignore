@@ -6,3 +6,4 @@ control-plane/logs/
 logs/
 packages/api/logs/
 packages/logs/
+packages/api/.los-ast-state/

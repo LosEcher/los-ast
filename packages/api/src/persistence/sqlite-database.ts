@@ -24,13 +24,14 @@ export function resolveSqliteDatabasePath(options: SqliteDatabaseOptions = {}): 
   const dir = options.dir ?? PERSISTENCE_CONFIG.experimentalStoreDir ?? undefined;
 
   if (sqlitePath) {
-    fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
-    return sqlitePath;
+    const resolvedPath = applyVitestWorkerSuffix(sqlitePath);
+    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+    return resolvedPath;
   }
 
   const targetDir = dir || path.join(process.cwd(), '.los-ast-state', 'api');
   fs.mkdirSync(targetDir, { recursive: true });
-  return path.join(targetDir, SQLITE_DEFAULT_FILE);
+  return applyVitestWorkerSuffix(path.join(targetDir, SQLITE_DEFAULT_FILE));
 }
 
 export function createSqliteDatabase(options: SqliteDatabaseOptions = {}): DatabaseSync {
@@ -214,4 +215,14 @@ function validateMigrations(schemaName: string, migrations: SqliteMigration[]): 
 
     previousVersion = migration.version;
   }
+}
+
+function applyVitestWorkerSuffix(databasePath: string): string {
+  const workerId = process.env.VITEST_POOL_ID || process.env.VITEST_WORKER_ID;
+  if (!workerId) {
+    return databasePath;
+  }
+
+  const parsedPath = path.parse(databasePath);
+  return path.join(parsedPath.dir, `${parsedPath.name}.worker-${workerId}${parsedPath.ext}`);
 }
