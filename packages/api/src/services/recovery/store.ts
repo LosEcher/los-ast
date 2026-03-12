@@ -261,14 +261,15 @@ export async function executeL2Action(action: RecoveryAction): Promise<Execution
  * 模拟动作执行
  */
 async function simulateActionExecution(action: RecoveryAction): Promise<void> {
-  // 模拟执行延迟
-  const delay = Math.random() * 1000 + 500;
-  await new Promise((resolve) => setTimeout(resolve, delay));
+  const delayByType: Record<RecoveryAction['type'], number> = {
+    restart: 25,
+    rollback: 40,
+    circuit_breaker: 15,
+    feature_toggle: 20,
+    code_patch: 60,
+  };
 
-  // 模拟偶尔的失败 (5% 概率)
-  if (Math.random() < 0.05) {
-    throw new Error(`Simulated failure for ${action.type}`);
-  }
+  await new Promise((resolve) => setTimeout(resolve, delayByType[action.type] ?? 25));
 }
 
 /**
