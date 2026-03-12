@@ -13,12 +13,17 @@ import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import fs from 'node:fs/promises';
 import path from 'path';
+import YAML from 'yaml';
 import errorHandlerPlugin from '../../src/plugins/error-handler';
 import requestIdPlugin from '../../src/plugins/request-id';
 import scopeValidatorPlugin from '../../src/plugins/scope-validator';
 import cancellationPlugin from '../../src/plugins/cancellation';
 import healthCheckPlugin from '../../src/plugins/health-check';
 import { scanRoutes } from '../../src/routes/core';
+import {
+  SCAN_REQUEST_PROPERTY_KEYS,
+  scanResponseDataSchema,
+} from '../../src/routes/core/scan-contract.js';
 import { buildOutputSchema } from '@los-ast/ai';
 
 // __dirname is /Users/echerlos/Downloads/projects/los-ast/packages/api/tests/contract
@@ -287,6 +292,25 @@ describe('CLI/API Parity', () => {
         'utf8'
       );
       const generatedOutputSchema = buildOutputSchema();
+      const openApi = YAML.parse(openApiDoc) as {
+        components?: {
+          schemas?: {
+            ScanRequest?: {
+              required?: string[];
+              properties?: Record<string, unknown>;
+            };
+            ScanResponse?: {
+              properties?: {
+                data?: {
+                  properties?: Record<string, unknown>;
+                };
+              };
+            };
+          };
+        };
+      };
+      const openApiScanRequest = openApi.components?.schemas?.ScanRequest;
+      const openApiScanResponseData = openApi.components?.schemas?.ScanResponse?.properties?.data?.properties;
 
       expect(sharedTypes).toMatch(/rootDir\?: string;/);
       expect(sharedTypes).toMatch(/parseFailures\?: \{/);
@@ -301,14 +325,26 @@ describe('CLI/API Parity', () => {
       expect(apiContract).toMatch(/rootDir\?: string;/);
       expect(apiContract).toMatch(/parseFailures\?: \{/);
       expect(apiContract).toMatch(/scanTelemetry\?: \{/);
+      expect(apiContract).toMatch(/deterministic\?: boolean; \/\/ Default: false/);
       expect(apiContract).toMatch(/findingSource\?: 'ast' \| 'contract' \| 'schema';|findingSource\?: FindingSource;/);
       expect(apiContract).toMatch(/governanceDomain\?: string\[\] \| null;/);
       expect(apiContract).toMatch(/impactHint\?: 'low' \| 'medium' \| 'high' \| null;/);
       expect(apiContract).toMatch(/diff\?: string \| null;/);
       expect(apiContract).toMatch(/applied\?: boolean;/);
 
-      expect(openApiDoc).toMatch(/parseFailures:/);
-      expect(openApiDoc).toMatch(/scanTelemetry:/);
+      expect(openApiScanRequest).toBeDefined();
+      expect(openApiScanRequest?.required).toEqual(['project']);
+      expect(Object.keys(openApiScanRequest?.properties ?? {})).toEqual(
+        expect.arrayContaining([...SCAN_REQUEST_PROPERTY_KEYS])
+      );
+      expect(openApiScanRequest?.properties).toHaveProperty('deterministic');
+
+      const scanResponseDataKeys = Object.keys(scanResponseDataSchema.properties);
+      expect(openApiScanResponseData).toBeDefined();
+      expect(Object.keys(openApiScanResponseData ?? {})).toEqual(
+        expect.arrayContaining(scanResponseDataKeys)
+      );
+
       expect(openApiDoc).toMatch(/findingSource:/);
       expect(openApiDoc).toMatch(/diff:/);
       expect(openApiDoc).toMatch(/applied:/);

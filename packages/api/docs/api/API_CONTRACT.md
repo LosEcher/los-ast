@@ -45,7 +45,7 @@ interface ScanRequest {
   ignore?: string[];       // Glob patterns for file exclusion
   rules?: string[];        // Rule file glob patterns (default: auto-resolve)
   includeStats?: boolean;  // Include parse cache/failure statistics
-  deterministic?: boolean; // Default: true (stable sorting, fixed timestamps)
+  deterministic?: boolean; // Default: false (opt-in stable sorting and fixed timestamps)
   openApiDocuments?: Array<{
     source?: string;                 // 来源标签
     file?: string;                   // 逻辑文件名
@@ -108,7 +108,7 @@ interface ScanRequest {
 | `include` | string[] | No | Glob patterns (fast-glob syntax), default: `['**/*']` |
 | `ignore` | string[] | No | Glob patterns to exclude |
 | `includeStats` | boolean | No | Include parse statistics in response (`parseCache` / `parseFailures` / `scanTelemetry`, default: false). Native-only requests may set this without providing `rootDir` |
-| `deterministic` | boolean | No | Produce deterministic output (default: true). When true: sorted keys, fixed epoch timestamp, truncated fingerprints |
+| `deterministic` | boolean | No | Produce deterministic output (default: false). When true: sorted keys, fixed epoch timestamp, truncated fingerprints |
 | `openApiDocuments` | object[] | No | Optional native OpenAPI inputs. Each document is parsed into `findingSource='contract'` findings before merge |
 | `openApiComparisons` | object[] | No | Optional baseline/current OpenAPI comparisons. Each pair is parsed into `findingSource='contract'` compatibility findings before merge |
 | `schemaDocuments` | object[] | No | Optional native SQL/Prisma inputs. Each document is parsed into `findingSource='schema'` findings before merge |
@@ -387,7 +387,7 @@ CLI options map to API fields:
 | `--include <glob>` | `include` | Array of glob patterns |
 | `--ignore <glob>` | `ignore` | Array of glob patterns |
 | `--rules <glob>` | `rules` | Rule file patterns (optional) |
-| `--deterministic` | `deterministic` | Default: true for machine output |
+| `--deterministic` | `deterministic` | CLI flag opt-in; API 默认为 false |
 | N/A | `scope` | CLI runs in local mode |
 
 ## Version Stability Guarantee
@@ -403,7 +403,7 @@ Deprecation policy: Fields may be deprecated with 6-month notice before removal 
 
 ## Deterministic Output
 
-When `deterministic: true` (default), the API produces byte-for-byte reproducible output:
+When `deterministic: true`, the API produces byte-for-byte reproducible output:
 
 | Aspect | Behavior |
 |--------|----------|

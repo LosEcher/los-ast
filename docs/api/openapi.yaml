@@ -623,9 +623,7 @@ components:
     ScanRequest:
       type: object
       required:
-        - scope
         - project
-        - rootDir
       properties:
         scope:
           $ref: '#/components/schemas/Scope'
@@ -636,7 +634,7 @@ components:
         rootDir:
           type: string
           minLength: 1
-          description: 代码根目录路径
+          description: 代码根目录路径；native-only 请求可省略
         include:
           type: array
           items:
@@ -656,6 +654,10 @@ components:
           type: string
           enum: [lsclaw-governance]
           description: 内置规则包标识。当前支持 `lsclaw-governance`（在未传 `rules` 时生效）。
+        deterministic:
+          type: boolean
+          description: 是否输出稳定排序/固定时间戳等确定性结果
+          default: false
         openApiDocuments:
           type: array
           description: >

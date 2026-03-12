@@ -8,6 +8,18 @@ export interface ScanRequestBody extends Omit<ScanParams, 'rulePack'> {
   rulePack?: BuiltInRulePack;
 }
 
+export const SCAN_REQUEST_BASE_PROPERTY_KEYS = [
+  'scope',
+  'project',
+  'rootDir',
+  'include',
+  'ignore',
+  'rules',
+  'rulePack',
+  'includeStats',
+  'deterministic',
+] as const;
+
 export const SCAN_NATIVE_INPUT_KEYS = [
   'openApiDocuments',
   'openApiComparisons',
@@ -18,6 +30,11 @@ export const SCAN_NATIVE_INPUT_KEYS = [
 ] as const;
 
 export type ScanNativeInputKey = (typeof SCAN_NATIVE_INPUT_KEYS)[number];
+
+export const SCAN_REQUEST_PROPERTY_KEYS = [
+  ...SCAN_REQUEST_BASE_PROPERTY_KEYS,
+  ...SCAN_NATIVE_INPUT_KEYS,
+] as const;
 
 export const scanScopeSchema = {
   type: 'object',
