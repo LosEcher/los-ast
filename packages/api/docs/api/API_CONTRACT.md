@@ -22,6 +22,7 @@ POST /scan
 > [packages/shared/src/types/api.ts](/Users/echerlos/Downloads/projects/los-ast/packages/shared/src/types/api.ts) 为准。
 > 本文档保留对外契约说明，但不再作为新增字段的首个定义来源。
 > 机器可读参考产物见 [scan-contract-reference.json](/Users/echerlos/Downloads/projects/los-ast/packages/api/docs/api/generated/scan-contract-reference.json)。
+> OpenAPI 生成片段见 [scan-openapi-components.yaml](/Users/echerlos/Downloads/projects/los-ast/docs/api/generated/scan-openapi-components.yaml)。
 
 ### Headers
 

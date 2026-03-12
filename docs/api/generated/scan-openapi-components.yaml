@@ -1,0 +1,277 @@
+    # @generated scan-contract:ScanRequest:begin
+    ScanRequest:
+      type: object
+      required:
+        - project
+      properties:
+        scope:
+          $ref: "#/components/schemas/Scope"
+        project:
+          type: string
+          minLength: 1
+          description: 项目名称
+        rootDir:
+          type: string
+          minLength: 1
+          description: 代码根目录路径；native-only 请求可省略
+        include:
+          type: array
+          items:
+            type: string
+          description: 包含模式（glob）
+        ignore:
+          type: array
+          items:
+            type: string
+          description: 忽略模式（glob）
+        rules:
+          type: array
+          description: 规则文件 glob 列表；不传时不加载额外规则。
+          items:
+            type: string
+        rulePack:
+          type: string
+          enum:
+            - lsclaw-governance
+          description: 内置规则包标识。当前支持 `lsclaw-governance`（在未传 `rules` 时生效）。
+        deterministic:
+          type: boolean
+          description: 是否输出稳定排序/固定时间戳等确定性结果
+          default: false
+        openApiDocuments:
+          type: array
+          items:
+            type: object
+            required:
+              - content
+            properties:
+              source:
+                type: string
+              file:
+                type: string
+              content:
+                type: string
+                minLength: 1
+              format:
+                type: string
+                enum:
+                  - yaml
+                  - json
+          description: 可选 OpenAPI 原生输入。每条文档会被解析为 `findingSource=contract` 的 findings。
+        openApiComparisons:
+          type: array
+          items:
+            type: object
+            required:
+              - baseline
+              - current
+            properties:
+              source:
+                type: string
+              file:
+                type: string
+              baseline:
+                type: string
+                minLength: 1
+              current:
+                type: string
+                minLength: 1
+              format:
+                type: string
+                enum:
+                  - yaml
+                  - json
+          description: 可选 OpenAPI 对比输入。每个 baseline/current 对会被解析为 `findingSource=contract` 的 compatibility findings。
+        schemaDocuments:
+          type: array
+          items:
+            type: object
+            required:
+              - content
+            properties:
+              source:
+                type: string
+              file:
+                type: string
+              content:
+                type: string
+                minLength: 1
+              format:
+                type: string
+                enum:
+                  - sql
+                  - prisma
+          description: 可选 schema 原生输入。每条文档会被解析为 `findingSource=schema` 的 findings。
+        schemaComparisons:
+          type: array
+          items:
+            type: object
+            required:
+              - baseline
+              - current
+            properties:
+              source:
+                type: string
+              file:
+                type: string
+              baseline:
+                type: string
+                minLength: 1
+              current:
+                type: string
+                minLength: 1
+              format:
+                type: string
+                enum:
+                  - sql
+                  - prisma
+          description: 可选 schema 对比输入。每个 baseline/current 对会被解析为 `findingSource=schema` 的 breaking-risk findings。
+        contractArtifacts:
+          type: array
+          items: &a2
+            type: object
+            properties:
+              source:
+                type: string
+              ruleId:
+                type: string
+              severity:
+                type: string
+                enum:
+                  - info
+                  - warning
+                  - error
+              message:
+                type: string
+              file:
+                type: string
+              language:
+                type: string
+              line:
+                type: number
+              column:
+                type: number
+              startIndex:
+                type: number
+              endIndex:
+                type: number
+              excerpt:
+                type: string
+              governanceDomain:
+                anyOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+              impactHint:
+                type: string
+                enum:
+                  - low
+                  - medium
+                  - high
+              range:
+                type: object
+                properties:
+                  start: &a1
+                    type: object
+                    properties:
+                      line:
+                        type: number
+                      column:
+                        type: number
+                      index:
+                        type: number
+                  end: *a1
+            additionalProperties: true
+          description: 可选 contract 来源 findings 输入。每条记录会被转换为 `findingSource=contract` 的 finding。
+        schemaArtifacts:
+          type: array
+          items: *a2
+          description: 可选 schema 来源 findings 输入。每条记录会被转换为 `findingSource=schema` 的 finding。
+        includeStats:
+          type: boolean
+          description: 是否包含解析统计（parseCache / parseFailures）
+          default: false
+    # @generated scan-contract:ScanRequest:end
+
+    # @generated scan-contract:ScanResponse:begin
+    ScanResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            filesScanned:
+              type: number
+            findings:
+              type: array
+              items:
+                $ref: "#/components/schemas/Finding"
+            parseCache:
+              type: object
+              properties:
+                hits:
+                  type: number
+                misses:
+                  type: number
+                entries:
+                  type: number
+                maxEntries:
+                  type: number
+            parseFailures:
+              type: object
+              properties:
+                count:
+                  type: number
+                sampleLimit:
+                  type: number
+                truncated:
+                  type: boolean
+                byLanguage:
+                  type: object
+                  additionalProperties:
+                    type: number
+                samples:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      file:
+                        type: string
+                      language:
+                        type: string
+                      error:
+                        type: string
+            scanTelemetry:
+              type: object
+              properties:
+                durationMs:
+                  type: number
+                mode:
+                  type: string
+                  enum:
+                    - ast
+                    - native_only
+                    - hybrid
+                explicitRulePatterns:
+                  type: number
+                loadedRules:
+                  type: number
+                estimatedFiles:
+                  type: number
+                nativeInputs:
+                  type: object
+                  properties:
+                    openApiDocuments:
+                      type: number
+                    openApiComparisons:
+                      type: number
+                    schemaDocuments:
+                      type: number
+                    schemaComparisons:
+                      type: number
+                    contractArtifacts:
+                      type: number
+                    schemaArtifacts:
+                      type: number
+    # @generated scan-contract:ScanResponse:end

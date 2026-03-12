@@ -620,13 +620,14 @@ components:
         - project_id
         - actor_id
 
+    # @generated scan-contract:ScanRequest:begin
     ScanRequest:
       type: object
       required:
         - project
       properties:
         scope:
-          $ref: '#/components/schemas/Scope'
+          $ref: "#/components/schemas/Scope"
         project:
           type: string
           minLength: 1
@@ -652,7 +653,8 @@ components:
             type: string
         rulePack:
           type: string
-          enum: [lsclaw-governance]
+          enum:
+            - lsclaw-governance
           description: 内置规则包标识。当前支持 `lsclaw-governance`（在未传 `rules` 时生效）。
         deterministic:
           type: boolean
@@ -660,8 +662,6 @@ components:
           default: false
         openApiDocuments:
           type: array
-          description: >
-            可选 OpenAPI 原生输入。每条文档会被解析为 `findingSource=contract` 的 findings。
           items:
             type: object
             required:
@@ -669,21 +669,19 @@ components:
             properties:
               source:
                 type: string
-                description: OpenAPI 来源标识
               file:
                 type: string
-                description: 逻辑文件名
               content:
                 type: string
-                description: OpenAPI YAML/JSON 文本
+                minLength: 1
               format:
                 type: string
-                enum: [yaml, json]
-                description: 可选格式提示
+                enum:
+                  - yaml
+                  - json
+          description: 可选 OpenAPI 原生输入。每条文档会被解析为 `findingSource=contract` 的 findings。
         openApiComparisons:
           type: array
-          description: >
-            可选 OpenAPI 对比输入。每个 baseline/current 对会被解析为 `findingSource=contract` 的 compatibility findings。
           items:
             type: object
             required:
@@ -692,24 +690,22 @@ components:
             properties:
               source:
                 type: string
-                description: OpenAPI 比较来源标识
               file:
                 type: string
-                description: 逻辑文件名
               baseline:
                 type: string
-                description: 基线 OpenAPI YAML/JSON 文本
+                minLength: 1
               current:
                 type: string
-                description: 当前 OpenAPI YAML/JSON 文本
+                minLength: 1
               format:
                 type: string
-                enum: [yaml, json]
-                description: 可选格式提示
+                enum:
+                  - yaml
+                  - json
+          description: 可选 OpenAPI 对比输入。每个 baseline/current 对会被解析为 `findingSource=contract` 的 compatibility findings。
         schemaDocuments:
           type: array
-          description: >
-            可选 schema 原生输入。每条文档会被解析为 `findingSource=schema` 的 findings。
           items:
             type: object
             required:
@@ -717,21 +713,19 @@ components:
             properties:
               source:
                 type: string
-                description: schema 来源标识
               file:
                 type: string
-                description: 逻辑文件名
               content:
                 type: string
-                description: SQL/Prisma 文本
+                minLength: 1
               format:
                 type: string
-                enum: [sql, prisma]
-                description: 可选格式提示
+                enum:
+                  - sql
+                  - prisma
+          description: 可选 schema 原生输入。每条文档会被解析为 `findingSource=schema` 的 findings。
         schemaComparisons:
           type: array
-          description: >
-            可选 schema 对比输入。每个 baseline/current 对会被解析为 `findingSource=schema` 的 breaking-risk findings。
           items:
             type: object
             required:
@@ -740,187 +734,88 @@ components:
             properties:
               source:
                 type: string
-                description: schema 比较来源标识
               file:
                 type: string
-                description: 逻辑文件名
               baseline:
                 type: string
-                description: 基线 SQL/Prisma 文本
+                minLength: 1
               current:
                 type: string
-                description: 当前 SQL/Prisma 文本
+                minLength: 1
               format:
                 type: string
-                enum: [sql, prisma]
-                description: 可选格式提示
+                enum:
+                  - sql
+                  - prisma
+          description: 可选 schema 对比输入。每个 baseline/current 对会被解析为 `findingSource=schema` 的 breaking-risk findings。
         contractArtifacts:
           type: array
-          description: >
-            可选 contract 来源 findings 输入。每条记录会被转换为 `findingSource=contract` 的 finding。
-          items:
+          items: &a2
             type: object
-            required:
-              - message
             properties:
               source:
                 type: string
-                description: contract 来源标识（用于 ruleFile 回填）
               ruleId:
                 type: string
-                description: 规则标识
               severity:
                 type: string
-                enum: [info, warning, error]
-                default: warning
+                enum:
+                  - info
+                  - warning
+                  - error
               message:
                 type: string
               file:
                 type: string
-                description: 关联文件路径
               language:
                 type: string
-                description: 来源语言标签（默认 contract）
               line:
-                type: integer
-                minimum: 1
-                description: 未提供 range 时回退
+                type: number
               column:
-                type: integer
-                minimum: 0
-                description: 列号
+                type: number
               startIndex:
-                type: integer
-                minimum: 0
+                type: number
               endIndex:
-                type: integer
-                minimum: 0
+                type: number
               excerpt:
                 type: string
-                description: 摘要片段
               governanceDomain:
-                oneOf:
+                anyOf:
                   - type: string
                   - type: array
                     items:
                       type: string
-                description: 治理域标签
               impactHint:
                 type: string
-                enum: [low, medium, high]
+                enum:
+                  - low
+                  - medium
+                  - high
               range:
                 type: object
                 properties:
-                  start:
+                  start: &a1
                     type: object
                     properties:
                       line:
-                        type: integer
-                        minimum: 1
+                        type: number
                       column:
-                        type: integer
-                        minimum: 0
+                        type: number
                       index:
-                        type: integer
-                        minimum: 0
-                  end:
-                    type: object
-                    properties:
-                      line:
-                        type: integer
-                        minimum: 1
-                      column:
-                        type: integer
-                        minimum: 0
-                      index:
-                        type: integer
-                        minimum: 0
+                        type: number
+                  end: *a1
+            additionalProperties: true
+          description: 可选 contract 来源 findings 输入。每条记录会被转换为 `findingSource=contract` 的 finding。
         schemaArtifacts:
           type: array
-          description: >
-            可选 schema 来源 findings 输入。每条记录会被转换为 `findingSource=schema` 的 finding。
-          items:
-            type: object
-            required:
-              - message
-            properties:
-              source:
-                type: string
-                description: schema 来源标识（用于 ruleFile 回填）
-              ruleId:
-                type: string
-                description: 规则标识
-              severity:
-                type: string
-                enum: [info, warning, error]
-                default: warning
-              message:
-                type: string
-              file:
-                type: string
-                description: 关联文件路径
-              language:
-                type: string
-                description: 来源语言标签（默认 schema）
-              line:
-                type: integer
-                minimum: 1
-                description: 未提供 range 时回退
-              column:
-                type: integer
-                minimum: 0
-                description: 列号
-              startIndex:
-                type: integer
-                minimum: 0
-              endIndex:
-                type: integer
-                minimum: 0
-              excerpt:
-                type: string
-                description: 摘要片段
-              governanceDomain:
-                oneOf:
-                  - type: string
-                  - type: array
-                    items:
-                      type: string
-                description: 治理域标签
-              impactHint:
-                type: string
-                enum: [low, medium, high]
-              range:
-                type: object
-                properties:
-                  start:
-                    type: object
-                    properties:
-                      line:
-                        type: integer
-                        minimum: 1
-                      column:
-                        type: integer
-                        minimum: 0
-                      index:
-                        type: integer
-                        minimum: 0
-                  end:
-                    type: object
-                    properties:
-                      line:
-                        type: integer
-                        minimum: 1
-                      column:
-                        type: integer
-                        minimum: 0
-                      index:
-                        type: integer
-                        minimum: 0
+          items: *a2
+          description: 可选 schema 来源 findings 输入。每条记录会被转换为 `findingSource=schema` 的 finding。
         includeStats:
           type: boolean
           description: 是否包含解析统计（parseCache / parseFailures）
           default: false
-
+    # @generated scan-contract:ScanRequest:end
+    # @generated scan-contract:ScanResponse:begin
     ScanResponse:
       type: object
       properties:
@@ -928,38 +823,35 @@ components:
           type: object
           properties:
             filesScanned:
-              type: integer
-              description: 扫描的文件数
+              type: number
             findings:
               type: array
               items:
-                $ref: '#/components/schemas/Finding'
+                $ref: "#/components/schemas/Finding"
             parseCache:
               type: object
-              description: 解析缓存统计（仅 includeStats=true）
               properties:
                 hits:
-                  type: integer
+                  type: number
                 misses:
-                  type: integer
+                  type: number
                 entries:
-                  type: integer
+                  type: number
                 maxEntries:
-                  type: integer
+                  type: number
             parseFailures:
               type: object
-              description: 解析失败统计（仅 includeStats=true 且存在失败文件）
               properties:
                 count:
-                  type: integer
+                  type: number
                 sampleLimit:
-                  type: integer
+                  type: number
                 truncated:
                   type: boolean
                 byLanguage:
                   type: object
                   additionalProperties:
-                    type: integer
+                    type: number
                 samples:
                   type: array
                   items:
@@ -973,34 +865,37 @@ components:
                         type: string
             scanTelemetry:
               type: object
-              description: 统一扫描 telemetry（仅 includeStats=true）
               properties:
                 durationMs:
                   type: number
                 mode:
                   type: string
-                  enum: [ast, native_only, hybrid]
+                  enum:
+                    - ast
+                    - native_only
+                    - hybrid
                 explicitRulePatterns:
-                  type: integer
+                  type: number
                 loadedRules:
-                  type: integer
+                  type: number
                 estimatedFiles:
-                  type: integer
+                  type: number
                 nativeInputs:
                   type: object
                   properties:
                     openApiDocuments:
-                      type: integer
+                      type: number
                     openApiComparisons:
-                      type: integer
+                      type: number
                     schemaDocuments:
-                      type: integer
+                      type: number
                     schemaComparisons:
-                      type: integer
+                      type: number
                     contractArtifacts:
-                      type: integer
+                      type: number
                     schemaArtifacts:
-                      type: integer
+                      type: number
+    # @generated scan-contract:ScanResponse:end
 
     Finding:
       type: object

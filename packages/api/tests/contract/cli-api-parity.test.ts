@@ -281,6 +281,10 @@ describe('CLI/API Parity', () => {
         path.join(testRootDir, 'docs/api/openapi.yaml'),
         'utf8'
       );
+      const generatedOpenApiComponents = await fs.readFile(
+        path.join(testRootDir, 'docs/api/generated/scan-openapi-components.yaml'),
+        'utf8'
+      );
       const outputSchemaDoc = await fs.readFile(
         path.join(testRootDir, 'docs/ai/OUTPUT_SCHEMA.md'),
         'utf8'
@@ -378,6 +382,10 @@ describe('CLI/API Parity', () => {
       expect(Object.keys(openApiScanResponseData ?? {})).toEqual(
         expect.arrayContaining(scanResponseDataKeys)
       );
+      expect(generatedOpenApiComponents).toMatch(/@generated scan-contract:ScanRequest:begin/);
+      expect(generatedOpenApiComponents).toMatch(/@generated scan-contract:ScanResponse:end/);
+      expect(openApiDoc).toContain('# @generated scan-contract:ScanRequest:begin');
+      expect(openApiDoc).toContain('# @generated scan-contract:ScanResponse:end');
 
       expect(openApiDoc).toMatch(/findingSource:/);
       expect(openApiDoc).toMatch(/diff:/);

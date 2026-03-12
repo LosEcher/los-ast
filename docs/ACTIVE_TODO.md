@@ -29,7 +29,8 @@
 - [x] `/scan` 已完成第一阶段定义收口：代码内请求体类型与 Fastify schema 已汇总到统一 `scan-contract` 模块，文档改为引用代码真源。
 - [x] `/scan` 已完成第二阶段防漂移校验：OpenAPI 与 API_CONTRACT 的关键字段集合已有契约测试保护。
 - [x] `/scan` 已完成第三阶段机器参考产物：新增可生成/校验的 `scan-contract-reference.json`，给后续自动生成文档打底。
-- [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；本轮先完成代码内双份定义收口。
+- [x] `/scan` 已完成第四阶段 OpenAPI 片段半自动同步：新增 `scan-openapi-components.yaml` 生成片段与同步脚本，主 `openapi.yaml` 已由生成块嵌入。
+- [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；当前已进入“代码真源 + 参考产物 + OpenAPI 片段同步”的半自动阶段。
 - [ ] `export-artifacts.mjs` 与 `evidence/service.ts` 仍属于大文件热点，本轮不做结构拆分，只保留治理项。
 
 1. route_binds 能力边界收口
@@ -107,8 +108,13 @@
   - 新增 `packages/api/scripts/generate-scan-contract-reference.ts`。
   - 新增 `packages/api/docs/api/generated/scan-contract-reference.json`。
   - 已补 `generate:scan-contract-reference` / `check:scan-contract-reference` 脚本。
+- 已完成 `/scan` 第四阶段 OpenAPI 半自动同步：
+  - 新增 `packages/api/scripts/sync-scan-openapi-components.ts`。
+  - 新增 `docs/api/generated/scan-openapi-components.yaml`。
+  - `docs/api/openapi.yaml` 中 `ScanRequest / ScanResponse` 已切到 `@generated` block，同步来源为 `scan-contract`。
+  - 契约测试已校验主 OpenAPI 文档实际嵌入的生成片段与生成文件一致。
 - 下一步新增：
-  - 评估是否将 `docs/api/openapi.yaml` 中的 `ScanRequest/ScanResponse` 改成由参考产物或生成脚本直接产出，而不是继续人工维护。
+  - 评估是否将 `API_CONTRACT.md` 的请求/响应字段表也改成由参考产物直接产出，进一步减少最后一份人工说明的漂移面。
 - 下一步可继续补 parser-level release notes 与更细的 compatibility cases。
 
 4. route_binds 补源计划

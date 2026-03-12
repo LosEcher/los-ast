@@ -11,6 +11,8 @@
     "benchmark:scan": "tsx scripts/scan-benchmark.ts",
     "generate:scan-contract-reference": "tsx scripts/generate-scan-contract-reference.ts",
     "check:scan-contract-reference": "tsx scripts/generate-scan-contract-reference.ts --check",
+    "generate:scan-openapi-components": "tsx scripts/sync-scan-openapi-components.ts",
+    "check:scan-openapi-components": "tsx scripts/sync-scan-openapi-components.ts --check",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:smoke": "vitest run tests/smoke",
