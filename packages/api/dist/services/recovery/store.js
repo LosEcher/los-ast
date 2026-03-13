@@ -2,16 +2,18 @@
  * 自动恢复存储服务
  * Phase 1.4: L1/L2 自动恢复系统
  */
+import { PERSISTENCE_CONFIG } from '../../config/index.js';
+import { runInSqliteTransaction } from '../../persistence/sqlite-database.js';
 import { generateId } from '../../utils/id-generator.js';
-import { getAllIncidents } from '../incident/store.js';
-// 内存存储
-const actionStore = new Map();
-const policyStore = new Map();
-const cooldownStore = new Map();
+import { recoveryRepository } from '../../persistence/repositories/recovery-repository.js';
+import { addRecoveryActionToIncident } from '../incident/store.js';
+const actionStore = recoveryRepository.actions;
+const policyStore = recoveryRepository.policies;
+const cooldownStore = recoveryRepository.cooldowns;
 /**
  * 创建恢复动作
  */
-export async function createRecoveryAction(request) {
+export async function createRecoveryAction(request, scope) {
     const now = new Date().toISOString();
     const actionId = generateId('act');
     // 检查是否需要审批
@@ -21,6 +23,7 @@ export async function createRecoveryAction(request) {
         action_id: actionId,
         incident_id: request.incident_id,
         hypothesis_id: request.hypothesis_id,
+        scope,
         level: request.level,
         type: request.type,
         status: requiresApproval ? 'pending_approval' : 'approved',
@@ -33,7 +36,13 @@ export async function createRecoveryAction(request) {
         created_at: now,
         updated_at: now,
     };
-    actionStore.set(actionId, action);
+    await runRecoveryMutation(async () => {
+        actionStore.set(actionId, action);
+        const incident = await addRecoveryActionToIncident(request.incident_id, actionId);
+        if (!incident) {
+            throw new Error(`Incident ${request.incident_id} not found when attaching recovery action`);
+        }
+    });
     console.log(`[RecoveryStore] Created recovery action ${actionId}: ${action.type} (${action.level})`);
     return action;
 }
@@ -41,12 +50,7 @@ export async function createRecoveryAction(request) {
  * 获取恢复策略
  */
 async function getRecoveryPolicyForLevel(level) {
-    for (const policy of policyStore.values()) {
-        if (policy.level === level) {
-            return policy;
-        }
-    }
-    return undefined;
+    return policyStore.getByLevel(level);
 }
 /**
  * 判断是否需要审批
@@ -91,6 +95,16 @@ function estimateDowntime(type) {
 export async function getRecoveryAction(actionId) {
     return actionStore.get(actionId) || null;
 }
+export async function getRecoveryActionWithScope(actionId, tenant_id, project_id) {
+    const action = actionStore.get(actionId);
+    if (!action) {
+        return null;
+    }
+    if (action.scope.tenant_id !== tenant_id || action.scope.project_id !== project_id) {
+        return null;
+    }
+    return action;
+}
 /**
  * 更新恢复动作状态
  */
@@ -101,16 +115,17 @@ export async function updateRecoveryActionStatus(actionId, newStatus, result) {
     }
     action.status = newStatus;
     action.updated_at = new Date().toISOString();
-    if (result) {
-        action.execution.result = result;
-        action.execution.completed_at = new Date().toISOString();
-        // 记录冷却期
-        if (newStatus === 'succeeded' || newStatus === 'failed') {
-            const cooldownKey = `${action.incident_id}:${action.type}`;
-            cooldownStore.set(cooldownKey, Date.now());
+    await runRecoveryMutation(() => {
+        if (result) {
+            action.execution.result = result;
+            action.execution.completed_at = new Date().toISOString();
+            if (newStatus === 'succeeded' || newStatus === 'failed') {
+                const cooldownKey = `${action.incident_id}:${action.type}`;
+                cooldownStore.set(cooldownKey, Date.now());
+            }
         }
-    }
-    actionStore.set(actionId, action);
+        actionStore.set(actionId, action);
+    });
     console.log(`[RecoveryStore] Updated recovery action ${actionId} status to ${newStatus}`);
     return action;
 }
@@ -183,33 +198,20 @@ export async function executeL2Action(action) {
  * 模拟动作执行
  */
 async function simulateActionExecution(action) {
-    // 模拟执行延迟
-    const delay = Math.random() * 1000 + 500;
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    // 模拟偶尔的失败 (5% 概率)
-    if (Math.random() < 0.05) {
-        throw new Error(`Simulated failure for ${action.type}`);
-    }
+    const delayByType = {
+        restart: 25,
+        rollback: 40,
+        circuit_breaker: 15,
+        feature_toggle: 20,
+        code_patch: 60,
+    };
+    await new Promise((resolve) => setTimeout(resolve, delayByType[action.type] ?? 25));
 }
 /**
  * 查询恢复动作
  */
 export async function queryRecoveryActions(params) {
-    let items = Array.from(actionStore.values());
-    if (params.incident_id) {
-        items = items.filter((a) => a.incident_id === params.incident_id);
-    }
-    if (params.status) {
-        items = items.filter((a) => a.status === params.status);
-    }
-    if (params.level) {
-        items = items.filter((a) => a.level === params.level);
-    }
-    const total = items.length;
-    const offset = params.offset || 0;
-    const limit = params.limit || 20;
-    items = items.slice(offset, offset + limit);
-    return { items, total };
+    return actionStore.query(params);
 }
 /**
  * 创建恢复策略
@@ -237,38 +239,13 @@ export async function getRecoveryPolicy(policyId) {
  * 获取所有恢复策略
  */
 export async function listRecoveryPolicies() {
-    return Array.from(policyStore.values());
+    return policyStore.values();
 }
 /**
  * 获取统计信息
  */
 export function getRecoveryStats(scope) {
-    const scopedIncidentIds = new Set(getAllIncidents()
-        .filter((incident) => {
-        if (scope?.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
-            return false;
-        }
-        if (scope?.project_id && incident.scope.project_id !== scope.project_id) {
-            return false;
-        }
-        return true;
-    })
-        .map((incident) => incident.incident_id));
-    const actions = Array.from(actionStore.values()).filter((action) => scopedIncidentIds.has(action.incident_id));
-    const byLevel = {};
-    const byStatus = {};
-    const byType = {};
-    for (const action of actions) {
-        byLevel[action.level] = (byLevel[action.level] || 0) + 1;
-        byStatus[action.status] = (byStatus[action.status] || 0) + 1;
-        byType[action.type] = (byType[action.type] || 0) + 1;
-    }
-    return {
-        totalActions: actions.length,
-        byLevel,
-        byStatus,
-        byType,
-    };
+    return actionStore.getStats(scope);
 }
 /**
  * 清空存储 (用于测试)
@@ -278,4 +255,9 @@ export function clearRecoveryStore() {
     policyStore.clear();
     cooldownStore.clear();
 }
-//# sourceMappingURL=store.js.map
+async function runRecoveryMutation(callback) {
+    if (PERSISTENCE_CONFIG.experimentalStoreBackend !== 'sqlite') {
+        return callback();
+    }
+    return runInSqliteTransaction(async () => callback());
+}

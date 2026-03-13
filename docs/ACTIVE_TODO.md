@@ -42,6 +42,12 @@
   - `export-artifacts.mjs` 已继续抽出 `route-guard-analysis.mjs`，把 control-flow guard / route activation 的纯分析逻辑从 CLI shell 中分离。
   - 下一步优先考虑继续拆 `export-artifacts.mjs` 的 `source-structure-extractor` 或 `route-topology-and-runtime`。
 
+0. 审查收口（2026-03-13）
+- [x] 统一仓库根目录与 `packages/api` 的 `.env.example` 默认值与变量集，避免 `DEV_ALLOW_UNVERIFIED_IDENTITY` 等开发安全基线漂移。
+- [x] 刷新 `hub-lite route evidence` 阶段状态文档中的测试文件数、测试数与复核日期，避免“仓库已变更但阶段基线仍停留在旧值”。
+- [x] 将 `evidence` 代码统计从硬编码占位值改为基于项目适配器 workspace 的真实统计，并补回归测试覆盖。
+- [x] `README` / `docs` 已补“新读者阅读顺序 + 稳定契约入口”收口，先把首次阅读路径压缩到 `ACTIVE_TODO -> README 稳定面/预览面 -> architecture/API_CONTRACT`。
+
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
 - 下游使用说明中区分三类用途：

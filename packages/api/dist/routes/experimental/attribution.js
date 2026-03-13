@@ -5,9 +5,98 @@
  * 注意: 此路由作为执行结果来源解释，仅服务于单次执行元数据
  * 不形成独立平台状态机，不承担跨项目治理职责
  */
-import { createHypothesis, getHypothesis, updateHypothesisStatus, queryHypotheses, createEvidenceBundle, getEvidenceBundle, getAttributionStats, saveAttributionAnalysis, } from '../../services/attribution/store.js';
+import { createHypothesis, getHypothesisWithScope, updateHypothesisStatus, queryHypotheses, createEvidenceBundle, getEvidenceBundleWithScope, getAttributionStats, saveAttributionAnalysis, } from '../../services/attribution/store.js';
 import { analyzeAttribution } from '../../services/attribution/provider.js';
-import { NotFoundError } from '../../types/errors.js';
+import { NotFoundError, ValidationError } from '../../types/errors.js';
+import { getIncidentWithScope } from '../../services/incident/store.js';
+const scopeSchema = {
+    type: 'object',
+    properties: {
+        tenant_id: { type: 'string' },
+        project_id: { type: 'string' },
+        actor_id: { type: 'string' },
+        mode: { type: 'string', enum: ['local', 'service'] },
+    },
+};
+const hypothesisBodySchema = {
+    type: 'object',
+    required: ['incident_id', 'title', 'description', 'category', 'root_cause', 'evidence_bundle_id'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        incident_id: { type: 'string', minLength: 1 },
+        title: { type: 'string', minLength: 1 },
+        description: { type: 'string', minLength: 1 },
+        category: { type: 'string', enum: ['code_defect', 'config_error', 'infrastructure', 'dependency_failure'] },
+        root_cause: {
+            type: 'object',
+            required: ['component', 'description'],
+            additionalProperties: false,
+            properties: {
+                component: { type: 'string', minLength: 1 },
+                location: { type: 'string' },
+                commit_sha: { type: 'string' },
+                pattern_id: { type: 'string' },
+                description: { type: 'string', minLength: 1 },
+            },
+        },
+        evidence_bundle_id: { type: 'string', minLength: 1 },
+        proposed_by: { type: 'string', minLength: 1 },
+    },
+};
+const hypothesisStatusBodySchema = {
+    type: 'object',
+    required: ['status'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        status: { type: 'string', enum: ['proposed', 'validating', 'confirmed', 'rejected', 'superseded'] },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        actor_id: { type: 'string', minLength: 1 },
+        reason: { type: 'string', minLength: 1 },
+    },
+};
+const evidenceBodySchema = {
+    type: 'object',
+    required: ['incident_id', 'evidence_types', 'time_range'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        incident_id: { type: 'string', minLength: 1 },
+        evidence_types: {
+            type: 'array',
+            minItems: 1,
+            items: { type: 'string', enum: ['log', 'metric', 'trace', 'code', 'config'] },
+        },
+        time_range: {
+            type: 'object',
+            required: ['from', 'to'],
+            additionalProperties: false,
+            properties: {
+                from: { type: 'string', minLength: 1 },
+                to: { type: 'string', minLength: 1 },
+            },
+        },
+    },
+};
+const analyzeBodySchema = {
+    type: 'object',
+    required: ['incident_id', 'evidence_bundle_id'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        incident_id: { type: 'string', minLength: 1 },
+        evidence_bundle_id: { type: 'string', minLength: 1 },
+    },
+};
+const idParamsSchema = {
+    type: 'object',
+    required: ['id'],
+    additionalProperties: false,
+    properties: {
+        id: { type: 'string', minLength: 1 },
+    },
+};
 // 查询参数验证函数
 function parseHypothesisStatus(value) {
     if (!value)
@@ -26,48 +115,105 @@ function parseQueryInt(value, defaultValue) {
  */
 export default async function attributionRoutes(fastify) {
     // POST /experimental/attribution/hypotheses - 创建假设
-    fastify.post('/hypotheses', async (request, reply) => {
+    fastify.post('/hypotheses', {
+        schema: {
+            body: hypothesisBodySchema,
+        },
+    }, async (request, reply) => {
         const body = request.body;
-        const hypothesis = await createHypothesis(body);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('INCOMPLETE_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const incident = await getIncidentWithScope(body.incident_id, scope.tenant_id, scope.project_id);
+        if (!incident) {
+            throw new NotFoundError('Incident', body.incident_id);
+        }
+        const evidenceBundle = await getEvidenceBundleWithScope(body.evidence_bundle_id, scope);
+        if (!evidenceBundle) {
+            throw new NotFoundError('Evidence bundle', body.evidence_bundle_id);
+        }
+        const hypothesis = await createHypothesis({
+            ...body,
+            incident_id: incident.incident_id,
+            proposed_by: scope.actor_id || body.proposed_by,
+        });
         reply.status(201);
         return { hypothesis };
     });
     // GET /experimental/attribution/hypotheses/:id - 获取假设
-    fastify.get('/hypotheses/:id', async (request) => {
+    fastify.get('/hypotheses/:id', {
+        schema: {
+            params: idParamsSchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
-        const hypothesis = await getHypothesis(id);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const hypothesis = await getHypothesisWithScope(id, scope);
         if (!hypothesis) {
             throw new NotFoundError('Hypothesis', id);
         }
         return { hypothesis };
     });
     // PATCH /experimental/attribution/hypotheses/:id/status - 更新假设状态
-    fastify.patch('/hypotheses/:id/status', async (request) => {
+    fastify.patch('/hypotheses/:id/status', {
+        schema: {
+            params: idParamsSchema,
+            body: hypothesisStatusBodySchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
         const body = request.body;
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
         // 先检查是否存在
-        const existing = await getHypothesis(id);
+        const existing = await getHypothesisWithScope(id, scope);
         if (!existing) {
             throw new NotFoundError('Hypothesis', id);
         }
-        const hypothesis = await updateHypothesisStatus(id, body.status, body.confidence, body.actor_id, body.reason);
+        const hypothesis = await updateHypothesisStatus(id, body.status, body.confidence, scope.actor_id || body.actor_id, body.reason);
         return { hypothesis };
     });
     // GET /experimental/attribution/hypotheses - 查询假设
     fastify.get('/hypotheses', async (request) => {
         const query = request.query;
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
         const result = await queryHypotheses({
             incident_id: query.incident_id,
             status: parseHypothesisStatus(query.status),
             category: query.category,
             limit: parseQueryInt(query.limit),
             offset: parseQueryInt(query.offset),
+            scope: {
+                tenant_id: scope.tenant_id,
+                project_id: scope.project_id,
+            },
         });
         return result;
     });
     // POST /experimental/attribution/evidence - 创建证据包
-    fastify.post('/evidence', async (request, reply) => {
+    fastify.post('/evidence', {
+        schema: {
+            body: evidenceBodySchema,
+        },
+    }, async (request, reply) => {
         const body = request.body;
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('INCOMPLETE_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const incident = await getIncidentWithScope(body.incident_id, scope.tenant_id, scope.project_id);
+        if (!incident) {
+            throw new NotFoundError('Incident', body.incident_id);
+        }
         // 创建证据项
         const evidenceItems = body.evidence_types.map((type) => ({
             item_id: `evd_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -77,29 +223,56 @@ export default async function attributionRoutes(fastify) {
             timestamp: new Date().toISOString(),
             metadata: {
                 time_range: body.time_range,
-                scope: body.scope,
+                scope: {
+                    tenant_id: scope.tenant_id,
+                    project_id: scope.project_id,
+                },
             },
         }));
-        const bundle = await createEvidenceBundle(body.incident_id, evidenceItems);
+        const bundle = await createEvidenceBundle(incident.incident_id, evidenceItems);
         reply.status(201);
         return { bundle };
     });
     // GET /experimental/attribution/evidence/:id - 获取证据包
-    fastify.get('/evidence/:id', async (request) => {
+    fastify.get('/evidence/:id', {
+        schema: {
+            params: idParamsSchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
-        const bundle = await getEvidenceBundle(id);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const bundle = await getEvidenceBundleWithScope(id, scope);
         if (!bundle) {
             throw new NotFoundError('Evidence bundle', id);
         }
         return { bundle };
     });
     // POST /experimental/attribution/analyze - 执行归因分析
-    fastify.post('/analyze', async (request) => {
+    fastify.post('/analyze', {
+        schema: {
+            body: analyzeBodySchema,
+        },
+    }, async (request) => {
         const body = request.body;
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const incident = await getIncidentWithScope(body.incident_id, scope.tenant_id, scope.project_id);
+        if (!incident) {
+            throw new NotFoundError('Incident', body.incident_id);
+        }
+        const bundle = await getEvidenceBundleWithScope(body.evidence_bundle_id, scope);
+        if (!bundle) {
+            throw new NotFoundError('Evidence bundle', body.evidence_bundle_id);
+        }
         const analysis = await analyzeAttribution({
-            incidentId: body.incident_id,
-            evidenceBundleId: body.evidence_bundle_id,
-            scope: request.scope,
+            incidentId: incident.incident_id,
+            evidenceBundleId: bundle.bundle_id,
+            scope,
         });
         await saveAttributionAnalysis(analysis);
         return { analysis };
@@ -113,4 +286,3 @@ export default async function attributionRoutes(fastify) {
         return { stats };
     });
 }
-//# sourceMappingURL=attribution.js.map

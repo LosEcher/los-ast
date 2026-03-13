@@ -84,4 +84,3 @@ function extractScope(request) {
     }
     return null;
 }
-//# sourceMappingURL=scope-validator.js.map

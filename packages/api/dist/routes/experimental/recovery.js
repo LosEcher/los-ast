@@ -4,101 +4,153 @@
  *
  * 注意: 恢复决策需要全局上下文，此路由将在 Milestone B 迁出至 VPS Agent Web
  */
-import { createRecoveryAction, getRecoveryAction, updateRecoveryActionStatus, startRecoveryAction, executeL1Action, executeL2Action, queryRecoveryActions, createRecoveryPolicy, getRecoveryPolicy, listRecoveryPolicies, getRecoveryStats, } from '../../services/recovery/store.js';
+import { getRecoveryActionWithScope, queryRecoveryActions, createRecoveryPolicy, getRecoveryPolicy, listRecoveryPolicies, getRecoveryStats, } from '../../services/recovery/store.js';
+import { approveRecoveryActionWorkflow, createRecoveryActionWorkflow, rollbackRecoveryActionWorkflow, } from '../../services/recovery/workflow.js';
 import { NotFoundError, ValidationError } from '../../types/errors.js';
+import { getIncidentWithScope } from '../../services/incident/store.js';
+const scopeSchema = {
+    type: 'object',
+    properties: {
+        tenant_id: { type: 'string' },
+        project_id: { type: 'string' },
+        actor_id: { type: 'string' },
+        mode: { type: 'string', enum: ['local', 'service'] },
+    },
+};
+const recoveryActionBodySchema = {
+    type: 'object',
+    required: ['incident_id', 'hypothesis_id', 'level', 'type', 'parameters'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        incident_id: { type: 'string', minLength: 1 },
+        hypothesis_id: { type: 'string', minLength: 1 },
+        level: { type: 'string', enum: ['L1_harmless', 'L2_controlled', 'L3_code_level'] },
+        type: { type: 'string', enum: ['restart', 'rollback', 'circuit_breaker', 'feature_toggle', 'code_patch'] },
+        parameters: { type: 'object' },
+        actor_id: { type: 'string', minLength: 1 },
+    },
+};
+const rollbackBodySchema = {
+    type: 'object',
+    required: ['reason'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        actor_id: { type: 'string', minLength: 1 },
+        reason: { type: 'string', minLength: 1 },
+    },
+};
+const actionIdParamsSchema = {
+    type: 'object',
+    required: ['id'],
+    additionalProperties: false,
+    properties: {
+        id: { type: 'string', minLength: 1 },
+    },
+};
 /**
  * 注册 Recovery 路由 (实验性)
  */
 export default async function recoveryRoutes(fastify) {
     // POST /experimental/recovery/actions - 创建并执行恢复动作
-    fastify.post('/actions', async (request, reply) => {
+    fastify.post('/actions', {
+        schema: {
+            body: recoveryActionBodySchema,
+        },
+    }, async (request, reply) => {
         const body = request.body;
-        // 创建动作
-        const action = await createRecoveryAction(body);
-        // 如果不需要审批，立即执行
-        if (!action.safety.requires_approval) {
-            await startRecoveryAction(action.action_id);
-            if (action.level === 'L1_harmless') {
-                const result = await executeL1Action(action);
-                await updateRecoveryActionStatus(action.action_id, result.success ? 'succeeded' : 'failed', result);
-            }
-            else if (action.level === 'L2_controlled') {
-                const result = await executeL2Action(action);
-                await updateRecoveryActionStatus(action.action_id, result.success ? 'succeeded' : 'failed', result);
-            }
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('INCOMPLETE_SCOPE', 'Request scope must include tenant_id and project_id');
         }
-        // 获取最新状态
-        const finalAction = await getRecoveryAction(action.action_id);
+        const incident = await getIncidentWithScope(body.incident_id, scope.tenant_id, scope.project_id);
+        if (!incident) {
+            throw new NotFoundError('Incident', body.incident_id);
+        }
+        const result = await createRecoveryActionWorkflow({
+            request: body,
+            actorId: scope.actor_id || body.actor_id,
+            scope: {
+                tenant_id: incident.scope.tenant_id,
+                project_id: incident.scope.project_id,
+            },
+        });
         reply.status(201);
-        return {
-            action: finalAction,
-            message: action.safety.requires_approval
-                ? 'Recovery action pending approval'
-                : 'Recovery action executed',
-        };
+        return result;
     });
     // GET /experimental/recovery/actions - 查询恢复动作
     fastify.get('/actions', async (request) => {
         const query = request.query;
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
         const result = await queryRecoveryActions({
             incident_id: query.incident_id,
             status: query.status,
             level: query.level,
             limit: query.limit ? parseInt(query.limit, 10) : undefined,
             offset: query.offset ? parseInt(query.offset, 10) : undefined,
+            scope: {
+                tenant_id: scope.tenant_id,
+                project_id: scope.project_id,
+            },
         });
         return result;
     });
     // GET /experimental/recovery/actions/:id - 获取恢复动作
     fastify.get('/actions/:id', async (request) => {
         const { id } = request.params;
-        const action = await getRecoveryAction(id);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const action = await getRecoveryActionWithScope(id, scope.tenant_id, scope.project_id);
         if (!action) {
             throw new NotFoundError('Recovery action', id);
         }
         return { action };
     });
     // POST /experimental/recovery/actions/:id/approve - 审批恢复动作
-    fastify.post('/actions/:id/approve', async (request) => {
+    fastify.post('/actions/:id/approve', {
+        schema: {
+            params: actionIdParamsSchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
-        const action = await getRecoveryAction(id);
-        if (!action) {
-            throw new NotFoundError('Recovery action', id);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
         }
-        if (action.status !== 'pending_approval') {
-            throw new ValidationError('INVALID_STATUS', 'Action is not pending approval');
-        }
-        // 更新状态为已审批
-        await updateRecoveryActionStatus(id, 'approved');
-        // 开始执行
-        await startRecoveryAction(id);
-        // 执行动作
-        if (action.level === 'L1_harmless') {
-            const result = await executeL1Action(action);
-            await updateRecoveryActionStatus(id, result.success ? 'succeeded' : 'failed', result);
-        }
-        else if (action.level === 'L2_controlled') {
-            const result = await executeL2Action(action);
-            await updateRecoveryActionStatus(id, result.success ? 'succeeded' : 'failed', result);
-        }
-        const finalAction = await getRecoveryAction(id);
+        const finalAction = await approveRecoveryActionWorkflow(id, {
+            tenant_id: scope.tenant_id,
+            project_id: scope.project_id,
+        });
         return { action: finalAction };
     });
     // POST /experimental/recovery/actions/:id/rollback - 回滚恢复动作
-    fastify.post('/actions/:id/rollback', async (request) => {
+    fastify.post('/actions/:id/rollback', {
+        schema: {
+            params: actionIdParamsSchema,
+            body: rollbackBodySchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
         const { actor_id, reason } = request.body;
-        const action = await getRecoveryAction(id);
-        if (!action) {
-            throw new NotFoundError('Recovery action', id);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
         }
-        // 更新状态为已回滚
-        await updateRecoveryActionStatus(id, 'rolled_back', {
-            success: true,
-            output: `Rolled back by ${actor_id}: ${reason}`,
-            duration_ms: 0,
+        const finalAction = await rollbackRecoveryActionWorkflow({
+            actionId: id,
+            scope: {
+                tenant_id: scope.tenant_id,
+                project_id: scope.project_id,
+            },
+            actorId: scope.actor_id || actor_id,
+            reason,
         });
-        const finalAction = await getRecoveryAction(id);
         return { action: finalAction };
     });
     // POST /experimental/recovery/policies - 创建恢复策略
@@ -137,4 +189,3 @@ export default async function recoveryRoutes(fastify) {
         return { stats };
     });
 }
-//# sourceMappingURL=recovery.js.map

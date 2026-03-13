@@ -25,4 +25,3 @@ export default fp(async function healthCheckPlugin(fastify) {
     name: 'health-check',
     fastify: '5.x',
 });
-//# sourceMappingURL=health-check.js.map

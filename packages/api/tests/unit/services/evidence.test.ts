@@ -1,11 +1,24 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import fs from 'node:fs/promises';
 import {
   generateEvidence,
+  getCodeStats,
   getEvidenceBundle,
   clearEvidenceStore,
 } from '../../../src/services/evidence/service';
 import * as core from '@los-ast/core';
+import * as adapters from '@los-ast/adapters';
 import type { GenerateEvidenceRequest, VerifiedScope } from '@los-ast/shared/types';
+
+vi.mock('node:fs/promises', () => ({
+  default: {
+    readFile: vi.fn(),
+  },
+}));
+
+vi.mock('@los-ast/adapters', () => ({
+  getProjectAdapter: vi.fn(),
+}));
 
 vi.mock('../../../src/config/index.js', async () => {
   return {
@@ -46,7 +59,11 @@ vi.mock('@los-ast/core', () => ({
       },
     ],
   }),
+  discoverFiles: vi.fn().mockResolvedValue([]),
   isReady: vi.fn().mockReturnValue(true),
+  languageFromFilePath: vi.fn((file: string) => (
+    file.endsWith('.ts') ? 'typescript' : null
+  )),
   loadRuleFiles: vi.fn().mockResolvedValue([]),
 }));
 
@@ -62,6 +79,7 @@ describe('Evidence Service', () => {
 
   beforeEach(() => {
     clearEvidenceStore();
+    vi.clearAllMocks();
   });
 
   describe('generateEvidence', () => {
@@ -189,6 +207,82 @@ describe('Evidence Service', () => {
       const bundle = await generateEvidence(request, verifiedScope);
 
       expect(bundle.actor.actor_id).toBe('verified-actor');
+    });
+  });
+
+  describe('getCodeStats', () => {
+    it('should derive stats from the resolved project workspace', async () => {
+      vi.mocked(adapters.getProjectAdapter).mockReturnValue({
+        project: 'lsclaw',
+        rootDir: '/workspace/lsclaw',
+        include: ['src/**/*.ts', 'README.md'],
+        ignore: ['**/node_modules/**'],
+        ruleGlobs: ['rules/projects/lsclaw/**/*.yml'],
+      });
+
+      vi.mocked(core.discoverFiles).mockResolvedValue([
+        '/workspace/lsclaw/src/index.ts',
+        '/workspace/lsclaw/README.md',
+      ]);
+
+      vi.mocked(fs.readFile)
+        .mockResolvedValueOnce('const answer = 42;\nconsole.log(answer)')
+        .mockResolvedValueOnce('# los-ast');
+
+      vi.mocked(core.languageFromFilePath).mockImplementation((file: string) => (
+        file.endsWith('.ts') ? 'typescript' : null
+      ));
+
+      vi.mocked(core.loadRuleFiles).mockResolvedValue([
+        { id: 'demo', language: 'typescript' },
+      ] as Awaited<ReturnType<typeof core.loadRuleFiles>>);
+
+      vi.mocked(core.scan).mockResolvedValue({
+        findings: [
+          { severity: 'warning' },
+          { severity: 'warning' },
+          { severity: 'error' },
+        ],
+      } as Awaited<ReturnType<typeof core.scan>>);
+
+      const stats = await getCodeStats('lsclaw');
+
+      expect(stats).toEqual({
+        total_files: 2,
+        total_lines: 3,
+        by_language: {
+          typescript: 1,
+          md: 1,
+        },
+        by_severity: {
+          warning: 2,
+          error: 1,
+        },
+      });
+
+      expect(core.discoverFiles).toHaveBeenCalledWith({
+        rootDir: '/workspace/lsclaw',
+        include: ['src/**/*.ts', 'README.md'],
+        ignore: ['**/node_modules/**'],
+      });
+      expect(core.loadRuleFiles).toHaveBeenCalledWith(['rules/projects/lsclaw/**/*.yml']);
+      expect(core.scan).toHaveBeenCalledWith(expect.objectContaining({
+        project: 'lsclaw',
+        rootDir: '/workspace/lsclaw',
+        deterministic: true,
+      }));
+    });
+
+    it('should return empty stats when no resolvable project workspace exists', async () => {
+      const stats = await getCodeStats('custom');
+
+      expect(stats).toEqual({
+        total_files: 0,
+        total_lines: 0,
+        by_language: {},
+        by_severity: {},
+      });
+      expect(adapters.getProjectAdapter).not.toHaveBeenCalled();
     });
   });
 });

@@ -5,4 +5,3 @@ export default async function vpsAgentWebRoutes(fastify) {
     await fastify.register(recoveryRoutes, { prefix: '/recovery' });
     await fastify.register(approvalRoutes, { prefix: '/approvals' });
 }
-//# sourceMappingURL=index.js.map

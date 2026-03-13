@@ -4,21 +4,61 @@
  *
  * 存储和管理经验沉淀数据
  */
+import crypto from 'node:crypto';
 import { generateId } from '../../utils/id-generator.js';
-// 内存存储 - 后续迁移到 PostgreSQL
-const proposalStore = new Map();
-const factStore = new Map();
-const rejectionStore = new Map();
-const lessonStore = new Map();
-const recipeStore = new Map();
+import { memoryRepository } from '../../persistence/repositories/memory-repository.js';
+const proposalStore = memoryRepository.proposals;
+const factStore = memoryRepository.facts;
+const rejectionStore = memoryRepository.rejections;
+const lessonStore = memoryRepository.lessons;
+const recipeStore = memoryRepository.recipes;
+function stableSerialize(value) {
+    if (Array.isArray(value)) {
+        return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+        const entries = Object.entries(value)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, item]) => `${JSON.stringify(key)}:${stableSerialize(item)}`);
+        return `{${entries.join(',')}}`;
+    }
+    return JSON.stringify(value);
+}
+function buildDefaultIdempotencyKey(request) {
+    const rawKey = stableSerialize({
+        incident_id: request.source.incident_id,
+        proposal_type: request.proposal_type,
+        scope: {
+            tenant_id: request.scope.tenant_id ?? null,
+            project_id: request.scope.project_id ?? null,
+        },
+        content: request.content,
+    });
+    return crypto.createHash('sha256').update(rawKey).digest('hex');
+}
+function extractKnowledgeTags(content) {
+    if (!content || typeof content !== 'object') {
+        return [];
+    }
+    const typedContent = content;
+    if (Array.isArray(typedContent.tags)) {
+        return typedContent.tags.filter((item) => typeof item === 'string');
+    }
+    const symptomKeywords = typedContent.triggers?.symptom_keywords;
+    if (Array.isArray(symptomKeywords)) {
+        return symptomKeywords.filter((item) => typeof item === 'string');
+    }
+    return [];
+}
 /**
  * 创建提案
  */
 export async function createProposal(request) {
+    const scopedRequest = request;
     const now = new Date().toISOString();
     const proposalId = generateId('prp');
     // 生成幂等性 key
-    const idempotencyKey = request.idempotency_key || `${request.source.incident_id}_${request.proposal_type}_${now}`;
+    const idempotencyKey = request.idempotency_key || buildDefaultIdempotencyKey(scopedRequest);
     // 检查幂等性
     for (const proposal of proposalStore.values()) {
         if (proposal.idempotency_key === idempotencyKey) {
@@ -26,22 +66,20 @@ export async function createProposal(request) {
             return proposal;
         }
     }
+    const normalizedContent = await normalizeTypedContent(proposalId, request.proposal_type, request.content, scopedRequest.scope);
     const proposal = {
         proposal_id: proposalId,
         proposal_type: request.proposal_type,
-        content: request.content,
+        content: normalizedContent,
         source: request.source,
         status: 'proposed',
-        scope: request.scope,
+        scope: scopedRequest.scope,
         idempotency_key: idempotencyKey,
         created_at: now,
         updated_at: now,
         version: 1,
     };
     proposalStore.set(proposalId, proposal);
-    // 根据类型存储具体内容
-    // 传入 request.scope 强制注入到 content 中，防止 content.scope 被伪造
-    await storeTypedContent(proposalId, request.proposal_type, request.content, request.scope);
     console.log(`[MemoryStore] Created proposal ${proposalId} of type ${request.proposal_type}`);
     return proposal;
 }
@@ -49,12 +87,12 @@ export async function createProposal(request) {
  * 存储类型化内容
  * 强制注入 proposal.scope 到 content 中，防止 scope 伪造
  */
-async function storeTypedContent(proposalId, type, content, scope) {
+async function normalizeTypedContent(proposalId, type, content, scope) {
     const now = new Date().toISOString();
     switch (type) {
         case 'corrected_fact': {
             const fact = content;
-            factStore.set(fact.fact_id || proposalId, {
+            const normalizedFact = {
                 ...fact,
                 fact_id: fact.fact_id || proposalId,
                 // 强制注入 scope，防止伪造
@@ -63,12 +101,12 @@ async function storeTypedContent(proposalId, type, content, scope) {
                     project_id: scope.project_id,
                 },
                 created_at: fact.created_at || now,
-            });
-            break;
+            };
+            return normalizedFact;
         }
         case 'rejected_hypothesis': {
             const rejection = content;
-            rejectionStore.set(rejection.rejection_id || proposalId, {
+            const normalizedRejection = {
                 ...rejection,
                 rejection_id: rejection.rejection_id || proposalId,
                 // 强制注入 scope，防止伪造
@@ -77,12 +115,12 @@ async function storeTypedContent(proposalId, type, content, scope) {
                     project_id: scope.project_id,
                 },
                 created_at: rejection.created_at || now,
-            });
-            break;
+            };
+            return normalizedRejection;
         }
         case 'incident_lesson': {
             const lesson = content;
-            lessonStore.set(lesson.lesson_id || proposalId, {
+            const normalizedLesson = {
                 ...lesson,
                 lesson_id: lesson.lesson_id || proposalId,
                 // 强制注入 scope，防止伪造
@@ -92,12 +130,12 @@ async function storeTypedContent(proposalId, type, content, scope) {
                 },
                 created_at: lesson.created_at || now,
                 updated_at: lesson.updated_at || now,
-            });
-            break;
+            };
+            return normalizedLesson;
         }
         case 'recovery_recipe': {
             const recipe = content;
-            recipeStore.set(recipe.recipe_id || proposalId, {
+            const normalizedRecipe = {
                 ...recipe,
                 recipe_id: recipe.recipe_id || proposalId,
                 // 强制注入 scope，防止伪造（保留 is_global 如果已设置）
@@ -114,10 +152,11 @@ async function storeTypedContent(proposalId, type, content, scope) {
                 created_at: recipe.created_at || now,
                 updated_at: recipe.updated_at || now,
                 version: recipe.version || 1,
-            });
-            break;
+            };
+            return normalizedRecipe;
         }
     }
+    return content;
 }
 /**
  * 获取提案
@@ -177,6 +216,16 @@ export async function validateProposal(proposalId, validatorId, approve, rejecti
 async function activateTypedContent(type, content) {
     const now = new Date().toISOString();
     switch (type) {
+        case 'corrected_fact': {
+            const fact = content;
+            factStore.set(fact.fact_id, fact);
+            break;
+        }
+        case 'rejected_hypothesis': {
+            const rejection = content;
+            rejectionStore.set(rejection.rejection_id, rejection);
+            break;
+        }
         case 'incident_lesson': {
             const lesson = content;
             lessonStore.set(lesson.lesson_id, {
@@ -274,14 +323,21 @@ export async function queryKnowledge(query) {
             itemScope.project_id === query.scope.project_id);
     });
     // 过滤标签
+    let scopedItems = filteredItems;
     if (query.tags && query.tags.length > 0) {
-        // 简化实现 - 可以在这里添加标签过滤逻辑
+        const normalizedTags = query.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean);
+        if (normalizedTags.length > 0) {
+            scopedItems = filteredItems.filter((item) => {
+                const tags = extractKnowledgeTags(item.content).map((tag) => tag.toLowerCase());
+                return normalizedTags.every((tag) => tags.includes(tag));
+            });
+        }
     }
     // 分页
-    const total = filteredItems.length;
+    const total = scopedItems.length;
     const offset = query.offset || 0;
     const limit = query.limit || 20;
-    const paginatedItems = filteredItems.slice(offset, offset + limit);
+    const paginatedItems = scopedItems.slice(offset, offset + limit);
     return {
         items: paginatedItems,
         total,
@@ -459,4 +515,3 @@ export function clearMemoryStore() {
     lessonStore.clear();
     recipeStore.clear();
 }
-//# sourceMappingURL=store.js.map

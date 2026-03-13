@@ -4,18 +4,17 @@
  *
  * 处理指标和日志数据的采集、存储和触发器评估
  */
-// 内存存储 - 后续迁移到时序数据库
-const metricsStore = new Map();
-const logsStore = new Map();
-const triggersStore = new Map();
-// 触发器冷却状态
-const triggerCooldowns = new Map();
+import { incidentCollectionRepository } from '../../persistence/repositories/incident-collection-repository.js';
+const metricsStore = incidentCollectionRepository.metrics;
+const logsStore = incidentCollectionRepository.logs;
+const triggersStore = incidentCollectionRepository.triggers;
+const triggerCooldowns = incidentCollectionRepository.triggerCooldowns;
 /**
  * 采集指标数据
  */
 export async function collectMetrics(scope, metrics) {
     const key = `${scope.tenant_id}:${scope.project_id}`;
-    if (!metricsStore.has(key)) {
+    if (!metricsStore.get(key)) {
         metricsStore.set(key, []);
     }
     const stored = metricsStore.get(key);
@@ -31,7 +30,7 @@ export async function collectMetrics(scope, metrics) {
  */
 export async function collectLogs(scope, logs) {
     const key = `${scope.tenant_id}:${scope.project_id}`;
-    if (!logsStore.has(key)) {
+    if (!logsStore.get(key)) {
         logsStore.set(key, []);
     }
     const stored = logsStore.get(key);
@@ -96,7 +95,7 @@ export async function getTrigger(triggerId) {
  * 列出所有触发器
  */
 export async function listTriggers() {
-    return Array.from(triggersStore.values());
+    return triggersStore.values();
 }
 /**
  * 删除触发器
@@ -202,7 +201,7 @@ export function getCollectionStats() {
     return {
         metricsCount,
         logsCount,
-        triggersCount: triggersStore.size,
+        triggersCount: triggersStore.size(),
     };
 }
 export function getCollectionStatsByScope(scope) {
@@ -212,7 +211,6 @@ export function getCollectionStatsByScope(scope) {
     return {
         metricsCount: metrics.length,
         logsCount: logs.length,
-        triggersCount: triggersStore.size,
+        triggersCount: triggersStore.size(),
     };
 }
-//# sourceMappingURL=collection.js.map

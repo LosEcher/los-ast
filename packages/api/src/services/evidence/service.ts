@@ -3,6 +3,10 @@
  * Phase 1.7: los-ast 证据生成
  */
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+import { getProjectAdapter } from '@los-ast/adapters';
 import type {
   CodeEvidenceBundle,
   GenerateEvidenceRequest,
@@ -17,7 +21,7 @@ import type {
   VerifiedScope,
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
-import { scan, explainAtPosition, loadRuleFiles, isReady } from '@los-ast/core';
+import { discoverFiles, explainAtPosition, isReady, languageFromFilePath, loadRuleFiles, scan } from '@los-ast/core';
 import { EVIDENCE_CONFIG } from '../../config/index.js';
 import { CoreNotReadyError } from '../../types/errors.js';
 import { clearEvidenceStore as clearEvidenceBundleStore, getStoredEvidenceBundle, saveEvidenceBundle } from './store.js';
@@ -33,6 +37,45 @@ function ensureCoreReady() {
   if (!isReady()) {
     throw new CoreNotReadyError();
   }
+}
+
+function createEmptyCodeStats(): CodeStats {
+  return {
+    total_files: 0,
+    total_lines: 0,
+    by_language: {},
+    by_severity: {},
+  };
+}
+
+function resolveStatsWorkspace(project: string) {
+  if (!project || project === 'custom') {
+    return null;
+  }
+
+  try {
+    return getProjectAdapter(project);
+  } catch {
+    return null;
+  }
+}
+
+function detectStatsLanguage(filePath: string): string {
+  const language = languageFromFilePath(filePath);
+  if (language) {
+    return String(language);
+  }
+
+  const extension = path.extname(filePath).replace(/^\./u, '').trim().toLowerCase();
+  return extension || 'unknown';
+}
+
+function countFileLines(content: string): number {
+  if (content.length === 0) {
+    return 0;
+  }
+
+  return content.split(/\r?\n/u).length;
 }
 
 async function generateSignature(bundle: Omit<CodeEvidenceBundle, 'signature'>, scope: VerifiedScope): Promise<EvidenceSignature | undefined> {
@@ -168,22 +211,48 @@ export async function getEvidenceBundle(
 /**
  * 获取代码统计
  */
-export async function getCodeStats(_project: string): Promise<CodeStats> {
-  // 模拟代码统计
-  return {
-    total_files: 42,
-    total_lines: 1234,
-    by_language: {
-      typescript: 25,
-      javascript: 10,
-      json: 7,
-    },
-    by_severity: {
-      error: 5,
-      warning: 12,
-      info: 8,
-    },
-  };
+export async function getCodeStats(project: string): Promise<CodeStats> {
+  ensureCoreReady();
+
+  const workspace = resolveStatsWorkspace(project);
+  if (!workspace) {
+    return createEmptyCodeStats();
+  }
+
+  const stats = createEmptyCodeStats();
+  const files = await discoverFiles({
+    rootDir: workspace.rootDir,
+    include: workspace.include,
+    ignore: workspace.ignore,
+  });
+
+  stats.total_files = files.length;
+
+  for (const file of files) {
+    const content = await fs.readFile(file, 'utf-8');
+    stats.total_lines += countFileLines(content);
+
+    const language = detectStatsLanguage(file);
+    stats.by_language[language] = (stats.by_language[language] || 0) + 1;
+  }
+
+  if (workspace.ruleGlobs.length > 0) {
+    const rules = await loadRuleFiles(workspace.ruleGlobs);
+    const scanResult = await scan({
+      project: workspace.project,
+      rootDir: workspace.rootDir,
+      include: workspace.include,
+      ignore: workspace.ignore,
+      rules,
+      deterministic: true,
+    });
+
+    for (const finding of scanResult.findings) {
+      stats.by_severity[finding.severity] = (stats.by_severity[finding.severity] || 0) + 1;
+    }
+  }
+
+  return stats;
 }
 
 /**

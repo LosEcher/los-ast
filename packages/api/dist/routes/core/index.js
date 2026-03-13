@@ -8,4 +8,3 @@
  */
 export { default as scanRoutes } from './scan.js';
 export { default as discoverRoutes } from './discover.js';
-//# sourceMappingURL=index.js.map

@@ -3,11 +3,11 @@
  * Phase 1.3: 故障归因系统
  */
 import { generateId } from '../../utils/id-generator.js';
+import { attributionRepository } from '../../persistence/repositories/attribution-repository.js';
 import { getAllIncidents } from '../incident/store.js';
-// 内存存储
-const hypothesisStore = new Map();
-const evidenceBundleStore = new Map();
-const attributionAnalysisStore = new Map();
+const hypothesisStore = attributionRepository.hypotheses;
+const evidenceBundleStore = attributionRepository.evidenceBundles;
+const attributionAnalysisStore = attributionRepository.analyses;
 /**
  * 创建假设
  */
@@ -28,7 +28,7 @@ export async function createHypothesis(request) {
             contradicting: [],
             bundle_id: request.evidence_bundle_id,
         },
-        proposed_by: request.proposed_by,
+        proposed_by: request.proposed_by || 'system',
         created_at: now,
         updated_at: now,
         version: 1,
@@ -42,6 +42,14 @@ export async function createHypothesis(request) {
  */
 export async function getHypothesis(hypothesisId) {
     return hypothesisStore.get(hypothesisId) || null;
+}
+export async function getHypothesisWithScope(hypothesisId, scope) {
+    const hypothesis = hypothesisStore.get(hypothesisId);
+    if (!hypothesis) {
+        return null;
+    }
+    const scopedIncidentIds = buildScopedIncidentIds(scope);
+    return scopedIncidentIds.has(hypothesis.incident_id) ? hypothesis : null;
 }
 /**
  * 更新假设状态
@@ -91,7 +99,8 @@ export async function addEvidenceToHypothesis(hypothesisId, evidenceItem, isSupp
  * 查询假设
  */
 export async function queryHypotheses(params) {
-    let items = Array.from(hypothesisStore.values());
+    const scopedIncidentIds = buildScopedIncidentIds(params.scope);
+    let items = hypothesisStore.values().filter((hypothesis) => scopedIncidentIds.has(hypothesis.incident_id));
     if (params.incident_id) {
         items = items.filter((h) => h.incident_id === params.incident_id);
     }
@@ -128,6 +137,14 @@ export async function createEvidenceBundle(incidentId, evidenceItems) {
 export async function getEvidenceBundle(bundleId) {
     return evidenceBundleStore.get(bundleId) || null;
 }
+export async function getEvidenceBundleWithScope(bundleId, scope) {
+    const bundle = evidenceBundleStore.get(bundleId);
+    if (!bundle) {
+        return null;
+    }
+    const scopedIncidentIds = buildScopedIncidentIds(scope);
+    return scopedIncidentIds.has(bundle.incident_id) ? bundle : null;
+}
 /**
  * 保存归因分析
  */
@@ -162,9 +179,8 @@ function buildScopedIncidentIds(scope) {
  */
 export function getAttributionStats(scope) {
     const scopedIncidentIds = buildScopedIncidentIds(scope);
-    const hypotheses = Array.from(hypothesisStore.values()).filter((hypothesis) => scopedIncidentIds.has(hypothesis.incident_id));
-    const evidenceBundles = Array.from(evidenceBundleStore.values()).filter((bundle) => scopedIncidentIds.has(bundle.incident_id));
-    const analyses = Array.from(attributionAnalysisStore.values()).filter((analysis) => {
+    const hypotheses = hypothesisStore.values().filter((hypothesis) => scopedIncidentIds.has(hypothesis.incident_id));
+    const analyses = attributionAnalysisStore.values().filter((analysis) => {
         if (analysis.scope?.tenant_id || analysis.scope?.project_id) {
             if (scope?.tenant_id && analysis.scope?.tenant_id !== scope.tenant_id) {
                 return false;
@@ -176,18 +192,35 @@ export function getAttributionStats(scope) {
         }
         return scopedIncidentIds.has(analysis.incident_id);
     });
-    const byCategory = {};
-    const byStatus = {};
+    const byCategory = {
+        code_defect: 0,
+        config_error: 0,
+        infrastructure: 0,
+        dependency_failure: 0,
+    };
+    const byStatus = {
+        proposed: 0,
+        validating: 0,
+        confirmed: 0,
+        rejected: 0,
+        superseded: 0,
+    };
+    let confidenceTotal = 0;
+    let latencyTotal = 0;
     for (const h of hypotheses) {
-        byCategory[h.category] = (byCategory[h.category] || 0) + 1;
-        byStatus[h.status] = (byStatus[h.status] || 0) + 1;
+        byCategory[h.category] += 1;
+        byStatus[h.status] += 1;
+        confidenceTotal += h.confidence;
+    }
+    for (const analysis of analyses) {
+        latencyTotal += analysis.latency_ms;
     }
     return {
-        hypothesesCount: hypotheses.length,
-        evidenceBundlesCount: evidenceBundles.length,
-        analysesCount: analyses.length,
-        byCategory,
-        byStatus,
+        total_analyses: analyses.length,
+        hypotheses_by_category: byCategory,
+        hypotheses_by_status: byStatus,
+        average_confidence: hypotheses.length > 0 ? confidenceTotal / hypotheses.length : 0,
+        average_latency_ms: analyses.length > 0 ? latencyTotal / analyses.length : 0,
     };
 }
 /**
@@ -198,4 +231,3 @@ export function clearAttributionStore() {
     evidenceBundleStore.clear();
     attributionAnalysisStore.clear();
 }
-//# sourceMappingURL=store.js.map

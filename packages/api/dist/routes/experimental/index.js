@@ -30,4 +30,3 @@ export const MIGRATION_PLAN = {
     hotreload: { target: 'los-ast-internal', timeline: 'stable', status: 'keep' },
     evidence: { target: 'los-ast', timeline: 'stable', status: 'keep' },
 };
-//# sourceMappingURL=index.js.map

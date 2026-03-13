@@ -58,33 +58,37 @@ npm run los-ast -- fix --project cantool --dry-run --max-changes 20
 npm run los-ast -- fix --project cantool --apply --max-changes 20
 ```
 
-## 文档
+## 从哪里开始看
 
-- 当前执行清单：[ACTIVE_TODO.md](docs/ACTIVE_TODO.md)
-- 架构说明：[architecture.md](docs/architecture.md)
-- 生态调研：[tooling-landscape.md](docs/research/tooling-landscape.md)
-- AI 使用手册：[AI_USAGE_GUIDE.md](docs/ai/AI_USAGE_GUIDE.md)
-- API 使用示例：[API_USAGE.md](API_USAGE.md)
-- API 契约入口：[API_CONTRACT.md](docs/API_CONTRACT.md)
-- Parser Profiles：[artifact-parser-profiles.md](docs/api/artifact-parser-profiles.md)
-- 两周优化计划：[optimization-plan-2weeks.md](docs/optimization-plan-2weeks.md)
-- lsclaw 集成执行方案：[lsclaw-integration-execution-plan.md](docs/lsclaw-integration-execution-plan.md)
-- 四项目协同待办：[four-project-collaboration-todo.md](docs/four-project-collaboration-todo.md)
-- VPS Agent Web 集成：[vps-agent-web-integration.md](docs/api/vps-agent-web-integration.md)
-- VPS Agent Web 对接清单：[vps-agent-web-contract-checklist.md](docs/api/vps-agent-web-contract-checklist.md)
-- VPS Agent Web 请求示例与错误映射：[vps-agent-web-examples-errors.md](docs/api/vps-agent-web-examples-errors.md)
-- 输出格式（JSONL）：[OUTPUT_SCHEMA.md](docs/ai/OUTPUT_SCHEMA.md)
-- 规则编写规范：[RULE_AUTHORING.md](docs/rules/RULE_AUTHORING.md)
-- 规则来源追溯：[RULE_TRACEABILITY.md](docs/rules/RULE_TRACEABILITY.md)
-- 治理能力与待办：
-  - [治理对齐 TODO（阶段文档）](docs/governance/governance-capability-todo-20260311.md)
-  - [治理规则集元信息模板](docs/governance/rule-set-metadata-template.md)
-  - [Stage1 落地交付总结](docs/governance/stage1-governance-delivery-20260311.md)
-  - [Stage2 验证证明](docs/governance/stage2-governance-verification-20260311.md)
+如果你是第一次接触这个仓库，建议按这个顺序阅读：
+
+1. [docs/ACTIVE_TODO.md](docs/ACTIVE_TODO.md): 当前有效执行清单，也是“现在能做什么、不能做什么、接下来做什么”的唯一入口。
+2. [README 的稳定面与预览面](#稳定面与预览面): 判断哪些能力适合接入，哪些仍是预览域。
+3. [docs/architecture.md](docs/architecture.md): 了解 core / cli / adapters / rules 的职责边界。
+
+## 文档入口
+
+按接入与开发场景分组：
+
+- 核心接入：
+  - [API_USAGE.md](API_USAGE.md)
+  - [docs/API_CONTRACT.md](docs/API_CONTRACT.md)
+  - [docs/api/artifact-parser-profiles.md](docs/api/artifact-parser-profiles.md)
+  - [docs/ai/OUTPUT_SCHEMA.md](docs/ai/OUTPUT_SCHEMA.md)
+- 规则与治理：
+  - [docs/rules/RULE_AUTHORING.md](docs/rules/RULE_AUTHORING.md)
+  - [docs/rules/RULE_TRACEABILITY.md](docs/rules/RULE_TRACEABILITY.md)
+  - [docs/adapters/lsclaw-artifact-contract.md](docs/adapters/lsclaw-artifact-contract.md)
+  - [docs/hub-lite-route-evidence-acceptance.md](docs/hub-lite-route-evidence-acceptance.md)
 - 项目适配器：
-  - [cantool.md](docs/adapters/cantool.md)
-  - [lsclaw.md](docs/adapters/lsclaw.md)
-  - [fullstackframe.md](docs/adapters/fullstackframe.md)
+  - [docs/adapters/cantool.md](docs/adapters/cantool.md)
+  - [docs/adapters/lsclaw.md](docs/adapters/lsclaw.md)
+  - [docs/adapters/fullstackframe.md](docs/adapters/fullstackframe.md)
+- 深入资料：
+  - [docs/research/tooling-landscape.md](docs/research/tooling-landscape.md)
+  - [docs/ai/AI_USAGE_GUIDE.md](docs/ai/AI_USAGE_GUIDE.md)
+  - `docs/governance/*`
+  - `docs/api/vps-agent-web-*`
 
 ## 稳定面与预览面
 
@@ -101,6 +105,12 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
   - incident / approval / attribution / recovery / memory proposal 相关能力
 
 当前建议把本项目作为“代码治理与证据输出内核”接入；对于接口治理、字段治理、执行编排，不应按已完全产品化能力理解。
+
+新接入方如果只想依赖稳定契约，可以只关注：
+
+- CLI: `los-ast scan|fix|explain|doctor`
+- API: `GET /healthz/live`、`GET /healthz/ready`、`POST /scan`、`POST /discover/symbols`
+- Artifact contract: `scan-findings.jsonl`、`symbols.json`、`structure-map.json`
 
 补充说明：当前 `hub-lite` 导出的 `structure-map.json` 适合用于“结构盘点 / 热点排序 / 边界证据”，并已支持 Fastify 四层路由证据输出：`route_declares`、`route_mounts`、`route_binds`、`route_runtime`，以及基础差异归因 `route_runtime_deltas`；其中静态层已能从 `if (!ROUTE_CONFIG.enableX) return;`、`const enabled = ROUTE_CONFIG.enableX` 后的 alias guard、`if (enabled) { register(...) }` 这类正向 block gate、`else / else if` 分支 route mount、带外层括号的简单 `&& / ||` 组合门禁，以及同文件单一 `return` helper gate 中提取 `control_flow_guard`，并在需要时保留 `guardShape` 与 `additionalConditions`；运行时层则按 `packages/api/dist` 的默认 flag wiring 做受控探针，不再强制挂载默认关闭路由，并会标出 `exact_match`、`auto_head`、`trailing_slash_variant` 等差异。但它还不适合作为完整“route truth 真源”，多框架、更复杂控制流和真实运行态仍需要结合 OpenAPI、集成测试或外部运行时探针交叉验证。
 

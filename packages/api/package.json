@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "clean:dist": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean:dist && tsc",
     "start": "node dist/server.js",
     "test": "vitest",
     "benchmark:scan": "tsx scripts/scan-benchmark.ts",
@@ -29,6 +30,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@los-ast/adapters": "file:../adapters",
     "@los-ast/ai": "file:../ai",
     "@los-ast/core": "file:../core",
     "@los-ast/rules": "file:../rules",

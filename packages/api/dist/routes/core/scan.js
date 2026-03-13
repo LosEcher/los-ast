@@ -5,6 +5,7 @@ import { scanService } from '../../services/scan-service.js';
 import { SCAN_LIMITS } from '../../config/index.js';
 import { ValidationError, ScanTooLargeError } from '../../types/errors.js';
 import { buildScanRequestBodySchema, scanResponseSchema } from './scan-schema.js';
+import { SCAN_NATIVE_INPUT_KEYS, } from './scan-contract.js';
 const BUILT_IN_RULE_PACK_NAMES = getBuiltInRulePackNames();
 function hasRuleCatalog(baseDir) {
     const languageDir = path.join(baseDir, 'languages');
@@ -40,14 +41,10 @@ function resolveRulePackPatterns(rulePack) {
     return [path.join(resolveRulesRoot(), relativePattern)];
 }
 function hasNativeArtifactInputs(body) {
-    return [
-        body.openApiDocuments,
-        body.openApiComparisons,
-        body.schemaDocuments,
-        body.schemaComparisons,
-        body.contractArtifacts,
-        body.schemaArtifacts,
-    ].some((items) => Array.isArray(items) && items.length > 0);
+    return SCAN_NATIVE_INPUT_KEYS.some((key) => {
+        const items = body[key];
+        return Array.isArray(items) && items.length > 0;
+    });
 }
 function requiresCodeScan(body, resolvedRules) {
     return typeof body.rootDir !== 'undefined'
@@ -111,4 +108,3 @@ export default async function scanRoutes(fastify) {
         return reply.send({ data: result });
     }));
 }
-//# sourceMappingURL=scan.js.map

@@ -136,4 +136,3 @@ export default fp(async function cancellationPlugin(fastify) {
     name: 'cancellation',
     fastify: '5.x',
 });
-//# sourceMappingURL=cancellation.js.map

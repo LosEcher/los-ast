@@ -95,4 +95,3 @@ export const artifactParserProfiles = [
         },
     },
 ];
-//# sourceMappingURL=registry.js.map

@@ -4,9 +4,124 @@
  *
  * 注意: 事故治理属于平台控制面职责，此路由将在 Milestone B 迁出至 VPS Agent Web
  */
-import { createIncident, getIncident, updateIncidentStatus, queryIncidents, getStoreStatsByScope, } from '../../services/incident/store.js';
+import { createIncident, getIncidentWithScope, updateIncidentStatus, queryIncidents, getStoreStatsByScope, } from '../../services/incident/store.js';
 import { collectMetrics, collectLogs, evaluateTriggers, getCollectionStatsByScope, } from '../../services/incident/collection.js';
-import { NotFoundError } from '../../types/errors.js';
+import { NotFoundError, ValidationError } from '../../types/errors.js';
+const requestScopeSchema = {
+    type: 'object',
+    properties: {
+        tenant_id: { type: 'string' },
+        project_id: { type: 'string' },
+        actor_id: { type: 'string' },
+        trace_id: { type: 'string' },
+        mode: { type: 'string', enum: ['local', 'service'] },
+    },
+};
+const incidentSourceSchema = {
+    type: 'object',
+    required: ['type', 'detector_id', 'raw_payload'],
+    additionalProperties: false,
+    properties: {
+        type: { type: 'string', enum: ['metric_alert', 'log_pattern', 'user_report'] },
+        detector_id: { type: 'string', minLength: 1 },
+        raw_payload: { type: 'object' },
+    },
+};
+const incidentImpactSchema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+        services_affected: { type: 'array', items: { type: 'string' } },
+        users_impacted: { type: 'integer', minimum: 0 },
+        sla_breach_risk: { type: 'boolean' },
+    },
+};
+const createIncidentBodySchema = {
+    type: 'object',
+    required: ['title', 'description', 'severity', 'source'],
+    additionalProperties: false,
+    properties: {
+        scope: requestScopeSchema,
+        title: { type: 'string', minLength: 1 },
+        description: { type: 'string', minLength: 1 },
+        severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low', 'info'] },
+        source: incidentSourceSchema,
+        impact: incidentImpactSchema,
+    },
+};
+const updateIncidentStatusBodySchema = {
+    type: 'object',
+    required: ['status'],
+    additionalProperties: false,
+    properties: {
+        scope: requestScopeSchema,
+        status: { type: 'string', enum: ['detected', 'triaging', 'attributed', 'recovering', 'resolved', 'closed'] },
+        comment: { type: 'string', minLength: 1 },
+        actor_id: { type: 'string', minLength: 1 },
+    },
+};
+const metricDataPointSchema = {
+    type: 'object',
+    required: ['timestamp', 'metric_name', 'value', 'labels'],
+    additionalProperties: false,
+    properties: {
+        timestamp: { type: 'string', minLength: 1 },
+        metric_name: { type: 'string', minLength: 1 },
+        value: { type: 'number' },
+        labels: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+        },
+    },
+};
+const logEntrySchema = {
+    type: 'object',
+    required: ['timestamp', 'level', 'message', 'service'],
+    additionalProperties: false,
+    properties: {
+        timestamp: { type: 'string', minLength: 1 },
+        level: { type: 'string', minLength: 1 },
+        message: { type: 'string', minLength: 1 },
+        service: { type: 'string', minLength: 1 },
+        trace_id: { type: 'string' },
+        span_id: { type: 'string' },
+        metadata: { type: 'object' },
+    },
+};
+const collectMetricsBodySchema = {
+    type: 'object',
+    required: ['metrics'],
+    additionalProperties: false,
+    properties: {
+        scope: requestScopeSchema,
+        metrics: {
+            type: 'array',
+            minItems: 1,
+            items: metricDataPointSchema,
+        },
+    },
+};
+const collectLogsBodySchema = {
+    type: 'object',
+    required: ['logs'],
+    additionalProperties: false,
+    properties: {
+        scope: requestScopeSchema,
+        logs: {
+            type: 'array',
+            minItems: 1,
+            items: logEntrySchema,
+        },
+    },
+};
+const incidentIdParamsSchema = {
+    type: 'object',
+    required: ['id'],
+    additionalProperties: false,
+    properties: {
+        id: { type: 'string', minLength: 1 },
+    },
+};
 // 查询参数验证函数
 function parseIncidentStatus(value) {
     if (!value)
@@ -39,9 +154,13 @@ export default async function incidentRoutes(fastify) {
     // GET /experimental/incidents - 查询 Incidents
     fastify.get('/', async (request) => {
         const query = request.query;
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
         const params = {
-            tenant_id: query.tenant_id,
-            project_id: query.project_id,
+            tenant_id: scope.tenant_id,
+            project_id: scope.project_id,
             status: parseIncidentStatus(query.status),
             severity: parseIncidentSeverity(query.severity),
             source_type: parseIncidentSourceType(query.source_type),
@@ -54,39 +173,86 @@ export default async function incidentRoutes(fastify) {
         return result;
     });
     // POST /experimental/incidents - 创建 Incident
-    fastify.post('/', async (request, reply) => {
+    fastify.post('/', {
+        schema: {
+            body: createIncidentBodySchema,
+        },
+    }, async (request, reply) => {
         const body = request.body;
-        const incident = await createIncident(body);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('INCOMPLETE_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const incident = await createIncident({
+            ...body,
+            scope: {
+                tenant_id: scope.tenant_id,
+                project_id: scope.project_id,
+                actor_id: scope.actor_id || body.scope?.actor_id || 'unknown',
+                trace_id: body.scope?.trace_id || request.requestId,
+            },
+        });
         reply.status(201);
         return { incident };
     });
     // GET /experimental/incidents/:id - 获取单个 Incident
-    fastify.get('/:id', async (request) => {
+    fastify.get('/:id', {
+        schema: {
+            params: incidentIdParamsSchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
-        const incident = await getIncident(id);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const incident = await getIncidentWithScope(id, scope.tenant_id, scope.project_id);
         if (!incident) {
             throw new NotFoundError('Incident', id);
         }
         return { incident };
     });
     // PATCH /experimental/incidents/:id/status - 更新 Incident 状态
-    fastify.patch('/:id/status', async (request) => {
+    fastify.patch('/:id/status', {
+        schema: {
+            params: incidentIdParamsSchema,
+            body: updateIncidentStatusBodySchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
         const body = request.body;
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
         // 先检查是否存在
-        const existing = await getIncident(id);
+        const existing = await getIncidentWithScope(id, scope.tenant_id, scope.project_id);
         if (!existing) {
             throw new NotFoundError('Incident', id);
         }
-        const incident = await updateIncidentStatus(id, body.status, body.comment, body.actor_id);
+        const incident = await updateIncidentStatus(id, body.status, body.comment, scope.actor_id || body.actor_id);
         return { incident };
     });
     // POST /experimental/incidents/collect/metrics - 采集指标
-    fastify.post('/collect/metrics', async (request) => {
+    fastify.post('/collect/metrics', {
+        schema: {
+            body: collectMetricsBodySchema,
+        },
+    }, async (request) => {
         const body = request.body;
-        await collectMetrics(body.scope, body.metrics);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        const scopedPayload = {
+            tenant_id: scope.tenant_id,
+            project_id: scope.project_id,
+            actor_id: scope.actor_id || body.scope?.actor_id || 'unknown',
+            trace_id: body.scope?.trace_id || request.requestId,
+        };
+        await collectMetrics(scopedPayload, body.metrics);
         // 评估触发器
-        const triggered = await evaluateTriggers(body.scope, body.metrics);
+        const triggered = await evaluateTriggers(scopedPayload, body.metrics);
         return {
             collected: body.metrics.length,
             triggers_evaluated: triggered.length,
@@ -94,9 +260,22 @@ export default async function incidentRoutes(fastify) {
         };
     });
     // POST /experimental/incidents/collect/logs - 采集日志
-    fastify.post('/collect/logs', async (request) => {
+    fastify.post('/collect/logs', {
+        schema: {
+            body: collectLogsBodySchema,
+        },
+    }, async (request) => {
         const body = request.body;
-        await collectLogs(body.scope, body.logs);
+        const scope = request.scope;
+        if (!scope?.tenant_id || !scope?.project_id) {
+            throw new ValidationError('MISSING_SCOPE', 'Request scope must include tenant_id and project_id');
+        }
+        await collectLogs({
+            tenant_id: scope.tenant_id,
+            project_id: scope.project_id,
+            actor_id: scope.actor_id || body.scope?.actor_id || 'unknown',
+            trace_id: body.scope?.trace_id || request.requestId,
+        }, body.logs);
         return {
             collected: body.logs.length,
         };
@@ -116,4 +295,3 @@ export default async function incidentRoutes(fastify) {
         });
     });
 }
-//# sourceMappingURL=incident.js.map

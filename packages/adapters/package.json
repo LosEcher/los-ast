@@ -2,8 +2,11 @@
   "name": "@los-ast/adapters",
   "private": true,
   "type": "module",
+  "types": "./src/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs"
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.mjs"
+    }
   }
 }
-

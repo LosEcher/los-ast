@@ -105,7 +105,7 @@ function parseSqlEntities(content) {
         const fields = new Map();
         const tablePrimaryKeys = new Set();
         const tableUniqueKeys = [];
-        for (const rawLine of rawLines) {
+        for (const [rawIndex, rawLine] of rawLines.entries()) {
             const normalizedLine = rawLine.replace(/,$/, '');
             const lowerLine = normalizedLine.toLowerCase();
             const primaryKeyMatch = lowerLine.match(/^primary key\s*\((.+)\)$/i);
@@ -138,6 +138,8 @@ function parseSqlEntities(content) {
                 primaryKey: /\bprimary\s+key\b/i.test(lowerLine),
                 unique: /\bunique\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine),
                 enumValues: parseSqlEnumValues(typeToken),
+                line: content.slice(0, match.index).split('\n').length + rawIndex + 1,
+                excerpt: normalizedLine,
             });
         }
         for (const primaryKeyField of tablePrimaryKeys) {
@@ -166,7 +168,7 @@ function parsePrismaEntities(content) {
         const fields = new Map();
         const compositePrimaryKeys = new Set();
         const compositeUniqueKeys = [];
-        for (const rawLine of rawLines) {
+        for (const [rawIndex, rawLine] of rawLines.entries()) {
             const compositeIdMatch = rawLine.match(/^@@id\s*\(\s*\[([^\]]+)\]/);
             if (compositeIdMatch) {
                 for (const key of compositeIdMatch[1].split(',').map((item) => item.trim()).filter(Boolean)) {
@@ -193,6 +195,8 @@ function parsePrismaEntities(content) {
                 primaryKey: /@id\b/.test(rawLine),
                 unique: /@unique\b/.test(rawLine),
                 enumValues: enums.get(normalizedType),
+                line: content.slice(0, match.index).split('\n').length + rawIndex + 1,
+                excerpt: rawLine,
             });
         }
         for (const primaryKeyField of compositePrimaryKeys) {
@@ -208,25 +212,10 @@ function parsePrismaEntities(content) {
 function buildSqlArtifacts(document, sourceLabel, fileLabel) {
     const artifacts = [];
     const entities = parseSqlEntities(document.content);
-    let line = 1;
     for (const entity of entities) {
-        const rawLines = document.content
-            .split('\n')
-            .map((item) => item.trim())
-            .filter(Boolean);
         const hasPrimaryKey = Array.from(entity.fields.values()).some((field) => field.primaryKey);
-        for (const rawLine of rawLines) {
-            const normalizedLine = rawLine.replace(/,$/, '');
-            const lowerLine = normalizedLine.toLowerCase();
-            const columnMatch = normalizedLine.match(/^([`"\[\]\w]+)\s+([A-Za-z0-9()_]+)/);
-            if (!columnMatch) {
-                continue;
-            }
-            const fieldName = cleanSqlIdentifier(columnMatch[1]);
-            const fieldType = columnMatch[2];
-            const isNullable = !/\bnot\s+null\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine);
-            const hasDefault = /\bdefault\b/i.test(lowerLine);
-            if (SENSITIVE_FIELD_RE.test(fieldName) && isNullable) {
+        for (const [fieldName, field] of entity.fields.entries()) {
+            if (SENSITIVE_FIELD_RE.test(fieldName) && field.nullable) {
                 artifacts.push({
                     source: sourceLabel,
                     ruleId: 'schema/sql-sensitive-nullable',
@@ -234,14 +223,14 @@ function buildSqlArtifacts(document, sourceLabel, fileLabel) {
                     message: `Sensitive column ${entity.name}.${fieldName} should not be nullable`,
                     file: fileLabel,
                     language: 'schema',
-                    line,
+                    line: field.line,
                     column: 0,
-                    excerpt: normalizedLine,
+                    excerpt: field.excerpt,
                     governanceDomain: ['database'],
                     impactHint: 'medium',
                 });
             }
-            if (LIFECYCLE_FIELD_RE.test(fieldName) && !isNullable && !hasDefault) {
+            if (LIFECYCLE_FIELD_RE.test(fieldName) && !field.nullable && !field.hasDefault) {
                 artifacts.push({
                     source: sourceLabel,
                     ruleId: 'schema/sql-lifecycle-default',
@@ -249,14 +238,14 @@ function buildSqlArtifacts(document, sourceLabel, fileLabel) {
                     message: `Lifecycle column ${entity.name}.${fieldName} should declare a default value`,
                     file: fileLabel,
                     language: 'schema',
-                    line,
+                    line: field.line,
                     column: 0,
-                    excerpt: normalizedLine,
+                    excerpt: field.excerpt,
                     governanceDomain: ['database', 'interface'],
                     impactHint: 'medium',
                 });
             }
-            if (AUDIT_TIMESTAMP_RE.test(fieldName) && /(timestamp|datetime)/i.test(fieldType) && !hasDefault) {
+            if (AUDIT_TIMESTAMP_RE.test(fieldName) && /(timestamp|datetime)/i.test(field.type) && !field.hasDefault) {
                 artifacts.push({
                     source: sourceLabel,
                     ruleId: 'schema/sql-audit-timestamp-default',
@@ -264,15 +253,16 @@ function buildSqlArtifacts(document, sourceLabel, fileLabel) {
                     message: `Audit timestamp ${entity.name}.${fieldName} should declare a default value`,
                     file: fileLabel,
                     language: 'schema',
-                    line,
+                    line: field.line,
                     column: 0,
-                    excerpt: normalizedLine,
+                    excerpt: field.excerpt,
                     governanceDomain: ['database'],
                     impactHint: 'low',
                 });
             }
         }
         if (!hasPrimaryKey) {
+            const firstField = entity.fields.values().next().value;
             artifacts.push({
                 source: sourceLabel,
                 ruleId: 'schema/sql-primary-key',
@@ -280,39 +270,24 @@ function buildSqlArtifacts(document, sourceLabel, fileLabel) {
                 message: `Table ${entity.name} should declare a primary key`,
                 file: fileLabel,
                 language: 'schema',
-                line,
+                line: firstField?.line || 1,
                 column: 0,
                 excerpt: `CREATE TABLE ${entity.name}`,
                 governanceDomain: ['database'],
                 impactHint: 'high',
             });
         }
-        line += Math.max(1, entity.fields.size);
     }
     return artifacts;
 }
 function buildPrismaArtifacts(document, sourceLabel, fileLabel) {
     const artifacts = [];
     const entities = parsePrismaEntities(document.content);
-    let line = 1;
     for (const entity of entities) {
-        const rawLines = document.content
-            .split('\n')
-            .map((item) => item.trim())
-            .filter(Boolean)
-            .filter((item) => !item.startsWith('//'));
         const hasPrimaryKey = Array.from(entity.fields.values()).some((field) => field.primaryKey) || /@@id\b/.test(document.content);
-        for (const rawLine of rawLines) {
-            const fieldMatch = rawLine.match(/^(\w+)\s+([A-Za-z][A-Za-z0-9]*\??)/);
-            if (!fieldMatch) {
-                continue;
-            }
-            const fieldName = fieldMatch[1];
-            const typeToken = fieldMatch[2];
-            const isNullable = typeToken.endsWith('?') && !/@id\b/.test(rawLine);
-            const hasDefault = /@default\s*\(/.test(rawLine);
-            const hasUpdatedAt = /@updatedAt\b/.test(rawLine);
-            if (SENSITIVE_FIELD_RE.test(fieldName) && isNullable) {
+        for (const [fieldName, field] of entity.fields.entries()) {
+            const hasUpdatedAt = field.defaultValue === '@updatedat';
+            if (SENSITIVE_FIELD_RE.test(fieldName) && field.nullable && !field.primaryKey) {
                 artifacts.push({
                     source: sourceLabel,
                     ruleId: 'schema/prisma-sensitive-nullable',
@@ -320,14 +295,14 @@ function buildPrismaArtifacts(document, sourceLabel, fileLabel) {
                     message: `Sensitive field ${entity.name}.${fieldName} should not be optional`,
                     file: fileLabel,
                     language: 'schema',
-                    line,
+                    line: field.line,
                     column: 0,
-                    excerpt: rawLine,
+                    excerpt: field.excerpt,
                     governanceDomain: ['database'],
                     impactHint: 'medium',
                 });
             }
-            if (LIFECYCLE_FIELD_RE.test(fieldName) && !isNullable && !hasDefault) {
+            if (LIFECYCLE_FIELD_RE.test(fieldName) && !field.nullable && !field.hasDefault) {
                 artifacts.push({
                     source: sourceLabel,
                     ruleId: 'schema/prisma-lifecycle-default',
@@ -335,14 +310,14 @@ function buildPrismaArtifacts(document, sourceLabel, fileLabel) {
                     message: `Lifecycle field ${entity.name}.${fieldName} should declare @default(...)`,
                     file: fileLabel,
                     language: 'schema',
-                    line,
+                    line: field.line,
                     column: 0,
-                    excerpt: rawLine,
+                    excerpt: field.excerpt,
                     governanceDomain: ['database', 'interface'],
                     impactHint: 'medium',
                 });
             }
-            if (AUDIT_TIMESTAMP_RE.test(fieldName) && /^DateTime\??$/.test(typeToken) && !hasDefault && !hasUpdatedAt) {
+            if (AUDIT_TIMESTAMP_RE.test(fieldName) && field.type === 'datetime' && !field.hasDefault && !hasUpdatedAt) {
                 artifacts.push({
                     source: sourceLabel,
                     ruleId: 'schema/prisma-audit-timestamp-default',
@@ -350,15 +325,16 @@ function buildPrismaArtifacts(document, sourceLabel, fileLabel) {
                     message: `Audit field ${entity.name}.${fieldName} should declare @default(now()) or @updatedAt`,
                     file: fileLabel,
                     language: 'schema',
-                    line,
+                    line: field.line,
                     column: 0,
-                    excerpt: rawLine,
+                    excerpt: field.excerpt,
                     governanceDomain: ['database'],
                     impactHint: 'low',
                 });
             }
         }
         if (!hasPrimaryKey) {
+            const firstField = entity.fields.values().next().value;
             artifacts.push({
                 source: sourceLabel,
                 ruleId: 'schema/prisma-primary-key',
@@ -366,14 +342,13 @@ function buildPrismaArtifacts(document, sourceLabel, fileLabel) {
                 message: `Model ${entity.name} should declare an id field or @@id`,
                 file: fileLabel,
                 language: 'schema',
-                line,
+                line: firstField?.line || 1,
                 column: 0,
                 excerpt: `model ${entity.name}`,
                 governanceDomain: ['database'],
                 impactHint: 'high',
             });
         }
-        line += Math.max(1, entity.fields.size);
     }
     return artifacts;
 }
@@ -524,4 +499,3 @@ export function buildSchemaArtifactsFromComparisons(comparisons) {
         return compareEntities(sourceLabel, fileLabel, 'prisma', parsePrismaEntities(comparison.baseline), parsePrismaEntities(comparison.current));
     });
 }
-//# sourceMappingURL=schema-artifacts.js.map

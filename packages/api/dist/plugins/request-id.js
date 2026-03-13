@@ -20,4 +20,3 @@ export default fp(async function requestIdPlugin(fastify) {
     name: 'request-id',
     fastify: '5.x',
 });
-//# sourceMappingURL=request-id.js.map

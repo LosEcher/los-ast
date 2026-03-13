@@ -159,4 +159,3 @@ export function createRouteCache(options = {}) {
         },
     };
 }
-//# sourceMappingURL=cache.js.map

@@ -6,6 +6,12 @@
 
 该文档当前覆盖稳定能力中的 `/scan` 契约、错误码分层与稳定性承诺。
 
+建议阅读顺序：
+
+1. 先看 `README.md` 中的“稳定面与预览面”，确认接入边界。
+2. 再看 `packages/api/docs/api/API_CONTRACT.md`，理解 `/scan` 契约细节。
+3. 如果要核对当前执行优先级，再回到 `docs/ACTIVE_TODO.md`。
+
 > 提示：在身份链路收口后，`/scan` 的请求身份来源将以 `Authorization: Bearer <jwt>` 为主；`scope` 为兼容上下文字段，生产环境以 JWT 派生为准。
 
 当前稳定面建议只按以下端点理解：

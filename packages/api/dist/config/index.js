@@ -1,5 +1,6 @@
 import { z } from 'zod';
 const NODE_ENVS = ['development', 'production', 'test'];
+const EXPERIMENTAL_STORE_BACKENDS = ['memory', 'file', 'sqlite'];
 const boolFromEnvSchema = z.preprocess((value) => {
     if (value === undefined || value === null) {
         return undefined;
@@ -84,6 +85,13 @@ const configSchema = z
     LSCLAW_JWT_SECRET: stringOrUndefined,
     DEV_ALLOW_UNVERIFIED_IDENTITY: boolFromEnvSchema.default(false),
     EVIDENCE_SIGNING_KEY: stringOrUndefined,
+    EXPERIMENTAL_STORE_BACKEND: z
+        .preprocess((value) => {
+        return value === undefined || value === null || typeof value === 'string' ? value : String(value);
+    }, z.enum(EXPERIMENTAL_STORE_BACKENDS))
+        .default('memory'),
+    EXPERIMENTAL_STORE_DIR: stringOrUndefined,
+    EXPERIMENTAL_SQLITE_PATH: stringOrUndefined,
     ENABLE_OPENAPI_NATIVE_PARSER: boolFromEnvSchema.default(true),
     ENABLE_SCHEMA_NATIVE_PARSER: boolFromEnvSchema.default(true),
     ENABLE_EXPERIMENTAL_ROUTES: boolFromEnvSchema.default(false),
@@ -143,6 +151,11 @@ const CONFIG_WITH_DEFAULTS = configSchema.parse({
     MAX_RESPONSE_BYTES: '10485760',
     MAX_SCAN_DURATION_MS: '30000',
 });
+export const DEFAULT_SCAN_LIMITS = {
+    maxFilesPerSyncScan: Number(CONFIG_WITH_DEFAULTS.MAX_FILES_PER_SYNC_SCAN),
+    maxResponseBytes: Number(CONFIG_WITH_DEFAULTS.MAX_RESPONSE_BYTES),
+    maxDurationMs: Number(CONFIG_WITH_DEFAULTS.MAX_SCAN_DURATION_MS),
+};
 function resolveNodeEnv(rawNodeEnv) {
     return rawNodeEnv === 'production' || rawNodeEnv === 'test' || rawNodeEnv === 'development'
         ? rawNodeEnv
@@ -161,6 +174,9 @@ function normalizeAndValidateConfig(env) {
         LSCLAW_JWT_SECRET: env.LSCLAW_JWT_SECRET,
         DEV_ALLOW_UNVERIFIED_IDENTITY: env.DEV_ALLOW_UNVERIFIED_IDENTITY,
         EVIDENCE_SIGNING_KEY: env.EVIDENCE_SIGNING_KEY,
+        EXPERIMENTAL_STORE_BACKEND: env.EXPERIMENTAL_STORE_BACKEND,
+        EXPERIMENTAL_STORE_DIR: env.EXPERIMENTAL_STORE_DIR,
+        EXPERIMENTAL_SQLITE_PATH: env.EXPERIMENTAL_SQLITE_PATH,
         ENABLE_OPENAPI_NATIVE_PARSER: env.ENABLE_OPENAPI_NATIVE_PARSER,
         ENABLE_SCHEMA_NATIVE_PARSER: env.ENABLE_SCHEMA_NATIVE_PARSER,
         ENABLE_EXPERIMENTAL_ROUTES: env.ENABLE_EXPERIMENTAL_ROUTES,
@@ -227,6 +243,11 @@ export const EVIDENCE_CONFIG = {
     signingKey: parsedConfig.values.EVIDENCE_SIGNING_KEY ?? null,
     enableSignatures: !!parsedConfig.values.EVIDENCE_SIGNING_KEY || IS_PRODUCTION,
 };
+export const PERSISTENCE_CONFIG = {
+    experimentalStoreBackend: parsedConfig.values.EXPERIMENTAL_STORE_BACKEND,
+    experimentalStoreDir: parsedConfig.values.EXPERIMENTAL_STORE_DIR,
+    experimentalSqlitePath: parsedConfig.values.EXPERIMENTAL_SQLITE_PATH,
+};
 export const PARSER_CONFIG = {
     enableOpenApiNativeParser: parsedConfig.values.ENABLE_OPENAPI_NATIVE_PARSER,
     enableSchemaNativeParser: parsedConfig.values.ENABLE_SCHEMA_NATIVE_PARSER,
@@ -289,6 +310,10 @@ export function logStartupConfig() {
     console.log(`[STARTUP]   - JWT secret configured: ${!!JWT_CONFIG.secret}`);
     console.log(`[STARTUP]   - Dev allow unverified identity: ${DEV_ALLOW_UNVERIFIED_IDENTITY}`);
     console.log(`[STARTUP]   - Evidence signing: ${EVIDENCE_CONFIG.enableSignatures ? 'ENABLED' : 'DISABLED'}`);
+    console.log('[STARTUP] Persistence configuration:');
+    console.log(`[STARTUP]   - Experimental store backend: ${PERSISTENCE_CONFIG.experimentalStoreBackend}`);
+    console.log(`[STARTUP]   - Experimental store dir: ${PERSISTENCE_CONFIG.experimentalStoreDir || '(default)'}`);
+    console.log(`[STARTUP]   - Experimental sqlite path: ${PERSISTENCE_CONFIG.experimentalSqlitePath || '(default)'}`);
     console.log('[STARTUP] Parser configuration:');
     console.log(`[STARTUP]   - OpenAPI native parser: ${PARSER_CONFIG.enableOpenApiNativeParser ? 'ENABLED' : 'DISABLED'}`);
     console.log(`[STARTUP]   - Schema native parser: ${PARSER_CONFIG.enableSchemaNativeParser ? 'ENABLED' : 'DISABLED'}`);
@@ -307,4 +332,3 @@ export function logStartupConfig() {
     }
     console.log('[STARTUP] ============================================');
 }
-//# sourceMappingURL=index.js.map

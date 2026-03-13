@@ -1,7 +1,7 @@
 {
   "phaseId": "hub-lite-route-evidence-20260311",
   "phaseName": "Hub-Lite Route Evidence",
-  "updatedAt": "2026-03-12",
+  "updatedAt": "2026-03-13",
   "status": "repo_gate_green",
   "repoGate": "pass",
   "scope": {
@@ -47,12 +47,12 @@
     "l3_api_tests": {
       "command": "npm run test:api",
       "status": "pass",
-      "result": "21 files, 232 tests"
+      "result": "24 files, 275 tests"
     },
     "l4_repo_tests": {
       "command": "npm run test",
       "status": "pass",
-      "result": "core 11 tests + api 21 files / 232 tests"
+      "result": "core 13 tests + api 24 files / 275 tests"
     }
   },
   "evidenceCounts": {

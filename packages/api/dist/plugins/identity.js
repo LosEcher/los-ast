@@ -170,4 +170,3 @@ export default fp(async function identityPlugin(fastify) {
     fastify: '5.x',
     dependencies: ['scope-validator'],
 });
-//# sourceMappingURL=identity.js.map

@@ -95,4 +95,3 @@ export function generateInternalToken() {
     }
     return token;
 }
-//# sourceMappingURL=internal-access.js.map

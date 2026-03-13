@@ -32,4 +32,3 @@ export function generateUUID() {
         return v.toString(16);
     });
 }
-//# sourceMappingURL=id-generator.js.map

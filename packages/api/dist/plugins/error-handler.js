@@ -132,4 +132,3 @@ export default fp(async function errorHandlerPlugin(fastify) {
     name: 'error-handler',
     fastify: '5.x',
 });
-//# sourceMappingURL=error-handler.js.map

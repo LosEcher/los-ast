@@ -3,14 +3,15 @@
  * Phase 1.6: 热重载系统
  */
 import { generateId } from '../../utils/id-generator.js';
-const bundleStore = new Map();
+import { hotReloadRepository } from '../../persistence/repositories/hotreload-repository.js';
+const bundleStore = hotReloadRepository;
 export async function createConfigBundle(request) {
     const now = new Date().toISOString();
     const bundleId = generateId('cfg');
     const bundle = {
         bundle_id: bundleId,
         version: request.version,
-        scope: request.scope,
+        target_scope: request.target_scope,
         configs: request.configs,
         status: 'draft',
         validation: {
@@ -59,7 +60,7 @@ export async function rollbackConfigBundle(bundleId) {
     return bundle;
 }
 export async function listConfigBundles() {
-    return Array.from(bundleStore.values());
+    return bundleStore.values();
 }
 export function getHotReloadStats() {
     const by_status = {};
@@ -70,7 +71,7 @@ export function getHotReloadStats() {
             active_bundles++;
     }
     return {
-        total_bundles: bundleStore.size,
+        total_bundles: bundleStore.size(),
         active_bundles,
         by_status,
     };
@@ -81,4 +82,3 @@ function generateChecksum(request) {
 export function clearHotReloadStore() {
     bundleStore.clear();
 }
-//# sourceMappingURL=store.js.map

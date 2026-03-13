@@ -36,4 +36,3 @@ export function noContent(reply) {
     reply.status(204);
     return '';
 }
-//# sourceMappingURL=http-helpers.js.map

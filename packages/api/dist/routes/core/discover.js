@@ -93,4 +93,3 @@ export default async function discoverRoutes(fastify) {
         return reply.send({ data: result });
     }));
 }
-//# sourceMappingURL=discover.js.map

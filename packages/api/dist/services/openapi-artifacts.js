@@ -56,6 +56,82 @@ function buildContractFinding(source, file, line, ruleId, severity, message, exc
         impactHint,
     };
 }
+function parseOperationLabel(operationLabel) {
+    const firstSpace = operationLabel.indexOf(' ');
+    if (firstSpace <= 0 || firstSpace === operationLabel.length - 1) {
+        return null;
+    }
+    return {
+        method: operationLabel.slice(0, firstSpace).toLowerCase(),
+        routePath: operationLabel.slice(firstSpace + 1),
+    };
+}
+function getLeadingSpaceCount(line) {
+    const match = line.match(/^\s*/);
+    return match ? match[0].length : 0;
+}
+function matchesStructuredKey(trimmedLine, key) {
+    return trimmedLine === `${key}:`
+        || trimmedLine === `'${key}':`
+        || trimmedLine === `"${key}":`
+        || trimmedLine.startsWith(`${key}: `)
+        || trimmedLine.startsWith(`'${key}': `)
+        || trimmedLine.startsWith(`"${key}": `);
+}
+function findYamlOperationLine(content, routePath, method) {
+    const lines = content.split(/\r?\n/u);
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#') || !matchesStructuredKey(trimmed, routePath)) {
+            continue;
+        }
+        const pathIndent = getLeadingSpaceCount(line);
+        const pathLine = index + 1;
+        for (let childIndex = index + 1; childIndex < lines.length; childIndex += 1) {
+            const childLine = lines[childIndex];
+            const childTrimmed = childLine.trim();
+            if (!childTrimmed || childTrimmed.startsWith('#')) {
+                continue;
+            }
+            const childIndent = getLeadingSpaceCount(childLine);
+            if (childIndent <= pathIndent) {
+                break;
+            }
+            if (childIndent === pathIndent + 2 && matchesStructuredKey(childTrimmed, method)) {
+                return childIndex + 1;
+            }
+        }
+        return pathLine;
+    }
+    return undefined;
+}
+function findJsonOperationLine(content, routePath, method) {
+    const lines = content.split(/\r?\n/u);
+    let pathLine;
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (!pathLine && line.includes(`"${routePath}"`)) {
+            pathLine = index + 1;
+            continue;
+        }
+        if (pathLine && line.includes(`"${method}"`)) {
+            return index + 1;
+        }
+    }
+    return pathLine;
+}
+function resolveOperationLine(document, operationLabel) {
+    const parsedLabel = parseOperationLabel(operationLabel);
+    if (!parsedLabel) {
+        return 1;
+    }
+    const format = document.format || (document.content.trim().startsWith('{') ? 'json' : 'yaml');
+    const line = format === 'json'
+        ? findJsonOperationLine(document.content, parsedLabel.routePath, parsedLabel.method)
+        : findYamlOperationLine(document.content, parsedLabel.routePath, parsedLabel.method);
+    return line || 1;
+}
 function getOperations(document) {
     const operations = new Map();
     for (const [routePath, pathItem] of Object.entries(document.paths || {})) {
@@ -424,7 +500,6 @@ export function buildContractArtifactsFromOpenApi(documents) {
         const fileLabel = document.file || sourceLabel;
         const parsed = parseDocument(document, docIndex);
         ensureOpenApiShape(parsed, sourceLabel);
-        let findingLine = 1;
         for (const [routePath, pathItem] of Object.entries(parsed.paths || {})) {
             if (!isRecord(pathItem)) {
                 continue;
@@ -439,6 +514,7 @@ export function buildContractArtifactsFromOpenApi(documents) {
                 const operation = operationRaw;
                 const methodUpper = method.toUpperCase();
                 const operationLabel = `${methodUpper} ${routePath}`;
+                const findingLine = resolveOperationLine(document, operationLabel);
                 if (typeof operation.operationId !== 'string' || operation.operationId.trim().length === 0) {
                     artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-operation-id', 'warning', `OpenAPI operation ${operationLabel} is missing operationId`, operationLabel, ['interface', 'backend'], 'medium'));
                 }
@@ -451,7 +527,6 @@ export function buildContractArtifactsFromOpenApi(documents) {
                 if (!hasSuccessResponse) {
                     artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-success-response', 'warning', `OpenAPI operation ${operationLabel} should declare at least one success response`, operationLabel, ['interface'], 'medium'));
                 }
-                findingLine += 1;
             }
         }
     });
@@ -465,18 +540,31 @@ export function buildContractArtifactsFromOpenApiComparisons(comparisons) {
     comparisons.forEach((comparison, index) => {
         const sourceLabel = comparison.source || comparison.file || `openapi-comparison-${index + 1}`;
         const fileLabel = comparison.file || sourceLabel;
-        const baseline = parseDocument({ source: `${sourceLabel}:baseline`, file: comparison.file, content: comparison.baseline, format: comparison.format }, index);
-        const current = parseDocument({ source: `${sourceLabel}:current`, file: comparison.file, content: comparison.current, format: comparison.format }, index);
+        const baselineDocument = {
+            source: `${sourceLabel}:baseline`,
+            file: comparison.file,
+            content: comparison.baseline,
+            format: comparison.format,
+        };
+        const currentDocument = {
+            source: `${sourceLabel}:current`,
+            file: comparison.file,
+            content: comparison.current,
+            format: comparison.format,
+        };
+        const baseline = parseDocument(baselineDocument, index);
+        const current = parseDocument(currentDocument, index);
         ensureOpenApiShape(baseline, sourceLabel);
         ensureOpenApiShape(current, sourceLabel);
         const baselineOperations = getOperations(baseline);
         const currentOperations = getOperations(current);
-        let findingLine = 1;
         for (const [operationLabel, baselineOperation] of baselineOperations.entries()) {
             const currentOperation = currentOperations.get(operationLabel);
+            const baselineLine = resolveOperationLine(baselineDocument, operationLabel);
+            const currentLine = resolveOperationLine(currentDocument, operationLabel);
+            const findingLine = currentOperation ? currentLine || baselineLine : baselineLine;
             if (!currentOperation) {
                 artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-operation-drop', 'error', `OpenAPI operation ${operationLabel} was removed from current spec`, operationLabel, ['interface', 'backend'], 'high'));
-                findingLine += 1;
                 continue;
             }
             const baselineRequestShape = getComparableObjectShape(baseline, getRequestSchema(baselineOperation));
@@ -586,9 +674,7 @@ export function buildContractArtifactsFromOpenApiComparisons(comparisons) {
                     }
                 }
             }
-            findingLine += 1;
         }
     });
     return artifacts;
 }
-//# sourceMappingURL=openapi-artifacts.js.map

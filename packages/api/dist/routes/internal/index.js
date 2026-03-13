@@ -9,4 +9,3 @@
 export const internalRoutes = {
 // 预留
 };
-//# sourceMappingURL=index.js.map

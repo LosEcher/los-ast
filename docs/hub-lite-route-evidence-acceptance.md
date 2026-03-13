@@ -1,6 +1,6 @@
 # Hub-Lite Route Evidence 验收说明
 
-更新时间：2026-03-12
+更新时间：2026-03-13
 
 ## 目的
 
@@ -65,7 +65,7 @@ npm run build:api
 
 当前基线：
 
-- 2026-03-11：通过
+- 2026-03-13：通过
 
 ### L3: API 行为验收
 
@@ -84,7 +84,7 @@ npm run test:api
 
 当前基线：
 
-- 2026-03-11：`21` files, `166` tests 全部通过
+- 2026-03-13：`24` files, `275` tests 全部通过
 
 ### L4: 仓库级门禁验收
 
@@ -103,8 +103,8 @@ npm run test
 
 当前状态：
 
-- 2026-03-11：通过
-- 结果：`test:core` 与 `test:api` 均通过
+- 2026-03-13：通过
+- 结果：`test:core` `13` tests 与 `test:api` `24` files / `275` tests 均通过
 - 结论：当前仓库默认测试入口可作为 `hub-lite route evidence` 的仓库级门禁依据
 
 ## 阶段完成判定

@@ -4,11 +4,58 @@
  *
  * 注意: 审批流是控制面核心能力，此路由将在 Milestone B 迁出至 VPS Agent Web
  */
-import { createApproval, getApprovalWithScope, processApproval, queryApprovals, getApprovalStats, } from '../../services/approval/store.js';
+import { createApproval, getApprovalWithScope, queryApprovals, getApprovalStats, } from '../../services/approval/store.js';
+import { processApprovalWorkflow } from '../../services/approval/workflow.js';
 import { NotFoundError, ValidationError } from '../../types/errors.js';
 import { MemoryCache } from '../../utils/cache.js';
 // 创建路由缓存实例 (30秒 TTL)
 const statsCache = new MemoryCache({ defaultTtl: 30000, maxSize: 10 });
+const scopeSchema = {
+    type: 'object',
+    properties: {
+        tenant_id: { type: 'string' },
+        project_id: { type: 'string' },
+        actor_id: { type: 'string' },
+        mode: { type: 'string', enum: ['local', 'service'] },
+    },
+};
+const approvalBodySchema = {
+    type: 'object',
+    required: ['item_type', 'item_id', 'title', 'description', 'risk_level', 'timeout_seconds'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        item_type: { type: 'string', enum: ['recovery_action', 'code_patch', 'config_change', 'recipe_activation'] },
+        item_id: { type: 'string', minLength: 1 },
+        title: { type: 'string', minLength: 1 },
+        description: { type: 'string', minLength: 1 },
+        risk_level: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+        timeout_seconds: { type: 'integer', minimum: 1 },
+        metadata: { type: 'object' },
+    },
+};
+const processApprovalBodySchema = {
+    type: 'object',
+    required: ['action'],
+    additionalProperties: false,
+    properties: {
+        scope: scopeSchema,
+        action: { type: 'string', enum: ['approve', 'reject'] },
+        actor_id: { type: 'string', minLength: 1 },
+        comment: { type: 'string', minLength: 1 },
+    },
+};
+const approvalIdParamsSchema = {
+    type: 'object',
+    required: ['id'],
+    additionalProperties: false,
+    properties: {
+        id: { type: 'string', minLength: 1 },
+    },
+};
+function invalidateApprovalStatsCache(scope) {
+    statsCache.delete(`approval:stats:${scope.tenant_id}:${scope.project_id}`);
+}
 // 查询参数验证函数
 function parseApprovalStatus(value) {
     if (!value)
@@ -53,7 +100,11 @@ export default async function approvalRoutes(fastify) {
         return result;
     });
     // POST /experimental/approvals - 创建审批项
-    fastify.post('/', async (request, reply) => {
+    fastify.post('/', {
+        schema: {
+            body: approvalBodySchema,
+        },
+    }, async (request, reply) => {
         const body = request.body;
         // 强制注入 request.scope，确保数据归属正确
         const scope = request.scope;
@@ -67,11 +118,19 @@ export default async function approvalRoutes(fastify) {
                 project_id: scope.project_id,
             }, // 强制使用验证后的 scope
         }, scope.actor_id);
+        invalidateApprovalStatsCache({
+            tenant_id: scope.tenant_id,
+            project_id: scope.project_id,
+        });
         reply.status(201);
         return { approval };
     });
     // GET /experimental/approvals/:id - 获取审批项
-    fastify.get('/:id', async (request) => {
+    fastify.get('/:id', {
+        schema: {
+            params: approvalIdParamsSchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
         // 强制使用 request.scope 进行租户边界校验
         const scope = request.scope;
@@ -86,7 +145,12 @@ export default async function approvalRoutes(fastify) {
         return { approval };
     });
     // POST /experimental/approvals/:id/process - 处理审批
-    fastify.post('/:id/process', async (request) => {
+    fastify.post('/:id/process', {
+        schema: {
+            params: approvalIdParamsSchema,
+            body: processApprovalBodySchema,
+        },
+    }, async (request) => {
         const { id } = request.params;
         const body = request.body;
         // 强制使用 request.scope 进行租户边界校验
@@ -99,8 +163,24 @@ export default async function approvalRoutes(fastify) {
         if (!existing) {
             throw new NotFoundError('Approval', id);
         }
+        const actorId = scope.actor_id || body.actor_id;
+        if (!actorId) {
+            throw new ValidationError('MISSING_ACTOR_ID', 'Approval processing requires a verified actor_id');
+        }
         try {
-            const approval = await processApproval(id, body);
+            const approval = await processApprovalWorkflow({
+                approval: existing,
+                actorId,
+                request: body,
+                scope: {
+                    tenant_id: scope.tenant_id,
+                    project_id: scope.project_id,
+                },
+            });
+            invalidateApprovalStatsCache({
+                tenant_id: scope.tenant_id,
+                project_id: scope.project_id,
+            });
             return { approval };
         }
         catch (error) {
@@ -127,4 +207,3 @@ export default async function approvalRoutes(fastify) {
         return { stats };
     });
 }
-//# sourceMappingURL=approval.js.map

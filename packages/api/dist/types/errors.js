@@ -78,4 +78,3 @@ export class AuthenticationError extends AppError {
         super('AUTHENTICATION', code, message, false);
     }
 }
-//# sourceMappingURL=errors.js.map

@@ -176,8 +176,9 @@ export class ScanService {
             return files.length;
         }
         catch (error) {
-            // 如果预估失败，返回一个安全值以继续处理
-            return 0;
+            throw new ValidationError('FILE_COUNT_ESTIMATE_FAILED', error instanceof Error
+                ? `failed to estimate candidate files before scan: ${error.message}`
+                : 'failed to estimate candidate files before scan');
         }
     }
     /**
@@ -314,4 +315,3 @@ export class ScanService {
 }
 // 导出单例实例
 export const scanService = new ScanService();
-//# sourceMappingURL=scan-service.js.map
