@@ -30,6 +30,8 @@ import {
   SCAN_ENDPOINT_ERROR_REFERENCE,
   SCAN_ERROR_CATEGORY_VALUES,
   SCAN_LIMIT_REFERENCE,
+  SCAN_OPENAPI_OPERATION_SUMMARY,
+  SCAN_OPENAPI_REQUEST_EXAMPLES,
 } from '../../src/routes/core/scan-doc-contract.js';
 import { buildOutputSchema } from '@los-ast/ai';
 import { DEFAULT_PARSE_CACHE_MAX_ENTRIES, PARSE_FAILURE_SAMPLE_LIMIT } from '@los-ast/core';
@@ -345,6 +347,21 @@ describe('CLI/API Parity', () => {
       };
       const generatedOutputSchema = buildOutputSchema();
       const openApi = YAML.parse(openApiDoc) as {
+        paths?: {
+          '/scan'?: {
+            post?: {
+              summary?: string;
+              description?: string;
+              requestBody?: {
+                content?: {
+                  'application/json'?: {
+                    examples?: Record<string, { value?: unknown }>;
+                  };
+                };
+              };
+            };
+          };
+        };
         components?: {
           schemas?: {
             ScanRequest?: {
@@ -361,6 +378,7 @@ describe('CLI/API Parity', () => {
           };
         };
       };
+      const openApiScanPost = openApi.paths?.['/scan']?.post;
       const openApiScanRequest = openApi.components?.schemas?.ScanRequest;
       const openApiScanResponseData = openApi.components?.schemas?.ScanResponse?.properties?.data?.properties;
 
@@ -454,8 +472,15 @@ describe('CLI/API Parity', () => {
       expect(Object.keys(openApiScanResponseData ?? {})).toEqual(
         expect.arrayContaining(scanResponseDataKeys)
       );
+      expect(openApiScanPost?.summary).toBe(SCAN_OPENAPI_OPERATION_SUMMARY);
+      expect(openApiScanPost?.description).toContain(`最大文件数：${SCAN_LIMIT_REFERENCE[0]?.value}（可配置）`);
+      expect(openApiScanPost?.requestBody?.content?.['application/json']?.examples).toEqual(
+        SCAN_OPENAPI_REQUEST_EXAMPLES
+      );
+      expect(generatedOpenApiComponents).toMatch(/@generated scan-contract:ScanPath:begin/);
       expect(generatedOpenApiComponents).toMatch(/@generated scan-contract:ScanRequest:begin/);
       expect(generatedOpenApiComponents).toMatch(/@generated scan-contract:ScanResponse:end/);
+      expect(openApiDoc).toContain('# @generated scan-contract:ScanPath:begin');
       expect(openApiDoc).toContain('# @generated scan-contract:ScanRequest:begin');
       expect(openApiDoc).toContain('# @generated scan-contract:ScanResponse:end');
 
@@ -465,9 +490,9 @@ describe('CLI/API Parity', () => {
       expect(openApiDoc).toMatch(/governanceDomain:/);
       expect(openApiDoc).toMatch(/impactHint:/);
       expect(openApiDoc).toMatch(/AUTHENTICATION/);
-      expect(openApiDoc).toMatch(/'401':/);
-      expect(openApiDoc).toMatch(/code: "REQUEST_TIMEOUT"/);
-      expect(openApiDoc).toMatch(/code: "SCAN_TOO_LARGE"/);
+      expect(openApiDoc).toMatch(/"401":/);
+      expect(openApiDoc).toMatch(/code: REQUEST_TIMEOUT/);
+      expect(openApiDoc).toMatch(/code: SCAN_TOO_LARGE/);
       expect(openApiDoc).toMatch(/nullable: true/);
 
       expect(outputSchemaDoc).toMatch(/findingSource/);

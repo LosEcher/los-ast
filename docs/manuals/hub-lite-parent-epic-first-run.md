@@ -54,8 +54,8 @@ npm run hub-lite:artifacts -- --root ./fixtures/golden/lsclaw-sample --project l
 - Route Binds: 0
 
 **Limitations:**
-- route_binds currently covers minimal Fastify literal-only route declarations and register prefixes
-- this fixture does not expose literal Fastify route registrations, so route_binds remains empty for this sample
+- route_binds currently provides minimal Fastify literal-only runtime-like bind evidence; it is not full route truth
+- this fixture does not expose literal Fastify route registrations or register-chain evidence, so route_binds remains empty for this sample
 
 ---
 

@@ -15,6 +15,10 @@
 - `route_runtime_deltas`
 - `control_flow_guard` 及其 `guardShape / additionalConditions`
 
+边界提醒：
+
+- `route_binds` 当前提供的是 minimal Fastify literal-only runtime-like bind evidence，不是 full route truth。
+
 ## 验收分层
 
 ### L1: 变更内核验收

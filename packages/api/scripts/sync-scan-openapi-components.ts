@@ -8,6 +8,14 @@ import {
   scanNativeInputProperties,
   scanResponseDataSchema,
 } from '../src/routes/core/scan-contract.js';
+import {
+  SCAN_LIMIT_REFERENCE,
+  SCAN_OPENAPI_CANCELLATION_SEMANTICS,
+  SCAN_OPENAPI_ERROR_RESPONSES,
+  SCAN_OPENAPI_OPERATION_SUMMARY,
+  SCAN_OPENAPI_REQUEST_EXAMPLES,
+  SCAN_OPENAPI_SCOPE_REQUIREMENTS,
+} from '../src/routes/core/scan-doc-contract.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -17,7 +25,7 @@ const args = new Set(process.argv.slice(2));
 const checkOnly = args.has('--check');
 
 const generatedBlocks = buildGeneratedBlocks();
-const generatedBlock = generatedBlocks.join('\n\n');
+const generatedBlock = generatedBlocks.map((item) => item.block).join('\n\n');
 
 if (!checkOnly) {
   fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
@@ -41,7 +49,7 @@ if (checkOnly) {
     process.exit(1);
   }
 
-  console.log(`[scan-openapi] OpenAPI component blocks are up to date.`);
+  console.log('[scan-openapi] OpenAPI component blocks are up to date.');
   process.exit(0);
 }
 
@@ -49,7 +57,54 @@ fs.writeFileSync(openApiPath, syncedOpenApi, 'utf8');
 console.log(`[scan-openapi] Wrote ${path.relative(repoRoot, generatedPath)}`);
 console.log(`[scan-openapi] Synced ${path.relative(repoRoot, openApiPath)}`);
 
-function buildGeneratedBlocks(): [string, string] {
+type GeneratedBlock = {
+  block: string;
+  name: 'ScanPath' | 'ScanRequest' | 'ScanResponse';
+};
+
+function buildGeneratedBlocks(): GeneratedBlock[] {
+  const scanPath = {
+    '/scan': {
+      post: {
+        summary: SCAN_OPENAPI_OPERATION_SUMMARY,
+        description: buildScanPathDescription(),
+        tags: ['Scan'],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/ScanRequest',
+              },
+              examples: SCAN_OPENAPI_REQUEST_EXAMPLES,
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: '扫描成功',
+            headers: {
+              'X-Request-ID': {
+                description: '请求追踪 ID',
+                schema: {
+                  type: 'string',
+                },
+              },
+            },
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ScanResponse',
+                },
+              },
+            },
+          },
+          ...buildScanErrorResponses(),
+        },
+      },
+    },
+  };
+
   const scanRequest = {
     ScanRequest: {
       type: 'object',
@@ -124,12 +179,34 @@ function buildGeneratedBlocks(): [string, string] {
   };
 
   return [
+    renderPathBlock('ScanPath', scanPath),
     renderSchemaBlock('ScanRequest', scanRequest),
     renderSchemaBlock('ScanResponse', scanResponse),
   ];
 }
 
-function renderSchemaBlock(name: 'ScanRequest' | 'ScanResponse', schema: object): string {
+function renderPathBlock(name: 'ScanPath', schema: object): GeneratedBlock {
+  const yamlBody = YAML.stringify(schema, {
+    indent: 2,
+    lineWidth: 0,
+  }).trimEnd();
+
+  const indentedBody = yamlBody
+    .split('\n')
+    .map((line) => `  ${line}`)
+    .join('\n');
+
+  return {
+    name,
+    block: [
+      `  # @generated scan-contract:${name}:begin`,
+      indentedBody,
+      `  # @generated scan-contract:${name}:end`,
+    ].join('\n'),
+  };
+}
+
+function renderSchemaBlock(name: 'ScanRequest' | 'ScanResponse', schema: object): GeneratedBlock {
   const yamlBody = YAML.stringify(schema, {
     indent: 2,
     lineWidth: 0,
@@ -140,25 +217,23 @@ function renderSchemaBlock(name: 'ScanRequest' | 'ScanResponse', schema: object)
     .map((line) => `    ${line}`)
     .join('\n');
 
-  return [
-    `    # @generated scan-contract:${name}:begin`,
-    indentedBody,
-    `    # @generated scan-contract:${name}:end`,
-  ].join('\n');
+  return {
+    name,
+    block: [
+      `    # @generated scan-contract:${name}:begin`,
+      indentedBody,
+      `    # @generated scan-contract:${name}:end`,
+    ].join('\n'),
+  };
 }
 
 function replaceGeneratedBlocks(source: string): string {
   let next = source;
 
-  for (const block of generatedBlocks) {
-    const firstLine = block.split('\n')[1]?.trim();
-    if (!firstLine) {
-      continue;
-    }
-
-    const schemaName = firstLine.replace(/:$/, '');
-    const beginMarker = `    # @generated scan-contract:${schemaName}:begin`;
-    const endMarker = `    # @generated scan-contract:${schemaName}:end`;
+  for (const { name, block } of generatedBlocks) {
+    const markerIndent = name === 'ScanPath' ? '  ' : '    ';
+    const beginMarker = `${markerIndent}# @generated scan-contract:${name}:begin`;
+    const endMarker = `${markerIndent}# @generated scan-contract:${name}:end`;
     const markerPattern = new RegExp(
       `${escapeRegExp(beginMarker)}[\\s\\S]*${escapeRegExp(endMarker)}`,
       'm'
@@ -166,23 +241,63 @@ function replaceGeneratedBlocks(source: string): string {
 
     if (markerPattern.test(next)) {
       next = next.replace(markerPattern, block);
-      next = removeLegacyDuplicateBlock(next, schemaName);
+      next = removeLegacyDuplicateBlock(next, name);
       continue;
     }
 
-    const fallbackPattern = schemaName === 'ScanRequest'
-      ? /^    ScanRequest:\n[\s\S]*?(?=^    ScanResponse:)/m
-      : /^    ScanResponse:\n[\s\S]*?(?=^    Finding:)/m;
+    const fallbackPattern = name === 'ScanPath'
+      ? /^  \/scan:\n[\s\S]*?(?=^  \/discover\/symbols:)/m
+      : name === 'ScanRequest'
+        ? /^    ScanRequest:\n[\s\S]*?(?=^    ScanResponse:)/m
+        : /^    ScanResponse:\n[\s\S]*?(?=^    Finding:)/m;
 
     if (!fallbackPattern.test(next)) {
-      throw new Error(`Unable to locate ${schemaName} block in ${openApiPath}`);
+      throw new Error(`Unable to locate ${name} block in ${openApiPath}`);
     }
 
     next = next.replace(fallbackPattern, `${block}\n`);
-    next = removeLegacyDuplicateBlock(next, schemaName);
+    next = removeLegacyDuplicateBlock(next, name);
   }
 
   return next;
+}
+
+function buildScanPathDescription(): string {
+  const limitMap = new Map(SCAN_LIMIT_REFERENCE.map((entry) => [entry.name, entry.value]));
+
+  return [
+    '同步扫描代码库，返回发现的 issues。',
+    '',
+    '## 限制',
+    `- 最大文件数：${limitMap.get('Max Files (Sync)')}（可配置）`,
+    `- 最大响应大小：${limitMap.get('Response Size')}（可配置）`,
+    `- 最大执行时间：${limitMap.get('Timeout')}（可配置）`,
+    '',
+    '## 取消语义',
+    ...SCAN_OPENAPI_CANCELLATION_SEMANTICS.map((item) => `- ${item}`),
+    '',
+    '## Scope 要求',
+    ...SCAN_OPENAPI_SCOPE_REQUIREMENTS.map((item) => `- ${item}`),
+  ].join('\n');
+}
+
+function buildScanErrorResponses(): Record<string, object> {
+  return Object.fromEntries(
+    Object.entries(SCAN_OPENAPI_ERROR_RESPONSES).map(([status, config]) => [
+      status,
+      {
+        description: config.description,
+        content: {
+          'application/json': {
+            schema: {
+              $ref: '#/components/schemas/ErrorResponse',
+            },
+            examples: config.examples,
+          },
+        },
+      },
+    ])
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -210,16 +325,21 @@ function withPropertyDescriptions<T extends Record<string, any>>(properties: T):
   ) as T;
 }
 
-function removeLegacyDuplicateBlock(source: string, schemaName: string): string {
-  const cleanupPattern = schemaName === 'ScanRequest'
+function removeLegacyDuplicateBlock(source: string, name: GeneratedBlock['name']): string {
+  const cleanupPattern = name === 'ScanPath'
     ? new RegExp(
-        `(\\n\\s*# @generated scan-contract:${schemaName}:end\\n)(\\s*${schemaName}:\\n[\\s\\S]*?)(?=^\\s*# @generated scan-contract:ScanResponse:begin|^\\s*ScanResponse:)`,
+        `(\\n\\s*# @generated scan-contract:${name}:end\\n)(\\s*\\/scan:\\n[\\s\\S]*?)(?=^\\s*\\/discover\\/symbols:)`,
         'm'
       )
-    : new RegExp(
-        `(\\n\\s*# @generated scan-contract:${schemaName}:end\\n)(\\s*${schemaName}:\\n[\\s\\S]*?)(?=^\\s*Finding:)`,
-        'm'
-      );
+    : name === 'ScanRequest'
+      ? new RegExp(
+          `(\\n\\s*# @generated scan-contract:${name}:end\\n)(\\s*ScanRequest:\\n[\\s\\S]*?)(?=^\\s*# @generated scan-contract:ScanResponse:begin|^\\s*ScanResponse:)`,
+          'm'
+        )
+      : new RegExp(
+          `(\\n\\s*# @generated scan-contract:${name}:end\\n)(\\s*ScanResponse:\\n[\\s\\S]*?)(?=^\\s*Finding:)`,
+          'm'
+        );
 
   return source.replace(cleanupPattern, '$1');
 }

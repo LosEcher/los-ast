@@ -1,6 +1,6 @@
 # los-ast Active TODO
 
-更新时间：2026-03-12
+更新时间：2026-03-13
 
 本文件是当前有效的执行清单，用于替代仓库内分散的阶段性 TODO/复盘文档。
 
@@ -35,18 +35,23 @@
 - [x] `/scan` 已完成第七阶段运行约束收口：ErrorCategory、错误码表、限制说明已切到生成片段，并修正 OpenAPI 中的 `401/408/413` 漂移。
 - [x] `/scan` 已完成第八阶段治理范围与 CLI/API parity 收口：Governance Scope Note 和 CLI/API Parity 已切到生成片段并有契约测试守护。
 - [x] `/scan` 已完成第九阶段稳定性说明收口：Version Stability Guarantee、Deterministic Output 与 Testing 已切到生成片段并有契约测试守护。
-- [ ] `/scan` 文档、OpenAPI 与共享类型仍未完全从同一生成源产出；当前已进入“代码真源 + 参考产物 + OpenAPI/API_CONTRACT 片段同步”的半自动阶段。
-- [~] `export-artifacts.mjs` 与 `evidence/service.ts` 大文件热点已开始拆分：
+- [x] `/scan` 文档、OpenAPI 与共享类型已继续收口到同一参考源：
+  - OpenAPI `/scan` operation 的 `description`、request examples 与 error examples 已改为从 `scan-doc-contract` 生成。
+  - API_CONTRACT 的 Example Request 已复用同一请求示例真源，避免 OpenAPI/API_CONTRACT 示例继续双写。
+- [x] `export-artifacts.mjs` 与 `evidence/service.ts` 大文件热点已继续拆分：
   - `evidence/service.ts` 已抽出 `builders.ts`，把 bundle/rewrite/explain 的纯构造逻辑移出 service orchestration。
   - `cli/index.mjs` 与 `export-artifacts.mjs` 已抽出共享 `workspace-options.mjs`，先收口重复的 workspace/rules 解析。
   - `export-artifacts.mjs` 已继续抽出 `route-guard-analysis.mjs`，把 control-flow guard / route activation 的纯分析逻辑从 CLI shell 中分离。
-  - 下一步优先考虑继续拆 `export-artifacts.mjs` 的 `source-structure-extractor` 或 `route-topology-and-runtime`。
+  - `export-artifacts.mjs` 已继续抽出 `source-structure-extractor.mjs`，把 source facts / route topology 的静态提取逻辑移出 CLI shell。
 
 0. 审查收口（2026-03-13）
 - [x] 统一仓库根目录与 `packages/api` 的 `.env.example` 默认值与变量集，避免 `DEV_ALLOW_UNVERIFIED_IDENTITY` 等开发安全基线漂移。
 - [x] 刷新 `hub-lite route evidence` 阶段状态文档中的测试文件数、测试数与复核日期，避免“仓库已变更但阶段基线仍停留在旧值”。
 - [x] 将 `evidence` 代码统计从硬编码占位值改为基于项目适配器 workspace 的真实统计，并补回归测试覆盖。
 - [x] `README` / `docs` 已补“新读者阅读顺序 + 稳定契约入口”收口，先把首次阅读路径压缩到 `ACTIVE_TODO -> README 稳定面/预览面 -> architecture/API_CONTRACT`。
+- [x] `/scan` 的 OpenAPI operation 文案、request examples 与 error examples 已切到 `scan-doc-contract` 共享真源，并由契约测试守护。
+- [x] `export-artifacts.mjs` 已抽出 `source-structure-extractor.mjs`，把 source facts / route topology 静态分析从 CLI orchestration 中分离。
+- [x] `route_binds` 的边界措辞已在 README、执行清单、集成说明和导出 summary 中统一为“minimal Fastify literal-only runtime-like bind evidence, not full route truth”。
 
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。

@@ -101,7 +101,10 @@ The following `source` fields are also part of the stable contract:
 - structure inventory
 - hotspot ranking
 - boundary evidence
-- minimal Fastify route declaration, mount, bind, runtime, and delta layering
+- minimal Fastify route declaration, mount, runtime, and delta layering
+- minimal Fastify literal-only runtime-like bind evidence
+
+`route_binds` currently provides minimal Fastify literal-only runtime-like bind evidence; it is not full route truth.
 
 `structure-map.json` is not currently promised as:
 

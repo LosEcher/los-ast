@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { buildOutputSchema } from '@los-ast/ai';
 import { DEFAULT_PARSE_CACHE_MAX_ENTRIES, PARSE_FAILURE_SAMPLE_LIMIT } from '@los-ast/core';
+import { SCAN_OPENAPI_REQUEST_EXAMPLES } from '../src/routes/core/scan-doc-contract.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -55,20 +56,7 @@ function buildGeneratedExamples(): string {
     findingExample[field] = exampleFindingValue(field);
   }
 
-  const exampleRequest = {
-    scope: {
-      tenant_id: 'org_123',
-      project_id: 'myapp',
-      actor_id: 'user_456',
-      mode: 'service',
-    },
-    project: 'myapp',
-    rootDir: '/workspace/myapp',
-    include: ['src/**/*.ts'],
-    ignore: ['**/*.spec.ts', 'node_modules/**'],
-    includeStats: true,
-    deterministic: true,
-  };
+  const exampleRequest = SCAN_OPENAPI_REQUEST_EXAMPLES.withOptions.value;
 
   const exampleResponse = {
     data: {
