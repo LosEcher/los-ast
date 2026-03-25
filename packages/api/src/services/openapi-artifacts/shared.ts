@@ -301,6 +301,9 @@ function resolveObjectSchema(
     const mergedProperties: Record<string, unknown> = {};
     const mergedRequired = new Set<string>();
     let mergedAdditionalProperties: unknown = undefined;
+    let inheritedDiscriminator: unknown = undefined;
+    let inheritedOneOf: unknown[] | undefined = undefined;
+    let inheritedAnyOf: unknown[] | undefined = undefined;
 
     for (const subSchema of allOf) {
       const resolvedSubSchema = resolveObjectSchema(document, getSchemaObject(subSchema));
@@ -322,6 +325,18 @@ function resolveObjectSchema(
 
       if (typeof mergedAdditionalProperties === 'undefined' && typeof resolvedSubSchema.additionalProperties !== 'undefined') {
         mergedAdditionalProperties = resolvedSubSchema.additionalProperties;
+      }
+
+      if (typeof inheritedDiscriminator === 'undefined' && typeof resolvedSubSchema.discriminator !== 'undefined') {
+        inheritedDiscriminator = resolvedSubSchema.discriminator;
+      }
+
+      if (!inheritedOneOf && Array.isArray(resolvedSubSchema.oneOf)) {
+        inheritedOneOf = resolvedSubSchema.oneOf;
+      }
+
+      if (!inheritedAnyOf && Array.isArray(resolvedSubSchema.anyOf)) {
+        inheritedAnyOf = resolvedSubSchema.anyOf;
       }
     }
 
@@ -346,6 +361,9 @@ function resolveObjectSchema(
       type: resolved.type || 'object',
       properties: mergedProperties,
       additionalProperties: mergedAdditionalProperties,
+      discriminator: typeof resolved.discriminator !== 'undefined' ? resolved.discriminator : inheritedDiscriminator,
+      oneOf: Array.isArray(resolved.oneOf) ? resolved.oneOf : inheritedOneOf,
+      anyOf: Array.isArray(resolved.anyOf) ? resolved.anyOf : inheritedAnyOf,
       required: Array.from(mergedRequired),
     };
   }

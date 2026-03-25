@@ -10,37 +10,45 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
+              allOf:
+                - oneOf:
+                    - type: object
+                      properties:
+                        kind: { type: string }
+                        type: { type: string }
+                        id: { type: string }
+                    - type: object
+                      properties:
+                        kind: { type: string }
+                        type: { type: string }
+                        id: { type: string }
+                  discriminator:
+                    propertyName: type
+                    mapping:
+                      admin: '#/components/schemas/AdminUser'
                 - type: object
                   properties:
-                    kind: { type: string }
-                    type: { type: string }
-                    id: { type: string }
-                - type: object
-                  properties:
-                    kind: { type: string }
-                    type: { type: string }
-                    id: { type: string }
-              discriminator:
-                propertyName: type
-                mapping:
-                  admin: '#/components/schemas/AdminUser'
+                    traceId: { type: string }
       responses:
         '200':
           description: ok
           content:
             application/json:
               schema:
-                oneOf:
+                allOf:
+                  - oneOf:
+                      - type: object
+                        properties:
+                          status: { type: string }
+                          id: { type: string }
+                      - type: object
+                        properties:
+                          status: { type: string }
+                          id: { type: string }
+                    discriminator:
+                      propertyName: status
+                      mapping:
+                        active: '#/components/schemas/ActiveUser'
                   - type: object
                     properties:
-                      status: { type: string }
-                      id: { type: string }
-                  - type: object
-                    properties:
-                      status: { type: string }
-                      id: { type: string }
-                discriminator:
-                  propertyName: status
-                  mapping:
-                    active: '#/components/schemas/ActiveUser'
+                      traceId: { type: string }

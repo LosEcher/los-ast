@@ -10,39 +10,47 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
+              allOf:
+                - oneOf:
+                    - type: object
+                      properties:
+                        kind: { type: string }
+                        type: { type: string }
+                        id: { type: string }
+                    - type: object
+                      properties:
+                        kind: { type: string }
+                        type: { type: string }
+                        id: { type: string }
+                  discriminator:
+                    propertyName: kind
+                    mapping:
+                      admin: '#/components/schemas/AdminUser'
+                      guest: '#/components/schemas/GuestUser'
                 - type: object
                   properties:
-                    kind: { type: string }
-                    type: { type: string }
-                    id: { type: string }
-                - type: object
-                  properties:
-                    kind: { type: string }
-                    type: { type: string }
-                    id: { type: string }
-              discriminator:
-                propertyName: kind
-                mapping:
-                  admin: '#/components/schemas/AdminUser'
-                  guest: '#/components/schemas/GuestUser'
+                    traceId: { type: string }
       responses:
         '200':
           description: ok
           content:
             application/json:
               schema:
-                oneOf:
+                allOf:
+                  - oneOf:
+                      - type: object
+                        properties:
+                          status: { type: string }
+                          id: { type: string }
+                      - type: object
+                        properties:
+                          status: { type: string }
+                          id: { type: string }
+                    discriminator:
+                      propertyName: status
+                      mapping:
+                        active: '#/components/schemas/ActiveUser'
+                        disabled: '#/components/schemas/DisabledUser'
                   - type: object
                     properties:
-                      status: { type: string }
-                      id: { type: string }
-                  - type: object
-                    properties:
-                      status: { type: string }
-                      id: { type: string }
-                discriminator:
-                  propertyName: status
-                  mapping:
-                    active: '#/components/schemas/ActiveUser'
-                    disabled: '#/components/schemas/DisabledUser'
+                      traceId: { type: string }

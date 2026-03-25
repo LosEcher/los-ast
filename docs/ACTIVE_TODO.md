@@ -129,6 +129,7 @@
 - 已补第一轮字段约束语义 comparison：request 侧已识别常见校验收紧，response 侧已识别常见保证变弱，当前覆盖 `min/maxLength`、`minimum/maximum`、`min/maxItems`、`min/maxProperties`、`uniqueItems`、`pattern`、`format`。
 - 已补对应 OpenAPI value-semantics golden fixture，固定输出顺序与规则面。
 - 已补最小 `discriminator` comparison：`propertyName` 变化与 mapping 值删除。
+- 已补 `allOf` wrapper 下的 union/discriminator 继承识别，现有 discriminator comparison 可覆盖 “base envelope + union payload” 组合场景。
 - 已补 `discriminator` golden fixture 与综合 OpenAPI comparison fixture。
 - 已显式固定同位置多来源 finding 的 deterministic 排序为 `ast -> contract -> schema`。
 - 已同步 core/evidence 输出类型中的 `findingSource / governanceDomain / impactHint / diff / applied` 字段声明。

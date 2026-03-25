@@ -184,4 +184,63 @@ describe('openapi artifacts shared helpers', () => {
       },
     });
   });
+
+  it('preserves allOf-wrapped union discriminators and common fields', () => {
+    const parsed = parseDocument({
+      source: 'openapi-inline',
+      file: '/tmp/openapi.yaml',
+      format: 'yaml',
+      content: [
+        'openapi: 3.0.3',
+        'paths: {}',
+      ].join('\n'),
+    }, 0);
+
+    const shape = getComparableObjectShape(parsed, {
+      allOf: [
+        {
+          oneOf: [
+            {
+              type: 'object',
+              required: ['kind', 'id'],
+              properties: {
+                kind: { type: 'string' },
+                id: { type: 'string' },
+                email: { type: 'string' },
+              },
+            },
+            {
+              type: 'object',
+              required: ['kind', 'id'],
+              properties: {
+                kind: { type: 'string' },
+                id: { type: 'string' },
+                phone: { type: 'string' },
+              },
+            },
+          ],
+          discriminator: {
+            propertyName: 'kind',
+            mapping: {
+              admin: '#/components/schemas/AdminUser',
+              guest: '#/components/schemas/GuestUser',
+            },
+          },
+        },
+        {
+          type: 'object',
+          properties: {
+            traceId: { type: 'string' },
+          },
+        },
+      ],
+    });
+
+    expect(shape.discriminators.get('')).toEqual({
+      propertyName: 'kind',
+      mappingKeys: ['admin', 'guest'],
+    });
+    expect(Array.from(shape.properties.keys()).sort()).toEqual(['id', 'kind', 'traceId']);
+    expect(Array.from(shape.required).sort()).toEqual(['id', 'kind']);
+  });
 });
