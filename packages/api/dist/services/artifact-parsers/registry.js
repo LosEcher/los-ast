@@ -84,6 +84,7 @@ export const artifactParserProfiles = [
                 'sequence-backed increment default equivalence',
                 'postgres serial/bigserial alias equivalence',
                 'postgres timestamptz/timetz alias equivalence',
+                'postgres int8/float8 alias equivalence',
             ],
             limitations: [
                 'heuristic parsing only',

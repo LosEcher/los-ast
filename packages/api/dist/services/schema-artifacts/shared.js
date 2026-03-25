@@ -20,6 +20,9 @@ function normalizeType(value) {
 }
 function normalizeSqlType(value) {
     const normalized = normalizeType(value);
+    if (normalized === 'double precision') {
+        return 'double precision';
+    }
     const timestampWithTimeZoneMatch = normalized.match(/^timestamp(?:\(([^)]*)\))?\s+with\s+time\s+zone$/);
     if (timestampWithTimeZoneMatch) {
         return timestampWithTimeZoneMatch[1]
@@ -64,6 +67,9 @@ function normalizeSqlType(value) {
     if (normalized === 'int' || normalized === 'int4') {
         return 'integer';
     }
+    if (normalized === 'int8') {
+        return 'bigint';
+    }
     if (normalized === 'bool') {
         return 'boolean';
     }
@@ -75,6 +81,9 @@ function normalizeSqlType(value) {
     }
     if (normalized === 'bigserial') {
         return 'bigint';
+    }
+    if (normalized === 'float8') {
+        return 'double precision';
     }
     return normalized;
 }
@@ -118,7 +127,7 @@ function extractSqlTypeToken(definition) {
         const match = trimmed.match(/^(enum\s*\([^)]*\))/i);
         return match ? match[1] : undefined;
     }
-    const compoundMatch = trimmed.match(/^(timestamp(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|time(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone)/i);
+    const compoundMatch = trimmed.match(/^(timestamp(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|time(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|double\s+precision)/i);
     if (compoundMatch) {
         return compoundMatch[1];
     }

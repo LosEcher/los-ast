@@ -502,6 +502,34 @@ describe('artifact parsers', () => {
     expect(parsed.schemaArtifacts).toHaveLength(0);
   });
 
+  it('should treat conservative postgres numeric aliases as compatible in schemaComparisons', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-sql-numeric-alias-equivalence',
+          file: '/tmp/schema.sql',
+          format: 'sql',
+          baseline: [
+            'CREATE TABLE metrics (',
+            '  aggregate_id INT8 NOT NULL,',
+            '  average_score FLOAT8,',
+            '  percentile DOUBLE PRECISION',
+            ');',
+          ].join('\n'),
+          current: [
+            'CREATE TABLE metrics (',
+            '  aggregate_id BIGINT NOT NULL,',
+            '  average_score DOUBLE PRECISION,',
+            '  percentile DOUBLE PRECISION',
+            ');',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts).toHaveLength(0);
+  });
+
   it('should bind schema findings to the correct entity without duplicating multi-entity documents', () => {
     const parsed = parseArtifactInputs({
       schemaDocuments: [

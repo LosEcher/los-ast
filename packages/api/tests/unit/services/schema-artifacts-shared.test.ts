@@ -86,6 +86,20 @@ describe('schema artifacts shared helpers', () => {
     expect(entity.fields.get('quiet_at')?.type).toBe('time with time zone');
   });
 
+  it('normalizes conservative postgres numeric aliases', () => {
+    const [entity] = parseSqlEntities([
+      'CREATE TABLE metrics (',
+      '  aggregate_id INT8 NOT NULL,',
+      '  average_score FLOAT8,',
+      '  percentile DOUBLE PRECISION',
+      ');',
+    ].join('\n'));
+
+    expect(entity.fields.get('aggregate_id')?.type).toBe('bigint');
+    expect(entity.fields.get('average_score')?.type).toBe('double precision');
+    expect(entity.fields.get('percentile')?.type).toBe('double precision');
+  });
+
   it('normalizes Prisma generated defaults and updatedAt fields', () => {
     const [entity] = parsePrismaEntities([
       'model User {',
