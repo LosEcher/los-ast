@@ -2248,6 +2248,43 @@ describe('ScanService', () => {
       expect(result.findings[0].severity).toBe('warning');
     });
 
+    it('should grade nullability loosening as warning in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-nullability-loosen',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id String @id',
+              '  locale String',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              '  id String @id',
+              '  locale String?',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/prisma-nullability-loosen',
+      ]);
+      expect(result.findings[0].severity).toBe('warning');
+    });
+
     it('should flag added required schema fields without defaults as breaking', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

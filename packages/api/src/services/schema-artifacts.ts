@@ -412,6 +412,17 @@ function compareEntities(
             'medium',
           ));
         }
+      } else if (!baselineField.nullable && currentField.nullable) {
+        artifacts.push(buildComparisonFinding(
+          sourceLabel,
+          fileLabel,
+          line,
+          `schema/${prefix}-nullability-loosen`,
+          'warning',
+          `Field ${baselineEntity.name}.${fieldName} changed from required to nullable`,
+          `${baselineEntity.name}.${fieldName}: required -> nullable`,
+          'medium',
+        ));
       }
 
       if (baselineField.unique && !currentField.unique) {

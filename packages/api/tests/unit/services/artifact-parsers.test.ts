@@ -307,6 +307,36 @@ describe('artifact parsers', () => {
     expect(parsed.schemaArtifacts[0].excerpt).toContain('User.locale');
   });
 
+  it('should grade nullability loosening as warning in schemaComparisons', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-nullability-loosen',
+          file: '/tmp/schema.prisma',
+          format: 'prisma',
+          baseline: [
+            'model User {',
+            '  id String @id',
+            '  locale String',
+            '}',
+          ].join('\n'),
+          current: [
+            'model User {',
+            '  id String @id',
+            '  locale String?',
+            '}',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts.map((item) => item.ruleId)).toEqual([
+      'schema/prisma-nullability-loosen',
+    ]);
+    expect(parsed.schemaArtifacts[0].severity).toBe('warning');
+    expect(parsed.schemaArtifacts[0].excerpt).toContain('User.locale');
+  });
+
   it('should flag newly added required schema fields without defaults as breaking', () => {
     const parsed = parseArtifactInputs({
       schemaComparisons: [

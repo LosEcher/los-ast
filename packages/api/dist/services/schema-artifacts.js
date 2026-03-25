@@ -264,6 +264,9 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
                     artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-nullability-tighten-with-default`, 'warning', `Field ${baselineEntity.name}.${fieldName} changed from nullable to required with default ${currentField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: nullable -> required with default`, 'medium'));
                 }
             }
+            else if (!baselineField.nullable && currentField.nullable) {
+                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-nullability-loosen`, 'warning', `Field ${baselineEntity.name}.${fieldName} changed from required to nullable`, `${baselineEntity.name}.${fieldName}: required -> nullable`, 'medium'));
+            }
             if (baselineField.unique && !currentField.unique) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-unique-removed`, 'info', `Field ${baselineEntity.name}.${fieldName} removed unique constraint`, `${baselineEntity.name}.${fieldName}: unique removed`, 'low'));
             }

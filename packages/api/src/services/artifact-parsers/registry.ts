@@ -111,6 +111,7 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'breaking type change',
         'breaking nullability tighten',
         'graded nullability tighten with default',
+        'nullability loosen warning',
         'breaking enum value drop',
         'default compatibility drift',
         'common sql type synonym equivalence',
