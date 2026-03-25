@@ -1,0 +1,301 @@
+import crypto from 'node:crypto';
+
+import type {
+  ContractArtifactFindingInput,
+  Finding,
+  FindingSource,
+  OpenApiComparisonInput,
+  OpenApiDocumentInput,
+  ScanResult,
+  SchemaArtifactFindingInput,
+  SchemaComparisonInput,
+  SchemaDocumentInput,
+} from '@los-ast/shared/types';
+
+export interface ContractFindingRange {
+  start: { line: number; column: number; index: number };
+  end: { line: number; column: number; index: number };
+}
+
+export interface ScanArtifactOptions {
+  project: string;
+  contractArtifacts?: ContractArtifactFindingInput[];
+  schemaArtifacts?: SchemaArtifactFindingInput[];
+  deterministic?: boolean;
+  defaultFindingSource: FindingSource;
+}
+
+export interface NativeArtifactInputOptions {
+  openApiDocuments?: OpenApiDocumentInput[];
+  openApiComparisons?: OpenApiComparisonInput[];
+  schemaDocuments?: SchemaDocumentInput[];
+  schemaComparisons?: SchemaComparisonInput[];
+  contractArtifacts?: ContractArtifactFindingInput[];
+  schemaArtifacts?: SchemaArtifactFindingInput[];
+}
+
+export interface CodeScanOptions {
+  rootDir?: string;
+  include?: string[];
+  ignore?: string[];
+  rules?: string[];
+  includeStats?: boolean;
+}
+
+export function toIsoNowForContract(deterministic = false) {
+  if (deterministic) {
+    return '1970-01-01T00:00:00.000Z';
+  }
+  return new Date().toISOString();
+}
+
+export function toContractFindingFingerprint(
+  input: {
+    project: string;
+    file: string;
+    ruleId: string;
+    range: ContractFindingRange;
+    message: string;
+  },
+  deterministic?: boolean
+) {
+  const base = [
+    input.project,
+    input.ruleId,
+    input.file,
+    `${input.range.start.line}-${input.range.start.column}-${input.range.start.index}`,
+    `${input.range.end.line}-${input.range.end.column}-${input.range.end.index}`,
+    input.message,
+  ].join('\n');
+
+  const hash = crypto.createHash('sha256').update(base).digest('hex');
+  return deterministic ? hash.slice(0, 32) : hash;
+}
+
+export function normalizeRange(input: ContractArtifactFindingInput): ContractFindingRange {
+  if (input.range?.start && input.range.end) {
+    return {
+      start: {
+        line: input.range.start.line,
+        column: input.range.start.column,
+        index: input.range.start.index,
+      },
+      end: {
+        line: input.range.end.line,
+        column: input.range.end.column,
+        index: input.range.end.index,
+      },
+    };
+  }
+
+  const line = typeof input.line === 'number' && Number.isFinite(input.line) ? Math.max(1, Math.floor(input.line)) : 1;
+  const column = typeof input.column === 'number' && Number.isFinite(input.column) ? Math.max(0, Math.floor(input.column)) : 0;
+  const startIndex = typeof input.startIndex === 'number' && Number.isFinite(input.startIndex) ? Math.max(0, Math.floor(input.startIndex)) : 0;
+  const endIndexRaw = typeof input.endIndex === 'number' && Number.isFinite(input.endIndex) ? Math.max(startIndex, Math.floor(input.endIndex)) : startIndex + 1;
+
+  return {
+    start: {
+      line,
+      column,
+      index: startIndex,
+    },
+    end: {
+      line,
+      column: Math.max(column + 1, column),
+      index: endIndexRaw,
+    },
+  };
+}
+
+export function normalizeGovernanceDomain(value: unknown): string[] | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const domains = value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item) => item.length > 0);
+    return domains.length > 0 ? domains : undefined;
+  }
+
+  return undefined;
+}
+
+export function deterministicSortFindings(a: Finding, b: Finding) {
+  if (a.file !== b.file) return a.file.localeCompare(b.file);
+  if (a.range.start.line !== b.range.start.line) return a.range.start.line - b.range.start.line;
+  if (a.range.start.column !== b.range.start.column) return a.range.start.column - b.range.start.column;
+  if (a.range.start.index !== b.range.start.index) return a.range.start.index - b.range.start.index;
+  const sourceOrder = { ast: 0, contract: 1, schema: 2 } as const;
+  const aSource = sourceOrder[a.findingSource || 'ast'];
+  const bSource = sourceOrder[b.findingSource || 'ast'];
+  if (aSource !== bSource) return aSource - bSource;
+  if (a.ruleId !== b.ruleId) return a.ruleId.localeCompare(b.ruleId);
+  if (a.fingerprint !== b.fingerprint) return a.fingerprint.localeCompare(b.fingerprint);
+  return 0;
+}
+
+export function hasScannableRootDir(rootDir?: string): rootDir is string {
+  return typeof rootDir === 'string' && rootDir.trim().length > 0;
+}
+
+export function hasNativeArtifactInputs(options: NativeArtifactInputOptions): boolean {
+  return [
+    options.openApiDocuments,
+    options.openApiComparisons,
+    options.schemaDocuments,
+    options.schemaComparisons,
+    options.contractArtifacts,
+    options.schemaArtifacts,
+  ].some((items) => Array.isArray(items) && items.length > 0);
+}
+
+export function countNativeInputs(options: NativeArtifactInputOptions) {
+  return {
+    openApiDocuments: Array.isArray(options.openApiDocuments) ? options.openApiDocuments.length : 0,
+    openApiComparisons: Array.isArray(options.openApiComparisons) ? options.openApiComparisons.length : 0,
+    schemaDocuments: Array.isArray(options.schemaDocuments) ? options.schemaDocuments.length : 0,
+    schemaComparisons: Array.isArray(options.schemaComparisons) ? options.schemaComparisons.length : 0,
+    contractArtifacts: Array.isArray(options.contractArtifacts) ? options.contractArtifacts.length : 0,
+    schemaArtifacts: Array.isArray(options.schemaArtifacts) ? options.schemaArtifacts.length : 0,
+  };
+}
+
+export function requiresCodeScan(options: CodeScanOptions): boolean {
+  return typeof options.rootDir !== 'undefined'
+    || (Array.isArray(options.include) && options.include.length > 0)
+    || (Array.isArray(options.ignore) && options.ignore.length > 0)
+    || (Array.isArray(options.rules) && options.rules.length > 0);
+}
+
+export function buildFindingsFromArtifacts({
+  project,
+  contractArtifacts,
+  schemaArtifacts,
+  deterministic = false,
+  defaultFindingSource,
+}: ScanArtifactOptions): Finding[] {
+  const artifacts = defaultFindingSource === 'schema'
+    ? schemaArtifacts
+    : contractArtifacts;
+
+  if (!Array.isArray(artifacts) || artifacts.length === 0) {
+    return [];
+  }
+
+  return artifacts.map((artifact, index) => {
+    const ruleId =
+      typeof artifact.ruleId === 'string' && artifact.ruleId.length > 0
+        ? artifact.ruleId
+        : `${defaultFindingSource}-${index}`;
+    const message = artifact.message || 'Contract finding';
+    const severity: Finding['severity'] = artifact.severity || 'warning';
+    const range = normalizeRange(artifact);
+    const file = artifact.file || defaultFindingSource;
+    const findingSource: FindingSource = defaultFindingSource;
+    const impactHint: Finding['impactHint'] = artifact.impactHint || 'medium';
+
+    return {
+      tool: 'los-ast',
+      version: 0,
+      timestamp: toIsoNowForContract(deterministic),
+      project,
+      ruleFile: artifact.source || defaultFindingSource,
+      ruleId,
+      findingSource,
+      governanceDomain: normalizeGovernanceDomain(artifact.governanceDomain),
+      impactHint,
+      severity,
+      message,
+      file,
+      language: artifact.language || defaultFindingSource,
+      range,
+      excerpt: artifact.excerpt || message,
+      hasFix: false,
+      proposedReplacement: null,
+      fingerprint: toContractFindingFingerprint({
+        project,
+        file,
+        ruleId,
+        range,
+        message,
+      }, deterministic),
+    };
+  });
+}
+
+export function resolveScanMode({
+  shouldRunAstScan,
+  hasNativeArtifacts,
+}: {
+  shouldRunAstScan: boolean;
+  hasNativeArtifacts: boolean;
+}): 'hybrid' | 'ast' | 'native_only' {
+  if (shouldRunAstScan && hasNativeArtifacts) {
+    return 'hybrid';
+  }
+  if (shouldRunAstScan) {
+    return 'ast';
+  }
+  return 'native_only';
+}
+
+export function buildScanTelemetry({
+  startedAt,
+  shouldRunAstScan,
+  hasNativeArtifacts,
+  explicitRulePatterns,
+  loadedRules,
+  estimatedFiles,
+  nativeInputCounts,
+}: {
+  startedAt: number;
+  shouldRunAstScan: boolean;
+  hasNativeArtifacts: boolean;
+  explicitRulePatterns: number;
+  loadedRules: number;
+  estimatedFiles?: number;
+  nativeInputCounts: ReturnType<typeof countNativeInputs>;
+}) {
+  return {
+    durationMs: Date.now() - startedAt,
+    mode: resolveScanMode({ shouldRunAstScan, hasNativeArtifacts }),
+    explicitRulePatterns,
+    loadedRules,
+    ...(typeof estimatedFiles === 'number' ? { estimatedFiles } : {}),
+    nativeInputs: nativeInputCounts,
+  };
+}
+
+export function mergeScanResultFindings({
+  result,
+  contractFindings,
+  schemaFindings,
+  deterministic,
+}: {
+  result: ScanResult;
+  contractFindings: Finding[];
+  schemaFindings: Finding[];
+  deterministic?: boolean;
+}): ScanResult {
+  const mergedFindings = [
+    ...(result.findings as Finding[]),
+    ...contractFindings,
+    ...schemaFindings,
+  ];
+
+  if (deterministic) {
+    mergedFindings.sort(deterministicSortFindings);
+  }
+
+  return {
+    ...result,
+    findings: mergedFindings as Finding[],
+  } as ScanResult;
+}

@@ -1,6 +1,7 @@
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
 import { applySqliteMigrations, createSqliteDatabase } from '../sqlite-database.js';
 import { createRepository } from './repository.js';
+import { buildApprovalStats, buildApprovalWhereClause, listExpiredPendingApprovalEntries, parseStoredApproval, queryApprovalItems, } from './approval-repository/shared.js';
 const approvalMigrations = [
     {
         version: 1,
@@ -64,72 +65,13 @@ class InMemoryApprovalRepository {
         return this.repository.size();
     }
     query(params) {
-        if (!params.tenant_id || !params.project_id) {
-            throw new Error('tenant_id and project_id are required for queryApprovals');
-        }
-        let items = this.repository.values().filter((approval) => approval.scope.tenant_id === params.tenant_id &&
-            approval.scope.project_id === params.project_id);
-        if (params.status) {
-            items = items.filter((approval) => approval.status === params.status);
-        }
-        if (params.risk_level) {
-            items = items.filter((approval) => approval.risk_level === params.risk_level);
-        }
-        if (params.item_type) {
-            items = items.filter((approval) => approval.item_type === params.item_type);
-        }
-        items.sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
-        const total = items.length;
-        const offset = params.offset || 0;
-        const limit = params.limit || 20;
-        items = items.slice(offset, offset + limit);
-        return {
-            items,
-            total,
-            has_more: offset + limit < total,
-            next_offset: offset + limit < total ? offset + limit : undefined,
-        };
+        return queryApprovalItems(this.repository.values(), params);
     }
     getStats(tenant_id, project_id) {
-        const by_status = {
-            pending: 0,
-            approved: 0,
-            rejected: 0,
-            expired: 0,
-        };
-        const by_risk_level = {};
-        const by_type = {
-            recovery_action: 0,
-            code_patch: 0,
-            config_change: 0,
-            recipe_activation: 0,
-        };
-        let total = 0;
-        let totalDecisionTimeSeconds = 0;
-        let decisionCount = 0;
-        for (const approval of this.repository.values()) {
-            if (approval.scope.tenant_id !== tenant_id || approval.scope.project_id !== project_id) {
-                continue;
-            }
-            total++;
-            by_status[approval.status] += 1;
-            by_risk_level[approval.risk_level] = (by_risk_level[approval.risk_level] || 0) + 1;
-            by_type[approval.item_type] += 1;
-            if (approval.approver) {
-                totalDecisionTimeSeconds += Math.max(0, Math.round((new Date(approval.approver.timestamp).getTime() - new Date(approval.requester.timestamp).getTime()) / 1000));
-                decisionCount += 1;
-            }
-        }
-        return {
-            total,
-            by_status,
-            by_risk_level,
-            by_type,
-            avg_decision_time_seconds: decisionCount > 0 ? totalDecisionTimeSeconds / decisionCount : 0,
-        };
+        return buildApprovalStats(this.repository.values(), tenant_id, project_id);
     }
     listPendingExpired(referenceTime) {
-        return this.repository.entries().filter(([, approval]) => approval.status === 'pending' && approval.timeout_at < referenceTime);
+        return listExpiredPendingApprovalEntries(this.repository.entries(), referenceTime);
     }
 }
 class SqliteApprovalRepository {
@@ -206,24 +148,7 @@ class SqliteApprovalRepository {
         return typeof row.count === 'bigint' ? Number(row.count) : row.count;
     }
     query(params) {
-        if (!params.tenant_id || !params.project_id) {
-            throw new Error('tenant_id and project_id are required for queryApprovals');
-        }
-        const conditions = ['tenant_id = ?', 'project_id = ?'];
-        const values = [params.tenant_id, params.project_id];
-        if (params.status) {
-            conditions.push('status = ?');
-            values.push(params.status);
-        }
-        if (params.risk_level) {
-            conditions.push('risk_level = ?');
-            values.push(params.risk_level);
-        }
-        if (params.item_type) {
-            conditions.push('item_type = ?');
-            values.push(params.item_type);
-        }
-        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+        const { whereClause, values } = buildApprovalWhereClause(params);
         const offset = params.offset || 0;
         const limit = params.limit || 20;
         const totalRow = this.database
@@ -250,22 +175,6 @@ class SqliteApprovalRepository {
         };
     }
     getStats(tenant_id, project_id) {
-        const by_status = {
-            pending: 0,
-            approved: 0,
-            rejected: 0,
-            expired: 0,
-        };
-        const by_risk_level = {};
-        const by_type = {
-            recovery_action: 0,
-            code_patch: 0,
-            config_change: 0,
-            recipe_activation: 0,
-        };
-        let total = 0;
-        let totalDecisionTimeSeconds = 0;
-        let decisionCount = 0;
         const rows = this.database
             .prepare(`
         SELECT payload_json
@@ -273,27 +182,9 @@ class SqliteApprovalRepository {
         WHERE tenant_id = ? AND project_id = ?
       `)
             .all(tenant_id, project_id);
-        for (const row of rows) {
-            const approval = this.parseApproval(row.payload_json, 'stats-row');
-            if (!approval) {
-                continue;
-            }
-            total++;
-            by_status[approval.status] += 1;
-            by_risk_level[approval.risk_level] = (by_risk_level[approval.risk_level] || 0) + 1;
-            by_type[approval.item_type] += 1;
-            if (approval.approver) {
-                totalDecisionTimeSeconds += Math.max(0, Math.round((new Date(approval.approver.timestamp).getTime() - new Date(approval.requester.timestamp).getTime()) / 1000));
-                decisionCount += 1;
-            }
-        }
-        return {
-            total,
-            by_status,
-            by_risk_level,
-            by_type,
-            avg_decision_time_seconds: decisionCount > 0 ? totalDecisionTimeSeconds / decisionCount : 0,
-        };
+        return buildApprovalStats(rows
+            .map((row) => this.parseApproval(row.payload_json, 'stats-row'))
+            .filter((approval) => approval !== undefined), tenant_id, project_id);
     }
     listPendingExpired(referenceTime) {
         const rows = this.database
@@ -310,16 +201,7 @@ class SqliteApprovalRepository {
         });
     }
     parseApproval(rawValue, approvalId) {
-        if (!rawValue) {
-            return undefined;
-        }
-        try {
-            return JSON.parse(rawValue);
-        }
-        catch (error) {
-            console.warn(`[Persistence] Ignoring invalid approval payload for "${approvalId}": ${error instanceof Error ? error.message : String(error)}`);
-            return undefined;
-        }
+        return parseStoredApproval(rawValue, approvalId);
     }
 }
 function createApprovalRepository() {

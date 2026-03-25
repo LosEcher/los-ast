@@ -7,8 +7,8 @@ on:
     branches: [main, master]
 
 jobs:
-  lint:
-    name: Lint
+  doctor:
+    name: Repo Doctor
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint
+      - run: npm run doctor
 
   api-build:
     name: API Build
@@ -33,6 +33,30 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+
+  api-dist-freshness:
+    name: API Dist Freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run check:api-dist
+
+  scan-generated-freshness:
+    name: Scan Generated Freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run check:scan-generated
 
   core-tests:
     name: Core Tests
@@ -105,6 +129,18 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run test:smoke
+
+  lsclaw-adapter-contract:
+    name: lsclaw Adapter Contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:lsclaw:adapter:artifacts
 
   golden-tests:
     name: Golden Tests

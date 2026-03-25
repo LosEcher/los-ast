@@ -1,6 +1,7 @@
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
 import { applySqliteMigrations, createSqliteDatabase } from '../sqlite-database.js';
 import { createRepository } from './repository.js';
+import { buildRecoveryActionWhereClause, buildRecoveryStats, parseStoredRecoveryAction, parseStoredRecoveryPolicy, queryRecoveryActionItems, } from './recovery-repository/shared.js';
 const recoveryActionMigrations = [
     {
         version: 1,
@@ -87,28 +88,7 @@ class InMemoryRecoveryActionRepository {
         return this.repository.size();
     }
     query(params) {
-        let items = this.repository.values();
-        if (params.scope?.tenant_id && params.scope?.project_id) {
-            items = items.filter((action) => action.scope.tenant_id === params.scope?.tenant_id &&
-                action.scope.project_id === params.scope?.project_id);
-        }
-        if (params.incident_id) {
-            items = items.filter((action) => action.incident_id === params.incident_id);
-        }
-        if (params.status) {
-            items = items.filter((action) => action.status === params.status);
-        }
-        if (params.level) {
-            items = items.filter((action) => action.level === params.level);
-        }
-        items.sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
-        const total = items.length;
-        const offset = params.offset || 0;
-        const limit = params.limit || 20;
-        return {
-            items: items.slice(offset, offset + limit),
-            total,
-        };
+        return queryRecoveryActionItems(this.repository.values(), params);
     }
     getStats(scope) {
         return buildRecoveryStats(this.repository.values(), scope);
@@ -223,25 +203,7 @@ class SqliteRecoveryActionRepository {
         return typeof row.count === 'bigint' ? Number(row.count) : row.count;
     }
     query(params) {
-        const conditions = [];
-        const values = [];
-        if (params.scope?.tenant_id && params.scope?.project_id) {
-            conditions.push('tenant_id = ?', 'project_id = ?');
-            values.push(params.scope.tenant_id, params.scope.project_id);
-        }
-        if (params.incident_id) {
-            conditions.push('incident_id = ?');
-            values.push(params.incident_id);
-        }
-        if (params.status) {
-            conditions.push('status = ?');
-            values.push(params.status);
-        }
-        if (params.level) {
-            conditions.push('level = ?');
-            values.push(params.level);
-        }
-        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const { whereClause, values } = buildRecoveryActionWhereClause(params);
         const offset = params.offset || 0;
         const limit = params.limit || 20;
         const totalRow = this.database
@@ -289,16 +251,7 @@ class SqliteRecoveryActionRepository {
         return buildRecoveryStats(actions);
     }
     parseAction(rawValue, actionId) {
-        if (!rawValue) {
-            return undefined;
-        }
-        try {
-            return JSON.parse(rawValue);
-        }
-        catch (error) {
-            console.warn(`[Persistence] Ignoring invalid recovery action payload for "${actionId}": ${error instanceof Error ? error.message : String(error)}`);
-            return undefined;
-        }
+        return parseStoredRecoveryAction(rawValue, actionId);
     }
 }
 class SqliteRecoveryPolicyRepository {
@@ -381,73 +334,8 @@ class SqliteRecoveryPolicyRepository {
         return this.parsePolicy(row?.payload_json, row?.policy_id ?? level);
     }
     parsePolicy(rawValue, policyId) {
-        if (!rawValue) {
-            return undefined;
-        }
-        try {
-            return JSON.parse(rawValue);
-        }
-        catch (error) {
-            console.warn(`[Persistence] Ignoring invalid recovery policy payload for "${policyId}": ${error instanceof Error ? error.message : String(error)}`);
-            return undefined;
-        }
+        return parseStoredRecoveryPolicy(rawValue, policyId);
     }
-}
-function buildRecoveryStats(sourceActions, scope) {
-    const actions = scope
-        ? sourceActions.filter((action) => {
-            if (scope.tenant_id && action.scope.tenant_id !== scope.tenant_id) {
-                return false;
-            }
-            if (scope.project_id && action.scope.project_id !== scope.project_id) {
-                return false;
-            }
-            return true;
-        })
-        : sourceActions;
-    const byLevel = {
-        L1_harmless: 0,
-        L2_controlled: 0,
-        L3_code_level: 0,
-    };
-    const byStatus = {
-        pending_approval: 0,
-        approved: 0,
-        executing: 0,
-        succeeded: 0,
-        failed: 0,
-        rolled_back: 0,
-    };
-    const byType = {
-        restart: 0,
-        rollback: 0,
-        circuit_breaker: 0,
-        feature_toggle: 0,
-        code_patch: 0,
-    };
-    let completedCount = 0;
-    let succeededCount = 0;
-    let totalExecutionTimeMs = 0;
-    for (const action of actions) {
-        byLevel[action.level] += 1;
-        byStatus[action.status] += 1;
-        byType[action.type] += 1;
-        if (action.execution.result) {
-            completedCount += 1;
-            totalExecutionTimeMs += action.execution.result.duration_ms;
-            if (action.status === 'succeeded') {
-                succeededCount += 1;
-            }
-        }
-    }
-    return {
-        total_actions: actions.length,
-        by_level: byLevel,
-        by_status: byStatus,
-        by_type: byType,
-        success_rate: completedCount > 0 ? succeededCount / completedCount : 0,
-        avg_execution_time_ms: completedCount > 0 ? totalExecutionTimeMs / completedCount : 0,
-    };
 }
 function createRecoveryRepository() {
     if (PERSISTENCE_CONFIG.experimentalStoreBackend === 'sqlite') {
