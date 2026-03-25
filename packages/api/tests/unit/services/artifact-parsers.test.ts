@@ -421,6 +421,34 @@ describe('artifact parsers', () => {
     expect(parsed.schemaArtifacts).toHaveLength(0);
   });
 
+  it('should treat common sql type synonyms as compatible in schemaComparisons', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-sql-type-synonyms',
+          file: '/tmp/schema.sql',
+          format: 'sql',
+          baseline: [
+            'CREATE TABLE users (',
+            '  age INT,',
+            '  is_active BOOL,',
+            '  balance DECIMAL(10, 2)',
+            ');',
+          ].join('\n'),
+          current: [
+            'CREATE TABLE users (',
+            '  age INTEGER,',
+            '  is_active BOOLEAN,',
+            '  balance NUMERIC(10,2)',
+            ');',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts).toHaveLength(0);
+  });
+
   it('should bind schema findings to the correct entity without duplicating multi-entity documents', () => {
     const parsed = parseArtifactInputs({
       schemaDocuments: [

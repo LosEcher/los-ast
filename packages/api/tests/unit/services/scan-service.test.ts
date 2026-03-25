@@ -2477,6 +2477,42 @@ describe('ScanService', () => {
       expect(result.findings).toHaveLength(0);
     });
 
+    it('should treat common sql type synonyms as compatible in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-sql-type-synonyms',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  age INT,',
+              '  is_active BOOL,',
+              '  balance DECIMAL(10, 2)',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              '  age INTEGER,',
+              '  is_active BOOLEAN,',
+              '  balance NUMERIC(10,2)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
     it('should treat equivalent prisma uuid and dbgenerated defaults as compatible in schemaComparisons', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

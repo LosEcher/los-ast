@@ -33,6 +33,20 @@ describe('schema artifacts shared helpers', () => {
     expect(entity.fields.get('email')?.unique).toBe(true);
   });
 
+  it('normalizes common SQL type synonyms conservatively', () => {
+    const [entity] = parseSqlEntities([
+      'CREATE TABLE users (',
+      '  age INT,',
+      '  is_active BOOL,',
+      '  balance DECIMAL(10, 2)',
+      ');',
+    ].join('\n'));
+
+    expect(entity.fields.get('age')?.type).toBe('integer');
+    expect(entity.fields.get('is_active')?.type).toBe('boolean');
+    expect(entity.fields.get('balance')?.type).toBe('numeric(10,2)');
+  });
+
   it('normalizes Prisma generated defaults and updatedAt fields', () => {
     const [entity] = parsePrismaEntities([
       'model User {',

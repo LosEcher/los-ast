@@ -113,12 +113,14 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'graded nullability tighten with default',
         'breaking enum value drop',
         'default compatibility drift',
+        'common sql type synonym equivalence',
       ],
       limitations: [
         'heuristic parsing only',
         'comparison requires caller-provided baseline/current pair',
         'enum parsing is limited to inline sql enum(...) and prisma enum blocks',
         'default compatibility does not yet model full function-equivalence across every dialect and provider-specific default',
+        'type equivalence is intentionally limited to a small set of conservative sql synonyms',
       ],
       fixtureFiles: [
         'fixtures/artifact-parsers/schema-minimal.sql',

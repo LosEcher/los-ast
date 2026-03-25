@@ -18,6 +18,28 @@ function cleanSqlIdentifier(value) {
 function normalizeType(value) {
     return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
+function normalizeSqlType(value) {
+    const normalized = normalizeType(value);
+    const parameterizedMatch = normalized.match(/^([a-z0-9_]+)\(([^)]*)\)$/);
+    if (parameterizedMatch) {
+        const [, rawBaseType, params] = parameterizedMatch;
+        const baseType = normalizeSqlType(rawBaseType);
+        if (baseType === rawBaseType) {
+            return `${baseType}(${params.replace(/\s+/g, '')})`;
+        }
+        return `${baseType}(${params.replace(/\s+/g, '')})`;
+    }
+    if (normalized === 'int' || normalized === 'int4') {
+        return 'integer';
+    }
+    if (normalized === 'bool') {
+        return 'boolean';
+    }
+    if (normalized === 'decimal') {
+        return 'numeric';
+    }
+    return normalized;
+}
 function normalizeDefaultValue(value) {
     if (!value) {
         return undefined;
@@ -128,7 +150,7 @@ export function parseSqlEntities(content) {
                 continue;
             }
             fields.set(fieldName, {
-                type: normalizeType(typeToken),
+                type: normalizeSqlType(typeToken),
                 nullable: !/\bnot\s+null\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine),
                 hasDefault: /\bdefault\b/i.test(lowerLine),
                 defaultValue: extractSqlDefaultValue(definition),
