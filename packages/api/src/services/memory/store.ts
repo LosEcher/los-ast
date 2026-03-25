@@ -1,18 +1,6 @@
-/**
- * los-memory 存储服务
- * Phase 1.2: 经验沉淀存储
- *
- * 存储和管理经验沉淀数据
- */
-
-import crypto from 'node:crypto';
-
 import type {
-  Proposal,
-  Scope,
-  CorrectedFact,
-  RejectedHypothesis,
   IncidentLesson,
+  Proposal,
   RecoveryRecipe,
   CreateProposalRequest,
   KnowledgeQuery,
@@ -22,67 +10,22 @@ import type {
 } from '@los-ast/shared/types';
 import { generateId } from '../../utils/id-generator.js';
 import { memoryRepository } from '../../persistence/repositories/memory-repository.js';
+import {
+  activateTypedContent,
+  buildDefaultIdempotencyKey,
+  extractKnowledgeTags,
+  isKnowledgeContentVisible,
+  isRecipeVisibleToScope,
+  isTenantProjectScopeMatch,
+  normalizeTypedContent,
+  type ScopedCreateProposalRequest,
+} from './shared.js';
 
 const proposalStore = memoryRepository.proposals;
 const factStore = memoryRepository.facts;
 const rejectionStore = memoryRepository.rejections;
 const lessonStore = memoryRepository.lessons;
 const recipeStore = memoryRepository.recipes;
-
-type ScopedCreateProposalRequest = Omit<CreateProposalRequest, 'scope'> & { scope: Scope };
-
-function stableSerialize(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
-  }
-
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableSerialize(item)}`);
-    return `{${entries.join(',')}}`;
-  }
-
-  return JSON.stringify(value);
-}
-
-function buildDefaultIdempotencyKey(request: ScopedCreateProposalRequest): string {
-  const rawKey = stableSerialize({
-    incident_id: request.source.incident_id,
-    proposal_type: request.proposal_type,
-    scope: {
-      tenant_id: request.scope.tenant_id ?? null,
-      project_id: request.scope.project_id ?? null,
-    },
-    content: request.content,
-  });
-
-  return crypto.createHash('sha256').update(rawKey).digest('hex');
-}
-
-function extractKnowledgeTags(content: unknown): string[] {
-  if (!content || typeof content !== 'object') {
-    return [];
-  }
-
-  const typedContent = content as {
-    tags?: unknown;
-    triggers?: {
-      symptom_keywords?: unknown;
-    };
-  };
-
-  if (Array.isArray(typedContent.tags)) {
-    return typedContent.tags.filter((item): item is string => typeof item === 'string');
-  }
-
-  const symptomKeywords = typedContent.triggers?.symptom_keywords;
-  if (Array.isArray(symptomKeywords)) {
-    return symptomKeywords.filter((item): item is string => typeof item === 'string');
-  }
-
-  return [];
-}
 
 /**
  * 创建提案
@@ -131,92 +74,6 @@ export async function createProposal(request: CreateProposalRequest): Promise<Pr
 }
 
 /**
- * 存储类型化内容
- * 强制注入 proposal.scope 到 content 中，防止 scope 伪造
- */
-async function normalizeTypedContent(
-  proposalId: string,
-  type: string,
-  content: unknown,
-  scope: Scope
-): Promise<unknown> {
-  const now = new Date().toISOString();
-
-  switch (type) {
-    case 'corrected_fact': {
-      const fact = content as CorrectedFact;
-      const normalizedFact: CorrectedFact = {
-        ...fact,
-        fact_id: fact.fact_id || proposalId,
-        // 强制注入 scope，防止伪造
-        scope: {
-          tenant_id: scope.tenant_id!,
-          project_id: scope.project_id!,
-        },
-        created_at: fact.created_at || now,
-      };
-      return normalizedFact;
-    }
-
-    case 'rejected_hypothesis': {
-      const rejection = content as RejectedHypothesis;
-      const normalizedRejection: RejectedHypothesis = {
-        ...rejection,
-        rejection_id: rejection.rejection_id || proposalId,
-        // 强制注入 scope，防止伪造
-        scope: {
-          tenant_id: scope.tenant_id!,
-          project_id: scope.project_id!,
-        },
-        created_at: rejection.created_at || now,
-      };
-      return normalizedRejection;
-    }
-
-    case 'incident_lesson': {
-      const lesson = content as IncidentLesson;
-      const normalizedLesson: IncidentLesson = {
-        ...lesson,
-        lesson_id: lesson.lesson_id || proposalId,
-        // 强制注入 scope，防止伪造
-        scope: {
-          tenant_id: scope.tenant_id!,
-          project_id: scope.project_id!,
-        },
-        created_at: lesson.created_at || now,
-        updated_at: lesson.updated_at || now,
-      };
-      return normalizedLesson;
-    }
-
-    case 'recovery_recipe': {
-      const recipe = content as RecoveryRecipe;
-      const normalizedRecipe: RecoveryRecipe = {
-        ...recipe,
-        recipe_id: recipe.recipe_id || proposalId,
-        // 强制注入 scope，防止伪造（保留 is_global 如果已设置）
-        scope: {
-          tenant_id: scope.tenant_id,
-          project_id: scope.project_id,
-          is_global: recipe.scope?.is_global || false,
-        },
-        stats: recipe.stats || {
-          times_used: 0,
-          success_rate: 0,
-          avg_duration_seconds: 0,
-        },
-        created_at: recipe.created_at || now,
-        updated_at: recipe.updated_at || now,
-        version: recipe.version || 1,
-      };
-      return normalizedRecipe;
-    }
-  }
-
-  return content;
-}
-
-/**
  * 获取提案
  */
 export async function getProposal(proposalId: string): Promise<Proposal | null> {
@@ -237,7 +94,7 @@ export async function getProposalWithScope(
     return null;
   }
   // 强制 scope 边界检查
-  if (proposal.scope.tenant_id !== tenant_id || proposal.scope.project_id !== project_id) {
+  if (!isTenantProjectScopeMatch(proposal.scope, tenant_id, project_id)) {
     return null;
   }
   return proposal;
@@ -272,7 +129,12 @@ export async function validateProposal(
     proposal.validation.validated_at = now;
 
     // 激活具体内容
-    await activateTypedContent(proposal.proposal_type, proposal.content);
+    await activateTypedContent(proposal.proposal_type, proposal.content, {
+      factStore,
+      rejectionStore,
+      lessonStore,
+      recipeStore,
+    });
   } else {
     proposal.status = 'rejected';
     proposal.validation.rejection_reason = rejectionReason || 'Rejected by validator';
@@ -286,45 +148,6 @@ export async function validateProposal(
   console.log(`[MemoryStore] Validated proposal ${proposalId}: ${approve ? 'approved' : 'rejected'}`);
 
   return proposal;
-}
-
-/**
- * 激活类型化内容
- */
-async function activateTypedContent(type: string, content: unknown): Promise<void> {
-  const now = new Date().toISOString();
-
-  switch (type) {
-    case 'corrected_fact': {
-      const fact = content as CorrectedFact;
-      factStore.set(fact.fact_id, fact);
-      break;
-    }
-
-    case 'rejected_hypothesis': {
-      const rejection = content as RejectedHypothesis;
-      rejectionStore.set(rejection.rejection_id, rejection);
-      break;
-    }
-
-    case 'incident_lesson': {
-      const lesson = content as IncidentLesson;
-      lessonStore.set(lesson.lesson_id, {
-        ...lesson,
-        updated_at: now,
-      });
-      break;
-    }
-
-    case 'recovery_recipe': {
-      const recipe = content as RecoveryRecipe;
-      recipeStore.set(recipe.recipe_id, {
-        ...recipe,
-        updated_at: now,
-      });
-      break;
-    }
-  }
 }
 
 /**
@@ -391,31 +214,7 @@ export async function queryKnowledge(query: KnowledgeQuery): Promise<KnowledgeRe
   }
 
   // 按 scope 过滤（强制租户隔离）
-  const filteredItems = items.filter((item) => {
-    const content = item.content as { scope?: { tenant_id?: string; project_id?: string; is_global?: boolean } };
-    const itemScope = content.scope;
-
-    // 如果没有 scope 信息，拒绝访问（安全默认）
-    if (!itemScope) {
-      return false;
-    }
-
-    // 全局项目（如 RecoveryRecipe）对所有租户可见
-    if (itemScope.is_global) {
-      return true;
-    }
-
-    // 强制要求 query.scope 中的 tenant_id 和 project_id
-    if (!query.scope?.tenant_id || !query.scope?.project_id) {
-      return false;
-    }
-
-    // 匹配 tenant_id 和 project_id
-    return (
-      itemScope.tenant_id === query.scope.tenant_id &&
-      itemScope.project_id === query.scope.project_id
-    );
-  });
+  const filteredItems = items.filter((item) => isKnowledgeContentVisible(item.content, query.scope));
 
   // 过滤标签
   let scopedItems = filteredItems;
@@ -465,10 +264,7 @@ export async function getRecoveryRecipeWithScope(
     return null;
   }
   // 检查 scope：全局可见或匹配 tenant/project
-  const scopeMatch =
-    recipe.scope.is_global ||
-    (recipe.scope.tenant_id === tenant_id && recipe.scope.project_id === project_id);
-  if (!scopeMatch) {
+  if (!isRecipeVisibleToScope(recipe.scope, tenant_id, project_id)) {
     return null;
   }
   return recipe;
@@ -486,11 +282,7 @@ export async function findMatchingRecipes(
 
   for (const recipe of recipeStore.values()) {
     // 检查范围匹配
-    const scopeMatch =
-      recipe.scope.is_global ||
-      (recipe.scope.tenant_id === tenantId && recipe.scope.project_id === projectId);
-
-    if (!scopeMatch) continue;
+    if (!isRecipeVisibleToScope(recipe.scope, tenantId, projectId)) continue;
 
     // 检查关键词匹配
     const keywordMatch = keywords.some((kw) => {
@@ -561,7 +353,7 @@ export async function getIncidentLessonWithScope(
     return null;
   }
   // 强制 scope 边界检查
-  if (lesson.scope.tenant_id !== tenant_id || lesson.scope.project_id !== project_id) {
+  if (!isTenantProjectScopeMatch(lesson.scope, tenant_id, project_id)) {
     return null;
   }
   return lesson;
@@ -595,10 +387,7 @@ export async function getMemoryStats(
   const byStatus: Record<string, number> = {};
 
   for (const proposal of proposalStore.values()) {
-    if (
-      proposal.scope.tenant_id === tenant_id &&
-      proposal.scope.project_id === project_id
-    ) {
+    if (isTenantProjectScopeMatch(proposal.scope, tenant_id, project_id)) {
       filteredProposals++;
       byStatus[proposal.status] = (byStatus[proposal.status] || 0) + 1;
     }
@@ -607,27 +396,21 @@ export async function getMemoryStats(
   // 统计各类型（按 scope 过滤）
   let factCount = 0;
   for (const fact of factStore.values()) {
-    if (fact.scope.tenant_id === tenant_id && fact.scope.project_id === project_id) {
+    if (isTenantProjectScopeMatch(fact.scope, tenant_id, project_id)) {
       factCount++;
     }
   }
 
   let rejectionCount = 0;
   for (const rejection of rejectionStore.values()) {
-    if (
-      rejection.scope.tenant_id === tenant_id &&
-      rejection.scope.project_id === project_id
-    ) {
+    if (isTenantProjectScopeMatch(rejection.scope, tenant_id, project_id)) {
       rejectionCount++;
     }
   }
 
   let lessonCount = 0;
   for (const lesson of lessonStore.values()) {
-    if (
-      lesson.scope.tenant_id === tenant_id &&
-      lesson.scope.project_id === project_id
-    ) {
+    if (isTenantProjectScopeMatch(lesson.scope, tenant_id, project_id)) {
       lessonCount++;
     }
   }
@@ -635,10 +418,7 @@ export async function getMemoryStats(
   let recipeCount = 0;
   for (const recipe of recipeStore.values()) {
     // Recipe 支持全局可见
-    const scopeMatch =
-      recipe.scope.is_global ||
-      (recipe.scope.tenant_id === tenant_id && recipe.scope.project_id === project_id);
-    if (scopeMatch) {
+    if (isRecipeVisibleToScope(recipe.scope, tenant_id, project_id)) {
       recipeCount++;
     }
   }

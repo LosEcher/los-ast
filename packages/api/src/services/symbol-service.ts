@@ -2,6 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { discoverFiles, isReady, languageFromFilePath, defaultParseCache } from '@los-ast/core';
 import type { SymbolInfo, SymbolResult } from '@los-ast/shared/types';
 import { CoreNotReadyError } from '../types/errors.js';
+import {
+  SYMBOL_RULES,
+  assertNotAborted,
+  buildSymbolsFromAstMatches,
+  clampSymbolLimit,
+  extractSymbolsFromSourceText,
+  partitionSymbolsByLimit,
+} from './symbol-service/shared.js';
 
 export interface SymbolServiceOptions {
   rootDir: string;
@@ -9,147 +17,6 @@ export interface SymbolServiceOptions {
   ignore?: string[];
   limit?: number;
   signal: AbortSignal;
-}
-
-// AST-grep 规则定义 - 符号发现模式
-const SYMBOL_RULES = [
-  {
-    kind: 'function' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    // 匹配函数声明: function foo() {}
-    pattern: '(function_declaration name: (identifier) @name)',
-  },
-  {
-    kind: 'function' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    // 匹配箭头函数变量: const foo = () => {}
-    pattern: '(lexical_declaration (variable_declarator name: (identifier) @name value: (arrow_function)))',
-  },
-  {
-    kind: 'class' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    // 匹配类声明: class Foo {}
-    pattern: '(class_declaration name: (type_identifier) @name)',
-  },
-  {
-    kind: 'interface' as const,
-    languages: ['typescript', 'tsx'],
-    // 匹配接口声明: interface Foo {}
-    pattern: '(interface_declaration name: (type_identifier) @name)',
-  },
-  {
-    kind: 'type' as const,
-    languages: ['typescript', 'tsx'],
-    // 匹配类型别名: type Foo = ...
-    pattern: '(type_alias_declaration name: (type_identifier) @name)',
-  },
-  {
-    kind: 'variable' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    // 匹配变量声明: const foo = ...
-    pattern: '(lexical_declaration (variable_declarator name: (identifier) @name))',
-  },
-  // Rust 支持
-  {
-    kind: 'function' as const,
-    languages: ['rust'],
-    // 匹配 Rust 函数: fn foo() {}
-    pattern: '(function_item name: (identifier) @name)',
-  },
-  {
-    kind: 'class' as const,
-    languages: ['rust'],
-    // 匹配 Rust struct: struct Foo {}
-    pattern: '(struct_item name: (type_identifier) @name)',
-  },
-  {
-    kind: 'interface' as const,
-    languages: ['rust'],
-    // 匹配 Rust trait: trait Foo {}
-    pattern: '(trait_item name: (type_identifier) @name)',
-  },
-  {
-    kind: 'type' as const,
-    languages: ['rust'],
-    // 匹配 Rust type alias: type Foo = ...
-    pattern: '(type_item name: (type_identifier) @name)',
-  },
-];
-
-const TEXT_SYMBOL_PATTERNS = [
-  {
-    kind: 'function' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    regex: /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm,
-  },
-  {
-    kind: 'function' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    regex: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/gm,
-  },
-  {
-    kind: 'class' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    regex: /^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)\b/gm,
-  },
-  {
-    kind: 'interface' as const,
-    languages: ['typescript', 'tsx'],
-    regex: /^\s*(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)\b/gm,
-  },
-  {
-    kind: 'type' as const,
-    languages: ['typescript', 'tsx'],
-    regex: /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\b/gm,
-  },
-  {
-    kind: 'variable' as const,
-    languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-    regex: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/gm,
-  },
-  {
-    kind: 'function' as const,
-    languages: ['rust'],
-    regex: /^\s*(?:pub\s+)?fn\s+([A-Za-z_][\w]*)\s*\(/gm,
-  },
-  {
-    kind: 'class' as const,
-    languages: ['rust'],
-    regex: /^\s*(?:pub\s+)?struct\s+([A-Za-z_][\w]*)\b/gm,
-  },
-  {
-    kind: 'interface' as const,
-    languages: ['rust'],
-    regex: /^\s*(?:pub\s+)?trait\s+([A-Za-z_][\w]*)\b/gm,
-  },
-  {
-    kind: 'type' as const,
-    languages: ['rust'],
-    regex: /^\s*(?:pub\s+)?type\s+([A-Za-z_][\w]*)\b/gm,
-  },
-];
-
-function toRange(source: string, index: number, length: number) {
-  const startPrefix = source.slice(0, index);
-  const startLine = startPrefix.split('\n').length;
-  const startColumn = index - (startPrefix.lastIndexOf('\n') + 1);
-  const endIndex = index + length;
-  const endPrefix = source.slice(0, endIndex);
-  const endLine = endPrefix.split('\n').length;
-  const endColumn = endIndex - (endPrefix.lastIndexOf('\n') + 1);
-
-  return {
-    start: {
-      line: startLine,
-      column: startColumn,
-      index,
-    },
-    end: {
-      line: endLine,
-      column: endColumn,
-      index: endIndex,
-    },
-  };
 }
 
 export class SymbolService {
@@ -165,58 +32,42 @@ export class SymbolService {
       throw new CoreNotReadyError();
     }
 
-    // 验证 limit 参数
-    const effectiveLimit = Math.min(Math.max(1, limit), 1000);
+    const effectiveLimit = clampSymbolLimit(limit);
 
-    // 检查取消信号
-    if (signal.aborted) {
-      throw new Error('Operation aborted');
-    }
+    assertNotAborted(signal);
 
-    // 使用 discoverFiles 获取文件列表
     const files = await discoverFiles({ rootDir, include, ignore });
 
-    // 检查取消信号
-    if (signal.aborted) {
-      throw new Error('Operation aborted');
-    }
+    assertNotAborted(signal);
 
     const symbols: SymbolInfo[] = [];
     let truncated = false;
     let totalScannedFiles = 0;
+    let truncatedFileSymbols: SymbolInfo[] = [];
 
-    // 遍历文件提取符号
-    let truncatedFileSymbols: SymbolInfo[] = []; // 记录被截断文件的剩余符号
     for (const file of files) {
-      if (signal.aborted) {
-        throw new Error('Operation aborted');
-      }
-
+      assertNotAborted(signal);
       totalScannedFiles++;
-
-      // 使用 AST 解析提取符号
       const fileSymbols = await this.extractSymbolsFromFileAST(file);
+      const { accepted, overflow, truncated: reachedLimit } = partitionSymbolsByLimit(
+        symbols.length,
+        fileSymbols,
+        effectiveLimit
+      );
+      symbols.push(...accepted);
 
-      for (const symbol of fileSymbols) {
-        if (symbols.length >= effectiveLimit) {
-          truncated = true;
-          truncatedFileSymbols.push(symbol); // 记录被截断后剩余的符号
-        } else {
-          symbols.push(symbol);
-        }
+      if (reachedLimit) {
+        truncated = true;
+        truncatedFileSymbols = overflow;
+        break;
       }
-
-      if (truncated) break;
     }
 
-    // 真实总数统计：当前已收集 + 当前文件剩余 + 后续文件
     let total = symbols.length;
     if (truncated) {
-      total += truncatedFileSymbols.length; // 加上当前文件被截断的剩余符号
-      // 继续扫描后续文件
+      total += truncatedFileSymbols.length;
       for (let i = totalScannedFiles; i < files.length; i++) {
-        if (signal.aborted) break;
-
+        assertNotAborted(signal);
         const file = files[i];
         const fileSymbols = await this.extractSymbolsFromFileAST(file);
         total += fileSymbols.length;
@@ -226,7 +77,7 @@ export class SymbolService {
     return {
       symbols,
       total,
-      truncated
+      truncated,
     };
   }
 
@@ -237,60 +88,25 @@ export class SymbolService {
   private async extractSymbolsFromFileAST(file: string): Promise<SymbolInfo[]> {
     const symbols: SymbolInfo[] = [];
 
-    // 获取文件语言
     const language = languageFromFilePath(file);
     if (!language) {
-      return symbols; // 不支持的文件类型
+      return symbols;
     }
 
     const normalizedLanguage = String(language).toLowerCase();
 
     try {
-      // 使用 core 的 parse-cache 解析文件
       const { root } = await defaultParseCache.parseFile(file, language, { cacheAst: true }) as { root: { findAll: (q: unknown) => Array<{ getMatch: (name: string) => { text: () => string } | null; range: () => { start: { line: number; column: number; index: number }; end: { line: number; column: number; index: number } } }> } };
 
-      // 应用符号发现规则
       for (const rule of SYMBOL_RULES) {
-        // 跳过不匹配当前语言的规则（语言值归一化为小写比较）
         if (!rule.languages.includes(normalizedLanguage)) {
           continue;
         }
 
-        // 查找所有匹配的节点
         const nodes = root.findAll({ rule: { pattern: rule.pattern } });
-
-        for (const node of nodes) {
-          // 提取符号名称
-          const nameNode = node.getMatch('name');
-          if (!nameNode) continue;
-
-          const name = nameNode.text();
-          if (!name) continue;
-
-          // 获取位置信息
-          const range = node.range();
-
-          symbols.push({
-            name,
-            kind: rule.kind,
-            file,
-            range: {
-              start: {
-                line: range.start.line,
-                column: range.start.column,
-                index: range.start.index
-              },
-              end: {
-                line: range.end.line,
-                column: range.end.column,
-                index: range.end.index
-              }
-            }
-          });
-        }
+        symbols.push(...buildSymbolsFromAstMatches({ matches: nodes, kind: rule.kind, file }));
       }
     } catch (error) {
-      // 解析失败则跳过该文件
       console.warn(`Failed to parse file ${file}:`, error);
     }
 
@@ -303,36 +119,7 @@ export class SymbolService {
 
   private async extractSymbolsFromFileText(file: string, language: string): Promise<SymbolInfo[]> {
     const source = await readFile(file, 'utf-8');
-    const symbols: SymbolInfo[] = [];
-    const seen = new Set<string>();
-
-    for (const pattern of TEXT_SYMBOL_PATTERNS) {
-      if (!pattern.languages.includes(language)) {
-        continue;
-      }
-
-      pattern.regex.lastIndex = 0;
-      let match: RegExpExecArray | null = pattern.regex.exec(source);
-      while (match) {
-        const name = String(match[1] ?? '').trim();
-        if (name) {
-          const nameIndex = match.index + match[0].indexOf(name);
-          const dedupeKey = `${pattern.kind}:${name}:${nameIndex}`;
-          if (!seen.has(dedupeKey)) {
-            seen.add(dedupeKey);
-            symbols.push({
-              name,
-              kind: pattern.kind,
-              file,
-              range: toRange(source, nameIndex, name.length),
-            });
-          }
-        }
-        match = pattern.regex.exec(source);
-      }
-    }
-
-    return symbols;
+    return extractSymbolsFromSourceText({ source, file, language });
   }
 }
 

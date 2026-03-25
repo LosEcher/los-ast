@@ -24,6 +24,7 @@
     "check:scan-api-contract-governance-sections": "tsx scripts/sync-scan-api-contract-governance-sections.ts --check",
     "generate:scan-api-contract-stability-sections": "tsx scripts/sync-scan-api-contract-stability-sections.ts",
     "check:scan-api-contract-stability-sections": "tsx scripts/sync-scan-api-contract-stability-sections.ts --check",
+    "check:scan-generated": "npm run check:scan-contract-reference && npm run check:scan-openapi-components && npm run check:scan-api-contract-sections && npm run check:scan-api-contract-examples && npm run check:scan-api-contract-operational-sections && npm run check:scan-api-contract-governance-sections && npm run check:scan-api-contract-stability-sections",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:smoke": "vitest run tests/smoke",

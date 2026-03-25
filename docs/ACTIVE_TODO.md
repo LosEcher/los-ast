@@ -1,6 +1,6 @@
 # los-ast Active TODO
 
-更新时间：2026-03-13
+更新时间：2026-03-25
 
 本文件是当前有效的执行清单，用于替代仓库内分散的阶段性 TODO/复盘文档。
 
@@ -52,6 +52,30 @@
 - [x] `/scan` 的 OpenAPI operation 文案、request examples 与 error examples 已切到 `scan-doc-contract` 共享真源，并由契约测试守护。
 - [x] `export-artifacts.mjs` 已抽出 `source-structure-extractor.mjs`，把 source facts / route topology 静态分析从 CLI orchestration 中分离。
 - [x] `route_binds` 的边界措辞已在 README、执行清单、集成说明和导出 summary 中统一为“minimal Fastify literal-only runtime-like bind evidence, not full route truth”。
+
+0. 审查执行（2026-03-25，多角色视角）
+- [x] 平台 / 质量：将 `lsclaw` 下游稳定契约检查纳入默认质量门；其中 runtime smoke 继续复用 `packages/api/tests/smoke`，artifact contract 进入仓库级默认 `test` 与 CI。
+- [x] 开发体验：把 `doctor` 从“伪 lint”语义中拆出，改为显式 `doctor` 入口；`lint` 仅保留兼容别名，避免继续误导新贡献者。
+- [x] 架构 / 交付：明确 `packages/api/dist` 继续作为受控运行时产物提交；README 已补“runtime probe / Docker / production start 共用该产物，影响运行时行为的改动需同变更刷新 `dist`，最低校验基线为 `build:api + check:api-dist + quality-gate`”，并已补仓库脚本与 CI freshness gate。
+- [x] 产品 / 集成：README 已补“稳定 API / artifact contract”与“下游稳定配合面”的区别，明确 `lsclaw` artifact contract 需要单独守护，但这不等于把整套预览路由提升为稳定面。
+- [x] 测试 / 可维护性：已为 `openapi-artifacts/shared.ts`、`schema-artifacts/shared.ts` 与 `route-guard-analysis/shared.mjs` 补窄测试入口，减少后续 shared 层回归只能依赖大集成测试定位。
+- [x] 稳定面结构收口：`packages/api/src/services/memory/store.ts` 已完成第一阶段拆分；幂等 key、typed content 标准化、scope 可见性与激活逻辑已抽到 `packages/api/src/services/memory/shared.ts`，并补 `memory-store-shared.test.ts` 做窄回归。
+- [x] CLI 结构收口：`packages/cli/src/source-structure-extractor.mjs` 已完成第一阶段 helper 下沉；route path/tier/activation、import/reexport/static expression 解析与模块解析已抽到 `packages/cli/src/source-structure-extractor/shared.mjs`，并补 `source-structure-extractor-shared.test.mjs` 做窄回归。
+- [x] API 结构收口：`packages/api/src/services/scan-service.ts` 已完成第一阶段 helper 下沉；artifact finding 归一、range/fingerprint/governance 处理、native input 计数与 telemetry 拼装已抽到 `packages/api/src/services/scan-service/shared.ts`，并补 `scan-service-shared.test.ts` 做窄回归。
+- [x] 持久层结构收口：`packages/api/src/persistence/repositories/approval-repository.ts` 已完成第一阶段 helper 下沉；query/stats/expired filter/JSON parse 逻辑已抽到 `packages/api/src/persistence/repositories/approval-repository/shared.ts`，并补 `approval-repository-shared.test.ts` 做窄回归。
+- [x] 持久层结构收口：`packages/api/src/persistence/repositories/recovery-repository.ts` 已完成第一阶段 helper 下沉；action query/whereClause/stats 与 action/policy JSON parse 逻辑已抽到 `packages/api/src/persistence/repositories/recovery-repository/shared.ts`，并补 `recovery-repository-shared.test.ts` 做窄回归。
+- [x] 配置结构收口：`packages/api/src/config/index.ts` 已完成第一阶段 helper 下沉；schema/normalize/derive 逻辑已抽到 `packages/api/src/config/shared.ts`，并补 `config-shared.test.ts` 做窄回归，同时保持 `DEFAULT_SCAN_LIMITS` 等稳定导出不变。
+- [x] Core 结构收口：`packages/core/src/runner.mjs` 已完成第一阶段 helper 下沉；timestamp/excerpt/replacement/constraint/fingerprint/edit overlap/parse failure summary 逻辑已抽到 `packages/core/src/runner/shared.mjs`，并补 `runner-shared.test.mjs` 做窄回归。
+- [x] 稳定符号发现面收口：`packages/api/src/services/symbol-service.ts` 已完成第一阶段 helper 下沉；AST symbol rule、文本回退提取、limit/abort/截断分段逻辑已抽到 `packages/api/src/services/symbol-service/shared.ts`，并补 `symbol-service-shared.test.ts` 做窄回归。
+- [x] 文档契约真源收口：`packages/api/src/routes/core/scan-doc-contract.ts` 已切成稳定 re-export 入口；reference / overview / example 常量已抽到 `packages/api/src/routes/core/scan-doc-contract/shared.ts`，并补 `scan-doc-contract-shared.test.ts` 做窄回归。
+- [x] Schema 契约真源收口：`packages/api/src/routes/core/scan-contract.ts` 已切成稳定 re-export 入口；request key、native input schema 与 response schema 真源已抽到 `packages/api/src/routes/core/scan-contract/shared.ts`，并补 `scan-contract-shared.test.ts` 做窄回归。
+- [x] 生成物治理：已新增聚合检查 `check:scan-generated`，并接入 CI freshness job；后续若改动 `scan-contract` / `scan-doc-contract` 真源或同步脚本，需显式校验 generated reference、OpenAPI blocks 与 `API_CONTRACT` 片段不漂移。
+- [x] 文档治理：仍标注 `READY FOR IMPLEMENTATION` 的历史路线图 / 设计文档已改为“历史参考”，并显式回指 `docs/ACTIVE_TODO.md`，避免执行入口再次分叉。
+- [x] 核心实现：`route-guard-analysis.mjs`、`openapi-artifacts.ts`、`schema-artifacts.ts` 三个热点文件已完成第一阶段拆分，优先把通用解析/归一逻辑沉到 shared 层，而不是继续扩预览路由面。
+  - 已完成第一步：`openapi-artifacts.ts` 的 OpenAPI 文档解析、schema 归一与 comparable shape 计算已抽到 `packages/api/src/services/openapi-artifacts/shared.ts`，主文件收口为 finding 生成编排。
+  - 已完成第二步：`schema-artifacts.ts` 的格式推断、SQL/Prisma 实体解析与默认值等价归一已抽到 `packages/api/src/services/schema-artifacts/shared.ts`，主文件收口为 document/comparison finding 编排。
+  - 已完成第三步：`route-guard-analysis.mjs` 的布尔表达式展开、helper/alias 解析与函数作用域扫描已抽到 `packages/cli/src/route-guard-analysis/shared.mjs`，主文件收口为 route guard / registration / activation 产物编排。
+- [ ] 下一阶段：如继续做结构收口，优先针对 shared 层补更细回归覆盖，或评估剩余仍偏大的稳定面热点；不要转去继续扩预览路由功能。
 
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
