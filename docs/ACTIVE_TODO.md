@@ -86,10 +86,11 @@
   - 已完成第一步：`openapi-artifacts.ts` 的 OpenAPI 文档解析、schema 归一与 comparable shape 计算已抽到 `packages/api/src/services/openapi-artifacts/shared.ts`，主文件收口为 finding 生成编排。
   - 已完成第二步：`schema-artifacts.ts` 的格式推断、SQL/Prisma 实体解析与默认值等价归一已抽到 `packages/api/src/services/schema-artifacts/shared.ts`，主文件收口为 document/comparison finding 编排。
   - 已完成第三步：`route-guard-analysis.mjs` 的布尔表达式展开、helper/alias 解析与函数作用域扫描已抽到 `packages/cli/src/route-guard-analysis/shared.mjs`，主文件收口为 route guard / registration / activation 产物编排。
-- [ ] 下一阶段：结构收口已基本完成，优先转向三条主线：
-  - 文档治理：补齐 `AGENTS.md` / `README` / `architecture` 的当前包拓扑与执行入口，消除新读者导航偏移。
-  - 稳定语义增强：继续推进 OpenAPI / schema compatibility 规则细化，而不是继续机械拆分稳定面文件。
-  - 契约治理：保持 `/scan` generated sections、`packages/api/dist` 与 `lsclaw` artifact contract 三条 freshness gate 长期可执行。
+- [x] 阶段性收尾：结构收口与第一阶段稳定语义增强已形成闭环，当前暂停继续横向扩张。
+  - 文档治理已完成第一轮收口：`AGENTS.md` / `README` / `architecture` / parser capability docs 已对齐当前包拓扑与执行入口。
+  - 稳定语义增强已完成第一轮闭环：OpenAPI 已补字段约束语义、字段级本地 `$ref`、`allOf` 下 union/discriminator 继承；schema 已补 nullability/default/type/unique 的保守等价与兼容性分级。
+  - 契约治理基线已固定：`/scan` generated sections、`packages/api/dist` 与 `lsclaw` artifact contract 三条 freshness gate 当前可执行且已纳入日常校验。
+  - 下一轮恢复点：优先继续 `openapi compatibility` 的 union/discriminator 分级增强；如无明确收益，不再继续机械拆分稳定面文件。
 
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
