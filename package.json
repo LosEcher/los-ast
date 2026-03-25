@@ -14,7 +14,7 @@
     "check:api-dist": "npm run build:api && npm run check:api-dist:status",
     "check:scan-generated": "cd packages/api && npm run check:scan-generated",
     "test": "npm run test:core && npm run test:hub-lite:artifacts && npm run test:api && npm run test:lsclaw:adapter:artifacts",
-    "test:core": "node --test test/rules.test.mjs test/route-guard-analysis-shared.test.mjs test/source-structure-extractor-shared.test.mjs test/export-artifacts-shared.test.mjs test/runner-shared.test.mjs",
+    "test:core": "node --test test/rules.test.mjs test/route-guard-analysis.test.mjs test/route-guard-analysis-shared.test.mjs test/source-structure-extractor-shared.test.mjs test/export-artifacts-shared.test.mjs test/runner-shared.test.mjs",
     "test:hub-lite:artifacts": "node --test test/hub-lite-artifacts.test.mjs",
     "test:lsclaw:adapter": "npm run test:lsclaw:adapter:artifacts && npm run test:lsclaw:adapter:runtime",
     "test:lsclaw:adapter:artifacts": "node --test test/lsclaw-adapter-contract.test.mjs",
