@@ -6,47 +6,19 @@
  */
 import { generateId } from '../../utils/id-generator.js';
 import { incidentRepository } from '../../persistence/repositories/incident-repository.js';
-/**
- * 生成指纹
- */
-function generateFingerprint(scope, title) {
-    const data = `${scope.tenant_id}:${scope.project_id}:${title}:${Date.now()}`;
-    return Buffer.from(data).toString('base64').substring(0, 16);
-}
+import { appendIncidentTimelineEvent, appendUniqueIncidentReference, applyIncidentStatusUpdate, buildIncidentEntity, generateIncidentFingerprint, hasIncidentScope, } from './shared.js';
 /**
  * 创建 Incident
  */
 export async function createIncident(request) {
     const now = new Date().toISOString();
     const incidentId = generateId('inc');
-    const incident = {
-        incident_id: incidentId,
-        fingerprint: generateFingerprint({ tenant_id: request.scope.tenant_id, project_id: request.scope.project_id }, request.title),
-        scope: request.scope,
-        title: request.title,
-        description: request.description,
-        severity: request.severity,
-        status: 'detected',
-        source: request.source,
-        timeline: [
-            {
-                timestamp: now,
-                type: 'created',
-                description: `Incident created from ${request.source.type}`,
-                metadata: { source: request.source },
-            },
-        ],
-        hypotheses: [],
-        recovery_actions: [],
-        impact: {
-            services_affected: request.impact?.services_affected || [],
-            users_impacted: request.impact?.users_impacted,
-            sla_breach_risk: request.impact?.sla_breach_risk || false,
-        },
-        created_at: now,
-        updated_at: now,
-        version: 1,
-    };
+    const incident = buildIncidentEntity({
+        incidentId,
+        request,
+        now,
+        fingerprint: generateIncidentFingerprint({ tenant_id: request.scope.tenant_id, project_id: request.scope.project_id }, request.title),
+    });
     incidentRepository.set(incidentId, incident);
     console.log(`[IncidentStore] Created incident ${incidentId}: ${incident.title}`);
     return incident;
@@ -62,7 +34,7 @@ export async function getIncidentWithScope(incidentId, tenant_id, project_id) {
     if (!incident) {
         return null;
     }
-    if (incident.scope.tenant_id !== tenant_id || incident.scope.project_id !== project_id) {
+    if (!hasIncidentScope(incident, tenant_id, project_id)) {
         return null;
     }
     return incident;
@@ -76,17 +48,7 @@ export async function updateIncidentStatus(incidentId, newStatus, comment, actor
         return null;
     }
     const now = new Date().toISOString();
-    // 添加状态变更事件到时间线
-    incident.timeline.push({
-        timestamp: now,
-        type: 'status_change',
-        description: comment || `Status changed to ${newStatus}`,
-        actor: actorId,
-        metadata: { from: incident.status, to: newStatus },
-    });
-    incident.status = newStatus;
-    incident.updated_at = now;
-    incident.version += 1;
+    applyIncidentStatusUpdate({ incident, newStatus, now, comment, actorId });
     incidentRepository.set(incidentId, incident);
     console.log(`[IncidentStore] Updated incident ${incidentId} status to ${newStatus}`);
     return incident;
@@ -99,12 +61,13 @@ export async function addHypothesisToIncident(incidentId, hypothesisId) {
     if (!incident) {
         return null;
     }
-    if (!incident.hypotheses.includes(hypothesisId)) {
-        incident.hypotheses.push(hypothesisId);
-        incident.updated_at = new Date().toISOString();
-        incident.version += 1;
-        incidentRepository.set(incidentId, incident);
-    }
+    appendUniqueIncidentReference({
+        incident,
+        field: 'hypotheses',
+        value: hypothesisId,
+        now: new Date().toISOString(),
+    });
+    incidentRepository.set(incidentId, incident);
     return incident;
 }
 /**
@@ -115,12 +78,13 @@ export async function addRecoveryActionToIncident(incidentId, actionId) {
     if (!incident) {
         return null;
     }
-    if (!incident.recovery_actions.includes(actionId)) {
-        incident.recovery_actions.push(actionId);
-        incident.updated_at = new Date().toISOString();
-        incident.version += 1;
-        incidentRepository.set(incidentId, incident);
-    }
+    appendUniqueIncidentReference({
+        incident,
+        field: 'recovery_actions',
+        value: actionId,
+        now: new Date().toISOString(),
+    });
+    incidentRepository.set(incidentId, incident);
     return incident;
 }
 /**
@@ -158,15 +122,16 @@ export async function addTimelineEvent(incidentId, type, description, actor, met
     if (!incident) {
         return null;
     }
-    incident.timeline.push({
-        timestamp: new Date().toISOString(),
-        type,
-        description,
-        actor,
-        metadata,
+    appendIncidentTimelineEvent({
+        incident,
+        now: new Date().toISOString(),
+        event: {
+            type,
+            description,
+            actor,
+            metadata,
+        },
     });
-    incident.updated_at = new Date().toISOString();
-    incident.version += 1;
     incidentRepository.set(incidentId, incident);
     return incident;
 }
