@@ -62,16 +62,19 @@
   - 审计时间字段缺少默认值
   - baseline/current 对比下的字段删除
   - baseline/current 对比下的类型变化
+  - baseline/current 对比下的保守 SQL widening 分级
   - baseline/current 对比下的主键变化
   - baseline/current 对比下的字段级 unique 与组合唯一键 drift
   - baseline/current 对比下的可空到必填收紧
+  - baseline/current 对比下的必填到可空放宽 warning
   - baseline/current 对比下的新增必填字段带 default 分级
   - baseline/current 对比下的 enum 值删除
   - baseline/current 对比下的默认值新增/删除/变化分级
 - 当前限制：
   - 仅做启发式解析
   - enum 仅支持 inline SQL `enum(...)` 与 Prisma `enum` block
-  - 默认值比较只做最小函数等价判断（如 `CURRENT_TIMESTAMP` / `now()`、`uuid_generate_v4()` / `gen_random_uuid()`）
+  - 默认值比较只做保守函数等价与分级判断（如 `CURRENT_TIMESTAMP` / `now()`、`uuid_generate_v4()` / `gen_random_uuid()`、`autoincrement()` / `nextval(...)`）
+  - 类型等价与 widening 分级只覆盖少量保守 SQL/Postgres 场景，不尝试做完整方言兼容性证明
 - fixture：
   - `fixtures/artifact-parsers/schema-minimal.sql`
   - `fixtures/artifact-parsers/schema-minimal.prisma`

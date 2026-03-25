@@ -143,13 +143,14 @@ export const SCAN_GOVERNANCE_OVERVIEW = {
     {
       dimension: '字段治理',
       status: '`schema` 域已支持最小接入',
-      details: '支持 `schemaArtifacts` 直通和 `schemaDocuments` 原生输入；当前先覆盖主键与敏感字段可空类问题',
+      details:
+        '支持 `schemaArtifacts` 直通和 `schemaDocuments` 原生输入；当前已覆盖主键缺失、敏感字段可空、生命周期默认值与审计时间默认值等基础结构检查',
     },
     {
       dimension: '兼容性治理',
       status: '`contract/schema` 域已支持最小对比',
       details:
-        '`contract` 支持 `openApiComparisons` 的 operation 删除、请求字段删除/类型变化/必填新增、请求新增必填字段带 default 的降级提示、响应字段删除/类型变化、响应 required -> optional 变化、最小值语义 comparison（`nullable` 收紧、`enum` 值删除、`default` 删除/变更），以及最小 `discriminator` comparison（`propertyName` 变化、mapping 值删除）；`schema` 支持 `schemaComparisons` 的字段删除、类型变化、主键变化、字段/组合唯一键 drift、可空性收紧、新增必填字段无 default、带 default 的降级提示，以及最小 Prisma/SQL 默认值等价归一',
+        '`contract` 支持 `openApiComparisons` 的 operation 删除、请求字段删除/类型变化/必填新增、请求新增必填字段带 default 的降级提示、响应字段删除/类型变化、响应 required -> optional 变化、最小值语义 comparison（`nullable` 收紧、`enum` 值删除、`default` 删除/变更），以及最小 `discriminator` comparison（`propertyName` 变化、mapping 值删除）；`schema` 支持 `schemaComparisons` 的字段删除、类型变化、主键变化、字段/组合唯一键 drift、`nullable -> required` / `required -> nullable` 分级、新增必填字段分级、default drift 分级，以及保守 SQL/Postgres type/default 等价归一与极少数 widening warning',
     },
     {
       dimension: '数据库字段治理',
