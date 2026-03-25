@@ -338,6 +338,8 @@ function compareEntities(
         continue;
       }
 
+      const nullabilityTightenedWithDefault = baselineField.nullable && !currentField.nullable && currentField.hasDefault;
+
       if (baselineField.type !== currentField.type) {
         artifacts.push(buildBreakingFinding(
           sourceLabel,
@@ -349,15 +351,28 @@ function compareEntities(
         ));
       }
 
-      if (baselineField.nullable && !currentField.nullable && !currentField.hasDefault) {
-        artifacts.push(buildBreakingFinding(
-          sourceLabel,
-          fileLabel,
-          line,
-          `schema/${prefix}-breaking-nullability-tighten`,
-          `Field ${baselineEntity.name}.${fieldName} changed from nullable to required without default`,
-          `${baselineEntity.name}.${fieldName}`,
-        ));
+      if (baselineField.nullable && !currentField.nullable) {
+        if (!currentField.hasDefault) {
+          artifacts.push(buildBreakingFinding(
+            sourceLabel,
+            fileLabel,
+            line,
+            `schema/${prefix}-breaking-nullability-tighten`,
+            `Field ${baselineEntity.name}.${fieldName} changed from nullable to required without default`,
+            `${baselineEntity.name}.${fieldName}`,
+          ));
+        } else {
+          artifacts.push(buildComparisonFinding(
+            sourceLabel,
+            fileLabel,
+            line,
+            `schema/${prefix}-nullability-tighten-with-default`,
+            'warning',
+            `Field ${baselineEntity.name}.${fieldName} changed from nullable to required with default ${currentField.defaultValue || ''}`.trim(),
+            `${baselineEntity.name}.${fieldName}: nullable -> required with default`,
+            'medium',
+          ));
+        }
       }
 
       if (baselineField.unique && !currentField.unique) {
@@ -420,7 +435,7 @@ function compareEntities(
           `${baselineEntity.name}.${fieldName}: default removed`,
           'medium',
         ));
-      } else if (!baselineField.hasDefault && currentField.hasDefault) {
+      } else if (!baselineField.hasDefault && currentField.hasDefault && !nullabilityTightenedWithDefault) {
         artifacts.push(buildComparisonFinding(
           sourceLabel,
           fileLabel,

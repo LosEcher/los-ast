@@ -142,6 +142,7 @@
 - 当前覆盖主键缺失、敏感字段可空、生命周期默认值、审计时间默认值 4 类基础检查。
 - 已完成最小 `schemaComparisons -> compatibility findings` 闭环，当前覆盖字段删除、类型变化、可空性收紧、新增必填字段无 default、enum 值删除、默认值变化分级。
 - 已补时间默认值函数与常见 UUID 默认值函数的最小等价归一（如 `CURRENT_TIMESTAMP` / `now()`、`uuid_generate_v4()` / `gen_random_uuid()`、Prisma `uuid()` / `dbgenerated("gen_random_uuid()")`）。
+- 已补第一轮 nullability 分级：已有字段从 nullable 收紧为 required 时，`无 default` 仍判为 breaking，`有 default` 则降级为 warning。
 - 已补主键变化、字段/组合唯一键 drift comparison，以及“新增必填字段但带 default”的降级提示。
 - 下一步扩展到更细的兼容性等级与方言等价规则。
 

@@ -227,11 +227,17 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
                 line += 1;
                 continue;
             }
+            const nullabilityTightenedWithDefault = baselineField.nullable && !currentField.nullable && currentField.hasDefault;
             if (baselineField.type !== currentField.type) {
                 artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-type-change`, `Field ${baselineEntity.name}.${fieldName} changed type from ${baselineField.type} to ${currentField.type}`, `${baselineEntity.name}.${fieldName}: ${baselineField.type} -> ${currentField.type}`));
             }
-            if (baselineField.nullable && !currentField.nullable && !currentField.hasDefault) {
-                artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-nullability-tighten`, `Field ${baselineEntity.name}.${fieldName} changed from nullable to required without default`, `${baselineEntity.name}.${fieldName}`));
+            if (baselineField.nullable && !currentField.nullable) {
+                if (!currentField.hasDefault) {
+                    artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-nullability-tighten`, `Field ${baselineEntity.name}.${fieldName} changed from nullable to required without default`, `${baselineEntity.name}.${fieldName}`));
+                }
+                else {
+                    artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-nullability-tighten-with-default`, 'warning', `Field ${baselineEntity.name}.${fieldName} changed from nullable to required with default ${currentField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: nullable -> required with default`, 'medium'));
+                }
             }
             if (baselineField.unique && !currentField.unique) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-unique-removed`, 'info', `Field ${baselineEntity.name}.${fieldName} removed unique constraint`, `${baselineEntity.name}.${fieldName}: unique removed`, 'low'));
@@ -249,7 +255,7 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
             if (baselineField.hasDefault && !currentField.hasDefault) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-removed`, 'warning', `Field ${baselineEntity.name}.${fieldName} removed default value ${baselineField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: default removed`, 'medium'));
             }
-            else if (!baselineField.hasDefault && currentField.hasDefault) {
+            else if (!baselineField.hasDefault && currentField.hasDefault && !nullabilityTightenedWithDefault) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-added`, 'info', `Field ${baselineEntity.name}.${fieldName} added default value ${currentField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: default added`, 'low'));
             }
             else if (baselineField.hasDefault &&

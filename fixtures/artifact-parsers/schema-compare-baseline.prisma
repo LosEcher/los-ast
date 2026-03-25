@@ -6,6 +6,7 @@ enum UserStatus {
 model User {
   id        String   @id
   email     String?
+  locale    String?
   status    UserStatus @default(ACTIVE)
   createdAt DateTime
 }

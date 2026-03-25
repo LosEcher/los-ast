@@ -110,6 +110,7 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'breaking field drop',
         'breaking type change',
         'breaking nullability tighten',
+        'graded nullability tighten with default',
         'breaking enum value drop',
         'default compatibility drift',
       ],
@@ -117,7 +118,7 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'heuristic parsing only',
         'comparison requires caller-provided baseline/current pair',
         'enum parsing is limited to inline sql enum(...) and prisma enum blocks',
-        'default compatibility does not yet model function-equivalence across dialects',
+        'default compatibility does not yet model full function-equivalence across every dialect and provider-specific default',
       ],
       fixtureFiles: [
         'fixtures/artifact-parsers/schema-minimal.sql',
