@@ -503,6 +503,30 @@ describe('artifact parsers', () => {
     expect(parsed.schemaArtifacts).toHaveLength(0);
   });
 
+  it('should treat equivalent sequence-backed increment defaults as compatible in schemaComparisons', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-prisma-increment-default-equivalence',
+          file: '/tmp/schema.prisma',
+          format: 'prisma',
+          baseline: [
+            'model User {',
+            '  id Int @id @default(autoincrement())',
+            '}',
+          ].join('\n'),
+          current: [
+            'model User {',
+            "  id Int @id @default(dbgenerated(\"nextval('users_id_seq'::regclass)\"))",
+            '}',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts).toHaveLength(0);
+  });
+
   it('should grade field-level unique drift in schemaComparisons', () => {
     const parsed = parseArtifactInputs({
       schemaComparisons: [

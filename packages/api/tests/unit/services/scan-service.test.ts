@@ -2547,6 +2547,38 @@ describe('ScanService', () => {
       expect(result.findings).toHaveLength(0);
     });
 
+    it('should treat equivalent sequence-backed increment defaults as compatible in schemaComparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-prisma-increment-default-equivalence',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id Int @id @default(autoincrement())',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              "  id Int @id @default(dbgenerated(\"nextval('users_id_seq'::regclass)\"))",
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
     it('should grade field-level unique drift in schemaComparisons', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

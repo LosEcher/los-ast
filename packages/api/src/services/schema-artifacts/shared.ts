@@ -110,6 +110,13 @@ function normalizeDefaultValue(value: string | undefined): string | undefined {
     return '@generated_uuid';
   }
 
+  if (
+    normalized === 'autoincrement()'
+    || /^nextval\(.+\)$/.test(normalized)
+  ) {
+    return '@generated_increment';
+  }
+
   return normalized;
 }
 

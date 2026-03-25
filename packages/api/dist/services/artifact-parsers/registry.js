@@ -81,6 +81,7 @@ export const artifactParserProfiles = [
                 'breaking enum value drop',
                 'default compatibility drift',
                 'common sql type synonym equivalence',
+                'sequence-backed increment default equivalence',
             ],
             limitations: [
                 'heuristic parsing only',

@@ -64,6 +64,10 @@ function normalizeDefaultValue(value) {
         || normalized === 'uuid_generate_v4()') {
         return '@generated_uuid';
     }
+    if (normalized === 'autoincrement()'
+        || /^nextval\(.+\)$/.test(normalized)) {
+        return '@generated_increment';
+    }
     return normalized;
 }
 function extractSqlTypeToken(definition) {

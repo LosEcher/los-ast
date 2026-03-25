@@ -66,4 +66,23 @@ describe('schema artifacts shared helpers', () => {
       hasDefault: true,
     });
   });
+
+  it('normalizes sequence-backed increment defaults across sql and prisma forms', () => {
+    const [sqlEntity] = parseSqlEntities([
+      'CREATE TABLE users (',
+      "  id INTEGER NOT NULL DEFAULT nextval('users_id_seq'::regclass),",
+      '  PRIMARY KEY (id)',
+      ');',
+    ].join('\n'));
+    const [prismaEntity] = parsePrismaEntities([
+      'model User {',
+      "  id Int @id @default(dbgenerated(\"nextval('users_id_seq'::regclass)\"))",
+      '  rank Int @default(autoincrement())',
+      '}',
+    ].join('\n'));
+
+    expect(sqlEntity.fields.get('id')?.defaultValue).toBe('@generated_increment');
+    expect(prismaEntity.fields.get('id')?.defaultValue).toBe('@generated_increment');
+    expect(prismaEntity.fields.get('rank')?.defaultValue).toBe('@generated_increment');
+  });
 });
