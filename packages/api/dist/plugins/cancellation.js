@@ -68,23 +68,7 @@ export default fp(async function cancellationPlugin(fastify) {
         let timeoutId;
         let reason = 'unknown';
         let timedOut = false;
-        const context = {
-            abortController,
-            reason: 'unknown',
-            timedOut: false,
-            timeoutId: undefined,
-            cleanup() {
-                if (cleaned)
-                    return;
-                cleaned = true;
-                if (timeoutId) {
-                    clearTimeout(timeoutId);
-                }
-                request.raw.off('close', onClose);
-                reply.raw.off('close', onClose);
-            },
-        };
-        const onClose = () => {
+        const abortForClientDisconnect = () => {
             if (cleaned)
                 return;
             reason = 'client-cancel';
@@ -99,6 +83,32 @@ export default fp(async function cancellationPlugin(fastify) {
                 path: request.url,
                 method: request.method,
             }, 'Client disconnected');
+        };
+        const context = {
+            abortController,
+            reason: 'unknown',
+            timedOut: false,
+            timeoutId: undefined,
+            cleanup() {
+                if (cleaned)
+                    return;
+                cleaned = true;
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+                request.raw.off('aborted', onAborted);
+                request.raw.off('close', onClose);
+                reply.raw.off('close', onClose);
+            },
+        };
+        const onAborted = () => {
+            abortForClientDisconnect();
+        };
+        const onClose = () => {
+            if (!request.raw.aborted && !reply.raw.destroyed) {
+                return;
+            }
+            abortForClientDisconnect();
         };
         timeoutId = setTimeout(() => {
             if (cleaned)
@@ -121,6 +131,7 @@ export default fp(async function cancellationPlugin(fastify) {
         context.reason = reason;
         context.timedOut = timedOut;
         request.cancellationContext = context;
+        request.raw.on('aborted', onAborted);
         request.raw.on('close', onClose);
         reply.raw.on('close', onClose);
     });

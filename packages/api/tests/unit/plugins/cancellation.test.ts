@@ -9,6 +9,18 @@ import cancellationPlugin from '../../../src/plugins/cancellation';
 
 const wait = promisify(setTimeout);
 
+async function waitForCondition(check: () => boolean, timeoutMs = 250, intervalMs = 10): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check()) {
+      return true;
+    }
+    await wait(intervalMs);
+  }
+
+  return check();
+}
+
 vi.mock('../../../src/config/index.js', async () => {
   const actual = await vi.importActual('../../../src/config/index.js');
   return {
@@ -116,7 +128,6 @@ describe('Cancellation Plugin', () => {
     expect(responseError).toBeDefined();
     expect(responseError.message).toMatch(/socket hang up|aborted/i);
 
-    await wait(60);
-    expect(abortedBySignal).toBe(true);
+    expect(await waitForCondition(() => abortedBySignal)).toBe(true);
   });
 });

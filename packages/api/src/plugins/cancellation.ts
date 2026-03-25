@@ -104,23 +104,7 @@ export default fp(async function cancellationPlugin(fastify: FastifyInstance) {
     let reason: CancellationReason = 'unknown';
     let timedOut = false;
 
-    const context: CancellationContext = {
-      abortController,
-      reason: 'unknown',
-      timedOut: false,
-      timeoutId: undefined,
-      cleanup() {
-        if (cleaned) return;
-        cleaned = true;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        request.raw.off('close', onClose);
-        reply.raw.off('close', onClose);
-      },
-    };
-
-    const onClose = () => {
+    const abortForClientDisconnect = () => {
       if (cleaned) return;
       reason = 'client-cancel';
       timedOut = false;
@@ -135,6 +119,35 @@ export default fp(async function cancellationPlugin(fastify: FastifyInstance) {
         path: request.url,
         method: request.method,
       }, 'Client disconnected');
+    };
+
+    const context: CancellationContext = {
+      abortController,
+      reason: 'unknown',
+      timedOut: false,
+      timeoutId: undefined,
+      cleanup() {
+        if (cleaned) return;
+        cleaned = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        request.raw.off('aborted', onAborted);
+        request.raw.off('close', onClose);
+        reply.raw.off('close', onClose);
+      },
+    };
+
+    const onAborted = () => {
+      abortForClientDisconnect();
+    };
+
+    const onClose = () => {
+      if (!request.raw.aborted && !reply.raw.destroyed) {
+        return;
+      }
+
+      abortForClientDisconnect();
     };
 
     timeoutId = setTimeout(() => {
@@ -160,6 +173,7 @@ export default fp(async function cancellationPlugin(fastify: FastifyInstance) {
     context.timedOut = timedOut;
 
     (request as unknown as { cancellationContext?: CancellationContext }).cancellationContext = context;
+    request.raw.on('aborted', onAborted);
     request.raw.on('close', onClose);
     reply.raw.on('close', onClose);
   });
