@@ -2359,6 +2359,78 @@ describe('ScanService', () => {
       ]);
     });
 
+    it('should grade low-risk optional default removal as info', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-optional-default-removed',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id String @id',
+              '  nickname String? @default("guest")',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              '  id String @id',
+              '  nickname String?',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/prisma-default-removed',
+      ]);
+      expect(result.findings[0].severity).toBe('info');
+    });
+
+    it('should treat generated-to-non-generated default changes as breaking', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-generated-default-drift',
+            file: '/tmp/schema.prisma',
+            format: 'prisma',
+            baseline: [
+              'model User {',
+              '  id String @id @default(uuid())',
+              '}',
+            ].join('\n'),
+            current: [
+              'model User {',
+              '  id String @id @default("manual-id")',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/prisma-breaking-default-generated-to-non-generated',
+      ]);
+      expect(result.findings[0].severity).toBe('error');
+    });
+
     it('should grade enum and default compatibility drift from schemaComparisons', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

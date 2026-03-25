@@ -246,6 +246,21 @@ function normalizeUniqueKey(key: string[]): string {
   return [...key].sort().join('|');
 }
 
+function isGeneratedDefaultValue(value: string | undefined): boolean {
+  return value === '@current_timestamp'
+    || value === '@generated_uuid'
+    || value === '@generated_increment'
+    || value === '@updatedat';
+}
+
+function isLowRiskDefaultRemoval(fieldName: string, field: SchemaField): boolean {
+  return field.nullable
+    && !field.primaryKey
+    && !field.unique
+    && !LIFECYCLE_FIELD_RE.test(fieldName)
+    && !AUDIT_TIMESTAMP_RE.test(fieldName);
+}
+
 function compareEntities(
   sourceLabel: string,
   fileLabel: string,
@@ -425,15 +440,16 @@ function compareEntities(
       }
 
       if (baselineField.hasDefault && !currentField.hasDefault) {
+        const lowRiskDefaultRemoval = isLowRiskDefaultRemoval(fieldName, baselineField);
         artifacts.push(buildComparisonFinding(
           sourceLabel,
           fileLabel,
           line,
           `schema/${prefix}-default-removed`,
-          'warning',
+          lowRiskDefaultRemoval ? 'info' : 'warning',
           `Field ${baselineEntity.name}.${fieldName} removed default value ${baselineField.defaultValue || ''}`.trim(),
           `${baselineEntity.name}.${fieldName}: default removed`,
-          'medium',
+          lowRiskDefaultRemoval ? 'low' : 'medium',
         ));
       } else if (!baselineField.hasDefault && currentField.hasDefault && !nullabilityTightenedWithDefault) {
         artifacts.push(buildComparisonFinding(
@@ -453,16 +469,32 @@ function compareEntities(
         currentField.defaultValue &&
         baselineField.defaultValue !== currentField.defaultValue
       ) {
-        artifacts.push(buildComparisonFinding(
-          sourceLabel,
-          fileLabel,
-          line,
-          `schema/${prefix}-default-changed`,
-          'warning',
-          `Field ${baselineEntity.name}.${fieldName} changed default value from ${baselineField.defaultValue} to ${currentField.defaultValue}`,
-          `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`,
-          'medium',
-        ));
+        const baselineGenerated = isGeneratedDefaultValue(baselineField.defaultValue);
+        const currentGenerated = isGeneratedDefaultValue(currentField.defaultValue);
+
+        if (baselineGenerated && !currentGenerated) {
+          artifacts.push(buildComparisonFinding(
+            sourceLabel,
+            fileLabel,
+            line,
+            `schema/${prefix}-breaking-default-generated-to-non-generated`,
+            'error',
+            `Field ${baselineEntity.name}.${fieldName} changed default value from generated ${baselineField.defaultValue} to non-generated ${currentField.defaultValue}`,
+            `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`,
+            'high',
+          ));
+        } else {
+          artifacts.push(buildComparisonFinding(
+            sourceLabel,
+            fileLabel,
+            line,
+            `schema/${prefix}-default-changed`,
+            'warning',
+            `Field ${baselineEntity.name}.${fieldName} changed default value from ${baselineField.defaultValue} to ${currentField.defaultValue}`,
+            `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`,
+            'medium',
+          ));
+        }
       }
 
       line += 1;

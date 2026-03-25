@@ -393,6 +393,62 @@ describe('artifact parsers', () => {
     ]);
   });
 
+  it('should grade low-risk optional default removal as info', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-optional-default-removed',
+          file: '/tmp/schema.prisma',
+          format: 'prisma',
+          baseline: [
+            'model User {',
+            '  id String @id',
+            '  nickname String? @default("guest")',
+            '}',
+          ].join('\n'),
+          current: [
+            'model User {',
+            '  id String @id',
+            '  nickname String?',
+            '}',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts.map((item) => item.ruleId)).toEqual([
+      'schema/prisma-default-removed',
+    ]);
+    expect(parsed.schemaArtifacts[0].severity).toBe('info');
+  });
+
+  it('should treat generated-to-non-generated default changes as breaking', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-generated-default-drift',
+          file: '/tmp/schema.prisma',
+          format: 'prisma',
+          baseline: [
+            'model User {',
+            '  id String @id @default(uuid())',
+            '}',
+          ].join('\n'),
+          current: [
+            'model User {',
+            '  id String @id @default("manual-id")',
+            '}',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts.map((item) => item.ruleId)).toEqual([
+      'schema/prisma-breaking-default-generated-to-non-generated',
+    ]);
+    expect(parsed.schemaArtifacts[0].severity).toBe('error');
+  });
+
   it('should treat equivalent sql timestamp and uuid defaults as compatible in schemaComparisons', () => {
     const parsed = parseArtifactInputs({
       schemaComparisons: [

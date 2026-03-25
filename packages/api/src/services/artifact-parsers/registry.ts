@@ -118,6 +118,7 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'postgres serial/bigserial alias equivalence',
         'postgres timestamptz/timetz alias equivalence',
         'postgres int8/float8 alias equivalence',
+        'graded default compatibility drift',
       ],
       limitations: [
         'heuristic parsing only',

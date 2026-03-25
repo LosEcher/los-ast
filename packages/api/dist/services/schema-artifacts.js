@@ -188,6 +188,19 @@ function diffEnumValues(baselineValues, currentValues) {
 function normalizeUniqueKey(key) {
     return [...key].sort().join('|');
 }
+function isGeneratedDefaultValue(value) {
+    return value === '@current_timestamp'
+        || value === '@generated_uuid'
+        || value === '@generated_increment'
+        || value === '@updatedat';
+}
+function isLowRiskDefaultRemoval(fieldName, field) {
+    return field.nullable
+        && !field.primaryKey
+        && !field.unique
+        && !LIFECYCLE_FIELD_RE.test(fieldName)
+        && !AUDIT_TIMESTAMP_RE.test(fieldName);
+}
 function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, currentEntities) {
     const artifacts = [];
     const currentByName = new Map(currentEntities.map((entity) => [entity.name, entity]));
@@ -253,7 +266,8 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-enum-value-add`, 'info', `Field ${baselineEntity.name}.${fieldName} added enum values: ${enumDiff.added.join(', ')}`, `${baselineEntity.name}.${fieldName}: +${enumDiff.added.join(', +')}`, 'low'));
             }
             if (baselineField.hasDefault && !currentField.hasDefault) {
-                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-removed`, 'warning', `Field ${baselineEntity.name}.${fieldName} removed default value ${baselineField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: default removed`, 'medium'));
+                const lowRiskDefaultRemoval = isLowRiskDefaultRemoval(fieldName, baselineField);
+                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-removed`, lowRiskDefaultRemoval ? 'info' : 'warning', `Field ${baselineEntity.name}.${fieldName} removed default value ${baselineField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: default removed`, lowRiskDefaultRemoval ? 'low' : 'medium'));
             }
             else if (!baselineField.hasDefault && currentField.hasDefault && !nullabilityTightenedWithDefault) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-added`, 'info', `Field ${baselineEntity.name}.${fieldName} added default value ${currentField.defaultValue || ''}`.trim(), `${baselineEntity.name}.${fieldName}: default added`, 'low'));
@@ -263,7 +277,14 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
                 baselineField.defaultValue &&
                 currentField.defaultValue &&
                 baselineField.defaultValue !== currentField.defaultValue) {
-                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-changed`, 'warning', `Field ${baselineEntity.name}.${fieldName} changed default value from ${baselineField.defaultValue} to ${currentField.defaultValue}`, `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`, 'medium'));
+                const baselineGenerated = isGeneratedDefaultValue(baselineField.defaultValue);
+                const currentGenerated = isGeneratedDefaultValue(currentField.defaultValue);
+                if (baselineGenerated && !currentGenerated) {
+                    artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-default-generated-to-non-generated`, 'error', `Field ${baselineEntity.name}.${fieldName} changed default value from generated ${baselineField.defaultValue} to non-generated ${currentField.defaultValue}`, `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`, 'high'));
+                }
+                else {
+                    artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-default-changed`, 'warning', `Field ${baselineEntity.name}.${fieldName} changed default value from ${baselineField.defaultValue} to ${currentField.defaultValue}`, `${baselineEntity.name}.${fieldName}: ${baselineField.defaultValue} -> ${currentField.defaultValue}`, 'medium'));
+                }
             }
             line += 1;
         }
