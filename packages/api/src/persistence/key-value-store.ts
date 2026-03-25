@@ -1,9 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
 
 import { PERSISTENCE_CONFIG } from '../config/index.js';
 import { applySqliteMigrations, createSqliteDatabase } from './sqlite-database.js';
+import {
+  buildQuarantineStorePath,
+  buildSerializedStorePayload,
+  buildTempStorePath,
+  keyValueStoreMigrations,
+  parseSerializedStore,
+  parseStoredJsonValue,
+  resolveJsonStoreFilePath,
+  resolveKeyValueStoreOptions,
+  toSqliteCount,
+} from './key-value-store/shared.js';
 
 export type KeyValueStoreBackend = 'memory' | 'file' | 'sqlite';
 
@@ -23,29 +33,6 @@ export interface KeyValueStoreOptions {
   dir?: string;
   sqlitePath?: string;
 }
-
-type SerializedStore<T> = {
-  version: 1;
-  items: Record<string, T>;
-};
-
-const STORE_SCHEMA_VERSION = 1;
-const keyValueStoreMigrations = [
-  {
-    version: 1,
-    up(database: DatabaseSync) {
-      database.exec(`
-        CREATE TABLE IF NOT EXISTS key_value_store (
-          namespace TEXT NOT NULL,
-          item_key TEXT NOT NULL,
-          value_json TEXT NOT NULL,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (namespace, item_key)
-        ) STRICT
-      `);
-    },
-  },
-];
 
 class InMemoryKeyValueStore<T> implements KeyValueStore<T> {
   private readonly store = new Map<string, T>();
@@ -89,8 +76,7 @@ class JsonFileKeyValueStore<T> implements KeyValueStore<T> {
 
   constructor(name: string, dir?: string) {
     const targetDir = dir || path.join(process.cwd(), '.los-ast-state', 'api');
-    const safeName = name.replace(/[^a-z0-9._-]+/giu, '_');
-    this.filePath = path.join(targetDir, `${safeName}.json`);
+    this.filePath = resolveJsonStoreFilePath(name, targetDir);
     this.load();
   }
 
@@ -143,19 +129,7 @@ class JsonFileKeyValueStore<T> implements KeyValueStore<T> {
     }
 
     try {
-      const parsed = JSON.parse(raw) as SerializedStore<T>;
-      if (
-        !parsed ||
-        typeof parsed !== 'object' ||
-        parsed.version !== STORE_SCHEMA_VERSION ||
-        !parsed.items ||
-        typeof parsed.items !== 'object' ||
-        Array.isArray(parsed.items)
-      ) {
-        throw new Error(`Unsupported store payload shape or version in ${this.filePath}`);
-      }
-
-      for (const [key, value] of Object.entries(parsed.items)) {
+      for (const [key, value] of Object.entries(parseSerializedStore<T>(raw, this.filePath))) {
         this.store.set(key, value);
       }
     } catch (error) {
@@ -165,17 +139,14 @@ class JsonFileKeyValueStore<T> implements KeyValueStore<T> {
 
   private flush(): void {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    const payload: SerializedStore<T> = {
-      version: STORE_SCHEMA_VERSION,
-      items: Object.fromEntries(this.store.entries()),
-    };
-    const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
+    const payload = buildSerializedStorePayload(Array.from(this.store.entries()));
+    const tempPath = buildTempStorePath(this.filePath);
     fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2), 'utf8');
     fs.renameSync(tempPath, this.filePath);
   }
 
   private quarantineCorruptedFile(error: unknown): void {
-    const quarantinePath = `${this.filePath}.corrupt-${Date.now()}`;
+    const quarantinePath = buildQuarantineStorePath(this.filePath);
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     fs.renameSync(this.filePath, quarantinePath);
     console.warn(
@@ -220,8 +191,7 @@ class SqliteKeyValueStore<T> implements KeyValueStore<T> {
         'SELECT COUNT(*) as count FROM key_value_store WHERE namespace = ? AND item_key = ?'
       )
       .get(this.name, key) as { count: number | bigint };
-    const count = typeof row.count === 'bigint' ? Number(row.count) : row.count;
-    return count > 0;
+    return toSqliteCount(row.count) > 0;
   }
 
   set(key: string, value: T): void {
@@ -276,24 +246,20 @@ class SqliteKeyValueStore<T> implements KeyValueStore<T> {
     const row = this.database
       .prepare('SELECT COUNT(*) as count FROM key_value_store WHERE namespace = ?')
       .get(this.name) as { count: number | bigint };
-    return typeof row.count === 'bigint' ? Number(row.count) : row.count;
+    return toSqliteCount(row.count);
   }
 
   private parseRowValue(key: string, rawValue: string | undefined): T | undefined {
-    if (rawValue === undefined) {
-      return undefined;
-    }
-
-    try {
-      return JSON.parse(rawValue) as T;
-    } catch (error) {
-      console.warn(
-        `[Persistence] Ignoring invalid JSON payload in sqlite store "${this.name}" for key "${key}": ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-      return undefined;
-    }
+    return parseStoredJsonValue<T>({
+      rawValue,
+      onInvalid: (error) => {
+        console.warn(
+          `[Persistence] Ignoring invalid JSON payload in sqlite store "${this.name}" for key "${key}": ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      },
+    });
   }
 }
 
@@ -301,9 +267,7 @@ export function createKeyValueStore<T>(
   name: string,
   options: KeyValueStoreOptions = {}
 ): KeyValueStore<T> {
-  const backend = options.backend ?? PERSISTENCE_CONFIG.experimentalStoreBackend;
-  const dir = options.dir ?? PERSISTENCE_CONFIG.experimentalStoreDir ?? undefined;
-  const sqlitePath = options.sqlitePath ?? PERSISTENCE_CONFIG.experimentalSqlitePath ?? undefined;
+  const { backend, dir, sqlitePath } = resolveKeyValueStoreOptions(options, PERSISTENCE_CONFIG);
 
   if (backend === 'file') {
     return new JsonFileKeyValueStore<T>(name, dir);
