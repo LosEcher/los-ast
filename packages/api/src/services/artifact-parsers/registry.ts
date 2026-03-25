@@ -121,6 +121,7 @@ export const artifactParserProfiles: ArtifactParserProfile[] = [
         'postgres int8/float8 alias equivalence',
         'graded default compatibility drift',
         'graded conservative sql type widening',
+        'single-field unique representation equivalence',
       ],
       limitations: [
         'heuristic parsing only',

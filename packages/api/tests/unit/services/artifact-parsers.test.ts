@@ -753,7 +753,36 @@ describe('artifact parsers', () => {
       'schema/prisma-unique-removed',
       'schema/prisma-unique-added',
     ]);
-    expect(parsed.schemaArtifacts.map((item) => item.severity)).toEqual(['info', 'warning']);
+    expect(parsed.schemaArtifacts.map((item) => item.severity)).toEqual(['warning', 'warning']);
+  });
+
+  it('should treat equivalent single-field unique representations as compatible', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-single-unique-equivalence',
+          file: '/tmp/schema.sql',
+          format: 'sql',
+          baseline: [
+            'CREATE TABLE users (',
+            '  id TEXT NOT NULL,',
+            '  email TEXT NOT NULL UNIQUE,',
+            '  PRIMARY KEY (id)',
+            ');',
+          ].join('\n'),
+          current: [
+            'CREATE TABLE users (',
+            '  id TEXT NOT NULL,',
+            '  email TEXT NOT NULL,',
+            '  PRIMARY KEY (id),',
+            '  UNIQUE (email)',
+            ');',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts).toHaveLength(0);
   });
 
   it('should grade composite unique drift in schemaComparisons', () => {

@@ -246,6 +246,14 @@ function normalizeUniqueKey(key: string[]): string {
   return [...key].sort().join('|');
 }
 
+function getSingleFieldUniqueKeys(entity: SchemaEntity): Set<string> {
+  return new Set(
+    (entity.uniqueKeys || [])
+      .filter((key) => key.length === 1)
+      .map((key) => key[0]),
+  );
+}
+
 function isGeneratedDefaultValue(value: string | undefined): boolean {
   return value === '@current_timestamp'
     || value === '@generated_uuid'
@@ -320,8 +328,17 @@ function compareEntities(
       ));
     }
 
-    const baselineUniqueKeys = (baselineEntity.uniqueKeys || []).map(normalizeUniqueKey).sort();
-    const currentUniqueKeys = (currentEntity.uniqueKeys || []).map(normalizeUniqueKey).sort();
+    const baselineSingleFieldUniqueKeys = getSingleFieldUniqueKeys(baselineEntity);
+    const currentSingleFieldUniqueKeys = getSingleFieldUniqueKeys(currentEntity);
+
+    const baselineUniqueKeys = (baselineEntity.uniqueKeys || [])
+      .filter((key) => key.length > 1)
+      .map(normalizeUniqueKey)
+      .sort();
+    const currentUniqueKeys = (currentEntity.uniqueKeys || [])
+      .filter((key) => key.length > 1)
+      .map(normalizeUniqueKey)
+      .sort();
 
     for (const key of baselineUniqueKeys.filter((item) => !currentUniqueKeys.includes(item))) {
       artifacts.push(buildComparisonFinding(
@@ -425,18 +442,23 @@ function compareEntities(
         ));
       }
 
-      if (baselineField.unique && !currentField.unique) {
+      const baselineHasSingleFieldUniqueness = baselineField.unique
+        || baselineSingleFieldUniqueKeys.has(fieldName);
+      const currentHasSingleFieldUniqueness = currentField.unique
+        || currentSingleFieldUniqueKeys.has(fieldName);
+
+      if (baselineHasSingleFieldUniqueness && !currentHasSingleFieldUniqueness) {
         artifacts.push(buildComparisonFinding(
           sourceLabel,
           fileLabel,
           line,
           `schema/${prefix}-unique-removed`,
-          'info',
+          'warning',
           `Field ${baselineEntity.name}.${fieldName} removed unique constraint`,
           `${baselineEntity.name}.${fieldName}: unique removed`,
-          'low',
+          'medium',
         ));
-      } else if (!baselineField.unique && currentField.unique) {
+      } else if (!baselineHasSingleFieldUniqueness && currentHasSingleFieldUniqueness) {
         artifacts.push(buildComparisonFinding(
           sourceLabel,
           fileLabel,

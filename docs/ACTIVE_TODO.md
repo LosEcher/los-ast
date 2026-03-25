@@ -151,6 +151,7 @@
 - 已补 PostgreSQL `INT8/BIGINT`、`FLOAT8/DOUBLE PRECISION` 的保守等价归一，并支持解析 `DOUBLE PRECISION` 多词类型写法。
 - 已补第一轮 default compatibility 分级：低风险 optional 字段移除 default 会降为 `info`，而从 generated default 漂移到 non-generated default 会提升为 breaking。
 - 已补第一轮 SQL type compatibility 分级：对极少数明显保守的 widening（如 `INTEGER -> BIGINT`、`REAL -> DOUBLE PRECISION`）从 breaking 降为 `warning`，避免把容量放宽误报成同级破坏性变更。
+- 已补单字段唯一约束的语义等价：列级 `UNIQUE` 与表级 `UNIQUE(field)` 不再误报 drift；真实的单字段唯一约束移除会提升为 `warning`。
 - 已补主键变化、字段/组合唯一键 drift comparison，以及“新增必填字段但带 default”的降级提示。
 - 下一步扩展到更细的兼容性等级与方言等价规则。
 

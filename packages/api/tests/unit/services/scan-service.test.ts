@@ -2868,7 +2868,44 @@ describe('ScanService', () => {
         'schema/prisma-unique-removed',
         'schema/prisma-unique-added',
       ]);
-      expect(result.findings.map((finding) => finding.severity)).toEqual(['info', 'warning']);
+      expect(result.findings.map((finding) => finding.severity)).toEqual(['warning', 'warning']);
+    });
+
+    it('should treat equivalent single-field unique representations as compatible', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-single-unique-equivalence',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL,',
+              '  email TEXT NOT NULL UNIQUE,',
+              '  PRIMARY KEY (id)',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              '  id TEXT NOT NULL,',
+              '  email TEXT NOT NULL,',
+              '  PRIMARY KEY (id),',
+              '  UNIQUE (email)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
     });
 
     it('should grade composite unique drift in schemaComparisons', async () => {

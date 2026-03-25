@@ -188,6 +188,11 @@ function diffEnumValues(baselineValues, currentValues) {
 function normalizeUniqueKey(key) {
     return [...key].sort().join('|');
 }
+function getSingleFieldUniqueKeys(entity) {
+    return new Set((entity.uniqueKeys || [])
+        .filter((key) => key.length === 1)
+        .map((key) => key[0]));
+}
 function isGeneratedDefaultValue(value) {
     return value === '@current_timestamp'
         || value === '@generated_uuid'
@@ -232,8 +237,16 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
             const currentLabel = currentPrimaryKeys.length > 0 ? currentPrimaryKeys.join(', ') : 'none';
             artifacts.push(buildBreakingFinding(sourceLabel, fileLabel, line, `schema/${prefix}-breaking-primary-key-change`, `${prefix === 'sql' ? 'Table' : 'Model'} ${baselineEntity.name} changed primary key from ${baselineLabel} to ${currentLabel}`, `${baselineEntity.name}: primary key ${baselineLabel} -> ${currentLabel}`));
         }
-        const baselineUniqueKeys = (baselineEntity.uniqueKeys || []).map(normalizeUniqueKey).sort();
-        const currentUniqueKeys = (currentEntity.uniqueKeys || []).map(normalizeUniqueKey).sort();
+        const baselineSingleFieldUniqueKeys = getSingleFieldUniqueKeys(baselineEntity);
+        const currentSingleFieldUniqueKeys = getSingleFieldUniqueKeys(currentEntity);
+        const baselineUniqueKeys = (baselineEntity.uniqueKeys || [])
+            .filter((key) => key.length > 1)
+            .map(normalizeUniqueKey)
+            .sort();
+        const currentUniqueKeys = (currentEntity.uniqueKeys || [])
+            .filter((key) => key.length > 1)
+            .map(normalizeUniqueKey)
+            .sort();
         for (const key of baselineUniqueKeys.filter((item) => !currentUniqueKeys.includes(item))) {
             artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-composite-unique-removed`, 'info', `${prefix === 'sql' ? 'Table' : 'Model'} ${baselineEntity.name} removed unique constraint on [${key.replace(/\|/g, ', ')}]`, `${baselineEntity.name}: unique [${key.replace(/\|/g, ', ')}] removed`, 'low'));
         }
@@ -267,10 +280,14 @@ function compareEntities(sourceLabel, fileLabel, prefix, baselineEntities, curre
             else if (!baselineField.nullable && currentField.nullable) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-nullability-loosen`, 'warning', `Field ${baselineEntity.name}.${fieldName} changed from required to nullable`, `${baselineEntity.name}.${fieldName}: required -> nullable`, 'medium'));
             }
-            if (baselineField.unique && !currentField.unique) {
-                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-unique-removed`, 'info', `Field ${baselineEntity.name}.${fieldName} removed unique constraint`, `${baselineEntity.name}.${fieldName}: unique removed`, 'low'));
+            const baselineHasSingleFieldUniqueness = baselineField.unique
+                || baselineSingleFieldUniqueKeys.has(fieldName);
+            const currentHasSingleFieldUniqueness = currentField.unique
+                || currentSingleFieldUniqueKeys.has(fieldName);
+            if (baselineHasSingleFieldUniqueness && !currentHasSingleFieldUniqueness) {
+                artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-unique-removed`, 'warning', `Field ${baselineEntity.name}.${fieldName} removed unique constraint`, `${baselineEntity.name}.${fieldName}: unique removed`, 'medium'));
             }
-            else if (!baselineField.unique && currentField.unique) {
+            else if (!baselineHasSingleFieldUniqueness && currentHasSingleFieldUniqueness) {
                 artifacts.push(buildComparisonFinding(sourceLabel, fileLabel, line, `schema/${prefix}-unique-added`, 'warning', `Field ${baselineEntity.name}.${fieldName} added unique constraint`, `${baselineEntity.name}.${fieldName}: unique added`, 'medium'));
             }
             const enumDiff = diffEnumValues(baselineField.enumValues, currentField.enumValues);
