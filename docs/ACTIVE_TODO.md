@@ -71,6 +71,7 @@
 - [x] Schema 契约真源收口：`packages/api/src/routes/core/scan-contract.ts` 已切成稳定 re-export 入口；request key、native input schema 与 response schema 真源已抽到 `packages/api/src/routes/core/scan-contract/shared.ts`，并补 `scan-contract-shared.test.ts` 做窄回归。
 - [x] 基础持久层收口：`packages/api/src/persistence/key-value-store.ts` 已完成第一阶段 helper 下沉；文件路径/临时文件/隔离文件命名、payload envelope 解析、sqlite count 与 JSON 归一、runtime backend 选项解析已抽到 `packages/api/src/persistence/key-value-store/shared.ts`，并补 `key-value-store-shared.test.ts` 做窄回归。
 - [x] 事故持久层收口：`packages/api/src/persistence/repositories/incident-repository.ts` 已完成第一阶段 helper 下沉；query filter/sort/paginate、sqlite whereClause、scoped stats/status counts 与 incident payload parse 已抽到 `packages/api/src/persistence/repositories/incident-repository/shared.ts`，并补 `incident-repository-shared.test.ts` 做窄回归。
+- [x] `/scan` 路由编排收口：`packages/api/src/routes/core/scan.ts` 已完成第一阶段 helper 下沉；rule-pack path 解析、native/code-scan 判定与请求体验证已抽到 `packages/api/src/routes/core/scan/shared.ts`，并补 `scan-shared.test.ts` 做窄回归。
 - [x] 生成物治理：已新增聚合检查 `check:scan-generated`，并接入 CI freshness job；后续若改动 `scan-contract` / `scan-doc-contract` 真源或同步脚本，需显式校验 generated reference、OpenAPI blocks 与 `API_CONTRACT` 片段不漂移。
 - [x] 文档治理：仍标注 `READY FOR IMPLEMENTATION` 的历史路线图 / 设计文档已改为“历史参考”，并显式回指 `docs/ACTIVE_TODO.md`，避免执行入口再次分叉。
 - [x] 核心实现：`route-guard-analysis.mjs`、`openapi-artifacts.ts`、`schema-artifacts.ts` 三个热点文件已完成第一阶段拆分，优先把通用解析/归一逻辑沉到 shared 层，而不是继续扩预览路由面。
