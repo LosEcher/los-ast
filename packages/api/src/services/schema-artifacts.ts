@@ -261,6 +261,17 @@ function isLowRiskDefaultRemoval(fieldName: string, field: SchemaField): boolean
     && !AUDIT_TIMESTAMP_RE.test(fieldName);
 }
 
+function isConservativeSqlTypeWidening(baselineType: string, currentType: string): boolean {
+  const baseline = baselineType.trim().toLowerCase();
+  const current = currentType.trim().toLowerCase();
+
+  return (
+    (baseline === 'smallint' && (current === 'integer' || current === 'bigint'))
+    || (baseline === 'integer' && current === 'bigint')
+    || (baseline === 'real' && current === 'double precision')
+  );
+}
+
 function compareEntities(
   sourceLabel: string,
   fileLabel: string,
@@ -356,14 +367,27 @@ function compareEntities(
       const nullabilityTightenedWithDefault = baselineField.nullable && !currentField.nullable && currentField.hasDefault;
 
       if (baselineField.type !== currentField.type) {
-        artifacts.push(buildBreakingFinding(
-          sourceLabel,
-          fileLabel,
-          line,
-          `schema/${prefix}-breaking-type-change`,
-          `Field ${baselineEntity.name}.${fieldName} changed type from ${baselineField.type} to ${currentField.type}`,
-          `${baselineEntity.name}.${fieldName}: ${baselineField.type} -> ${currentField.type}`,
-        ));
+        if (prefix === 'sql' && isConservativeSqlTypeWidening(baselineField.type, currentField.type)) {
+          artifacts.push(buildComparisonFinding(
+            sourceLabel,
+            fileLabel,
+            line,
+            `schema/${prefix}-type-widening`,
+            'warning',
+            `Field ${baselineEntity.name}.${fieldName} widened type from ${baselineField.type} to ${currentField.type}`,
+            `${baselineEntity.name}.${fieldName}: ${baselineField.type} -> ${currentField.type}`,
+            'medium',
+          ));
+        } else {
+          artifacts.push(buildBreakingFinding(
+            sourceLabel,
+            fileLabel,
+            line,
+            `schema/${prefix}-breaking-type-change`,
+            `Field ${baselineEntity.name}.${fieldName} changed type from ${baselineField.type} to ${currentField.type}`,
+            `${baselineEntity.name}.${fieldName}: ${baselineField.type} -> ${currentField.type}`,
+          ));
+        }
       }
 
       if (baselineField.nullable && !currentField.nullable) {

@@ -86,6 +86,7 @@ export const artifactParserProfiles = [
                 'postgres timestamptz/timetz alias equivalence',
                 'postgres int8/float8 alias equivalence',
                 'graded default compatibility drift',
+                'graded conservative sql type widening',
             ],
             limitations: [
                 'heuristic parsing only',

@@ -2431,6 +2431,44 @@ describe('ScanService', () => {
       expect(result.findings[0].severity).toBe('error');
     });
 
+    it('should grade conservative sql type widening as warning', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-sql-type-widening',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE metrics (',
+              '  aggregate_id INTEGER NOT NULL,',
+              '  score REAL',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE metrics (',
+              '  aggregate_id BIGINT NOT NULL,',
+              '  score DOUBLE PRECISION',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'schema/sql-type-widening',
+        'schema/sql-type-widening',
+      ]);
+      expect(result.findings.every((finding) => finding.severity === 'warning')).toBe(true);
+    });
+
     it('should grade enum and default compatibility drift from schemaComparisons', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

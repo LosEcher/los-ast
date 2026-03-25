@@ -449,6 +449,36 @@ describe('artifact parsers', () => {
     expect(parsed.schemaArtifacts[0].severity).toBe('error');
   });
 
+  it('should grade conservative sql type widening as warning', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-sql-type-widening',
+          file: '/tmp/schema.sql',
+          format: 'sql',
+          baseline: [
+            'CREATE TABLE metrics (',
+            '  aggregate_id INTEGER NOT NULL,',
+            '  score REAL',
+            ');',
+          ].join('\n'),
+          current: [
+            'CREATE TABLE metrics (',
+            '  aggregate_id BIGINT NOT NULL,',
+            '  score DOUBLE PRECISION',
+            ');',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts.map((item) => item.ruleId)).toEqual([
+      'schema/sql-type-widening',
+      'schema/sql-type-widening',
+    ]);
+    expect(parsed.schemaArtifacts.every((item) => item.severity === 'warning')).toBe(true);
+  });
+
   it('should treat equivalent sql timestamp and uuid defaults as compatible in schemaComparisons', () => {
     const parsed = parseArtifactInputs({
       schemaComparisons: [
