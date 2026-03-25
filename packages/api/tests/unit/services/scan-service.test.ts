@@ -1726,6 +1726,105 @@ describe('ScanService', () => {
       expect(result.findings[1].excerpt).toContain('response[200].status');
     });
 
+    it('should resolve local json-pointer refs inside openapi comparisons', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        openApiComparisons: [
+          {
+            source: 'openapi-compare-json-pointer-refs',
+            file: '/tmp/openapi-json-pointer-refs.yaml',
+            format: 'yaml',
+            baseline: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    SharedFields:',
+              '      type: object',
+              '      properties:',
+              '        email:',
+              '          type: string',
+              '          minLength: 3',
+              '        status:',
+              '          type: string',
+              '          pattern: "^(queued|done)$"',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              properties:',
+              '                email:',
+              "                  $ref: '#/components/schemas/SharedFields/properties/email'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  status:',
+              "                    $ref: '#/components/schemas/SharedFields/properties/status'",
+            ].join('\n'),
+            current: [
+              'openapi: 3.0.3',
+              'components:',
+              '  schemas:',
+              '    SharedFields:',
+              '      type: object',
+              '      properties:',
+              '        email:',
+              '          type: string',
+              '          minLength: 8',
+              '          format: email',
+              '        status:',
+              '          type: string',
+              'paths:',
+              '  /users:',
+              '    post:',
+              '      requestBody:',
+              '        required: true',
+              '        content:',
+              '          application/json:',
+              '            schema:',
+              '              type: object',
+              '              properties:',
+              '                email:',
+              "                  $ref: '#/components/schemas/SharedFields/properties/email'",
+              '      responses:',
+              "        '200':",
+              '          description: ok',
+              '          content:',
+              '            application/json:',
+              '              schema:',
+              '                type: object',
+              '                properties:',
+              '                  status:',
+              "                    $ref: '#/components/schemas/SharedFields/properties/status'",
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings.map((finding) => finding.ruleId)).toEqual([
+        'contract/openapi-breaking-request-validation-tighten',
+        'contract/openapi-breaking-response-validation-weaken',
+      ]);
+      expect(result.findings[0].excerpt).toContain('request.email');
+      expect(result.findings[1].excerpt).toContain('response[200].status');
+    });
+
     it('should derive schema findings from schemaDocuments', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

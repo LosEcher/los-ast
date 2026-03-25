@@ -40,6 +40,7 @@ export const artifactParserProfiles = [
                 'oneOf/anyOf comparison is based on common comparable fields, not full union semantics',
                 'discriminator comparison currently focuses on propertyName and mapping-key drift',
                 'validation-keyword comparison currently focuses on common monotonic keywords such as length/range/pattern/format',
+                'local refs support generic json-pointer traversal, but remote refs are still unresolved',
             ],
             fixtureFiles: [
                 'fixtures/artifact-parsers/openapi-minimal.yaml',

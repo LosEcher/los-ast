@@ -120,7 +120,7 @@
 1. 原生 contract 输入源
 - 已完成 `openApiDocuments -> contract findings` 最小闭环。
 - 已完成最小 `openApiComparisons -> contract compatibility findings` 闭环，当前覆盖 operation 删除、请求字段删除/类型变化/必填新增、success response 状态码删除、响应字段删除/类型变化、响应 required -> optional 变化。
-- 已补本地 `#/components/schemas/*` 与简单 `allOf` 合并后的 comparison 识别。
+- 已补本地 JSON Pointer `$ref` 与简单 `allOf` 合并后的 comparison 识别；当前不只支持 `#/components/schemas/*`，也支持如 `#/components/schemas/Foo/properties/bar` 这类本地字段级引用。
 - 已补 `oneOf/anyOf` 分支中公共字段的最小 comparison 归一，当前 request/response 都有回归覆盖，且支持配合本地 `#/components/schemas/*` 使用。
 - 已补 object 嵌套路径与 `array.items` 路径的 request/response comparison 识别，如 `request.profile.age`、`response[200].users[].id`。
 - 已有回归覆盖嵌套路径里的本地 `$ref`、简单 `allOf` 与 `oneOf` 数组项组合场景。

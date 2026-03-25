@@ -2,6 +2,22 @@ openapi: 3.0.3
 info:
   title: Value Semantics Example
   version: 1.0.0
+components:
+  schemas:
+    SharedFields:
+      type: object
+      properties:
+        email:
+          type: string
+          minLength: 3
+        state:
+          type: string
+          nullable: true
+          pattern: "^(queued|done)$"
+          enum:
+            - queued
+            - done
+          default: queued
 paths:
   /users:
     post:
@@ -22,8 +38,7 @@ paths:
                     - archived
                   default: active
                 email:
-                  type: string
-                  minLength: 3
+                  $ref: '#/components/schemas/SharedFields/properties/email'
       responses:
         '200':
           description: ok
@@ -33,10 +48,4 @@ paths:
                 type: object
                 properties:
                   state:
-                    type: string
-                    nullable: true
-                    pattern: "^(queued|done)$"
-                    enum:
-                      - queued
-                      - done
-                    default: queued
+                    $ref: '#/components/schemas/SharedFields/properties/state'

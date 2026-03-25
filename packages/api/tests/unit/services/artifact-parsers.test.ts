@@ -1693,6 +1693,97 @@ describe('artifact parsers', () => {
     expect(parsed.contractArtifacts[1].excerpt).toContain('pattern ^(queued|done)$ -> unset');
   });
 
+  it('should resolve local json-pointer refs inside comparison schemas', () => {
+    const parsed = parseArtifactInputs({
+      openApiComparisons: [
+        {
+          source: 'openapi-compare-json-pointer-refs',
+          file: '/tmp/openapi-json-pointer-refs.yaml',
+          format: 'yaml',
+          baseline: [
+            'openapi: 3.0.3',
+            'components:',
+            '  schemas:',
+            '    SharedFields:',
+            '      type: object',
+            '      properties:',
+            '        email:',
+            '          type: string',
+            '          minLength: 3',
+            '        status:',
+            '          type: string',
+            '          pattern: "^(queued|done)$"',
+            'paths:',
+            '  /users:',
+            '    post:',
+            '      requestBody:',
+            '        required: true',
+            '        content:',
+            '          application/json:',
+            '            schema:',
+            '              type: object',
+            '              properties:',
+            '                email:',
+            "                  $ref: '#/components/schemas/SharedFields/properties/email'",
+            '      responses:',
+            "        '200':",
+            '          description: ok',
+            '          content:',
+            '            application/json:',
+            '              schema:',
+            '                type: object',
+            '                properties:',
+            '                  status:',
+            "                    $ref: '#/components/schemas/SharedFields/properties/status'",
+          ].join('\n'),
+          current: [
+            'openapi: 3.0.3',
+            'components:',
+            '  schemas:',
+            '    SharedFields:',
+            '      type: object',
+            '      properties:',
+            '        email:',
+            '          type: string',
+            '          minLength: 8',
+            '          format: email',
+            '        status:',
+            '          type: string',
+            'paths:',
+            '  /users:',
+            '    post:',
+            '      requestBody:',
+            '        required: true',
+            '        content:',
+            '          application/json:',
+            '            schema:',
+            '              type: object',
+            '              properties:',
+            '                email:',
+            "                  $ref: '#/components/schemas/SharedFields/properties/email'",
+            '      responses:',
+            "        '200':",
+            '          description: ok',
+            '          content:',
+            '            application/json:',
+            '              schema:',
+            '                type: object',
+            '                properties:',
+            '                  status:',
+            "                    $ref: '#/components/schemas/SharedFields/properties/status'",
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.contractArtifacts.map((item) => item.ruleId)).toEqual([
+      'contract/openapi-breaking-request-validation-tighten',
+      'contract/openapi-breaking-response-validation-weaken',
+    ]);
+    expect(parsed.contractArtifacts[0].excerpt).toContain('request.email');
+    expect(parsed.contractArtifacts[1].excerpt).toContain('response[200].status');
+  });
+
   it('should dedupe native findings against passthrough artifacts and keep the later artifact payload', () => {
     const parsed = parseArtifactInputs({
       openApiDocuments: [

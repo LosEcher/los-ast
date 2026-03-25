@@ -135,6 +135,34 @@ export function getOperations(document) {
 function getSchemaObject(schema) {
     return isRecord(schema) ? schema : undefined;
 }
+function decodeJsonPointerSegment(segment) {
+    return segment.replace(/~1/g, '/').replace(/~0/g, '~');
+}
+function resolveLocalRefTarget(document, ref) {
+    if (!ref.startsWith('#/')) {
+        return undefined;
+    }
+    const segments = ref
+        .slice(2)
+        .split('/')
+        .map((segment) => decodeJsonPointerSegment(segment));
+    let cursor = document;
+    for (const segment of segments) {
+        if (Array.isArray(cursor)) {
+            const index = Number(segment);
+            if (!Number.isInteger(index) || index < 0 || index >= cursor.length) {
+                return undefined;
+            }
+            cursor = cursor[index];
+            continue;
+        }
+        if (!isRecord(cursor) || !Object.hasOwn(cursor, segment)) {
+            return undefined;
+        }
+        cursor = cursor[segment];
+    }
+    return cursor;
+}
 function resolveLocalSchemaRef(document, schema, seen = new Set()) {
     const schemaObject = getSchemaObject(schema);
     if (!schemaObject) {
@@ -144,19 +172,17 @@ function resolveLocalSchemaRef(document, schema, seen = new Set()) {
     if (!ref) {
         return schemaObject;
     }
-    const prefix = '#/components/schemas/';
-    if (!ref.startsWith(prefix)) {
+    if (!ref.startsWith('#/')) {
         return schemaObject;
     }
-    const schemaName = ref.slice(prefix.length);
-    if (!schemaName || seen.has(schemaName)) {
+    if (seen.has(ref)) {
         return undefined;
     }
-    const target = document.components?.schemas?.[schemaName];
+    const target = resolveLocalRefTarget(document, ref);
     if (!target) {
         return undefined;
     }
-    seen.add(schemaName);
+    seen.add(ref);
     return resolveLocalSchemaRef(document, target, seen) || getSchemaObject(target);
 }
 function resolveObjectSchema(document, schema) {

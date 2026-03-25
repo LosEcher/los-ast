@@ -146,4 +146,42 @@ describe('openapi artifacts shared helpers', () => {
       uniqueItems: true,
     });
   });
+
+  it('resolves local json-pointer refs beyond the schema root object', () => {
+    const parsed = parseDocument({
+      source: 'openapi-inline',
+      file: '/tmp/openapi.yaml',
+      format: 'yaml',
+      content: [
+        'openapi: 3.0.3',
+        'components:',
+        '  schemas:',
+        '    CommonFields:',
+        '      type: object',
+        '      properties:',
+        '        email:',
+        '          type: string',
+        '          format: email',
+        '          minLength: 8',
+        'paths: {}',
+      ].join('\n'),
+    }, 0);
+
+    const shape = getComparableObjectShape(parsed, {
+      type: 'object',
+      properties: {
+        email: {
+          $ref: '#/components/schemas/CommonFields/properties/email',
+        },
+      },
+    });
+
+    expect(shape.properties.get('email')).toMatchObject({
+      type: 'string',
+      validation: {
+        format: 'email',
+        minLength: 8,
+      },
+    });
+  });
 });

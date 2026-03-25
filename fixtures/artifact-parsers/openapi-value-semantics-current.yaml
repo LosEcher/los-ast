@@ -2,6 +2,19 @@ openapi: 3.0.3
 info:
   title: Value Semantics Example
   version: 1.1.0
+components:
+  schemas:
+    SharedFields:
+      type: object
+      properties:
+        email:
+          type: string
+          minLength: 8
+          format: email
+        state:
+          type: string
+          enum:
+            - queued
 paths:
   /users:
     post:
@@ -20,9 +33,7 @@ paths:
                     - disabled
                   default: disabled
                 email:
-                  type: string
-                  minLength: 8
-                  format: email
+                  $ref: '#/components/schemas/SharedFields/properties/email'
       responses:
         '200':
           description: ok
@@ -32,6 +43,4 @@ paths:
                 type: object
                 properties:
                   state:
-                    type: string
-                    enum:
-                      - queued
+                    $ref: '#/components/schemas/SharedFields/properties/state'
