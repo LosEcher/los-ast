@@ -146,6 +146,7 @@
 - 已补第一轮 nullability 分级：已有字段从 nullable 收紧为 required 时，`无 default` 仍判为 breaking，`有 default` 则降级为 warning。
 - 已补第一轮 SQL type equivalence 降噪：当前对 `INT/INTEGER`、`BOOL/BOOLEAN`、`DECIMAL/NUMERIC` 做保守等价归一，避免误报 breaking type change。
 - 已补 PostgreSQL `SERIAL/BIGSERIAL` 与显式 `INTEGER/BIGINT + nextval(...)` 的保守等价归一，避免序列别名与展开写法之间的默认值/类型双重误报。
+- 已补 PostgreSQL `TIMESTAMPTZ/TIMETZ` 与显式 `TIMESTAMP/TIME WITH TIME ZONE` 的保守等价归一，并支持解析 `... WITH/WITHOUT TIME ZONE` 多词类型写法。
 - 已补主键变化、字段/组合唯一键 drift comparison，以及“新增必填字段但带 default”的降级提示。
 - 下一步扩展到更细的兼容性等级与方言等价规则。
 

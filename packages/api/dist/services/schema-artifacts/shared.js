@@ -20,6 +20,38 @@ function normalizeType(value) {
 }
 function normalizeSqlType(value) {
     const normalized = normalizeType(value);
+    const timestampWithTimeZoneMatch = normalized.match(/^timestamp(?:\(([^)]*)\))?\s+with\s+time\s+zone$/);
+    if (timestampWithTimeZoneMatch) {
+        return timestampWithTimeZoneMatch[1]
+            ? `timestamp(${timestampWithTimeZoneMatch[1].replace(/\s+/g, '')}) with time zone`
+            : 'timestamp with time zone';
+    }
+    const timestampWithoutTimeZoneMatch = normalized.match(/^timestamp(?:\(([^)]*)\))?\s+without\s+time\s+zone$/);
+    if (timestampWithoutTimeZoneMatch) {
+        return timestampWithoutTimeZoneMatch[1]
+            ? `timestamp(${timestampWithoutTimeZoneMatch[1].replace(/\s+/g, '')})`
+            : 'timestamp';
+    }
+    const timeWithTimeZoneMatch = normalized.match(/^time(?:\(([^)]*)\))?\s+with\s+time\s+zone$/);
+    if (timeWithTimeZoneMatch) {
+        return timeWithTimeZoneMatch[1]
+            ? `time(${timeWithTimeZoneMatch[1].replace(/\s+/g, '')}) with time zone`
+            : 'time with time zone';
+    }
+    const timeWithoutTimeZoneMatch = normalized.match(/^time(?:\(([^)]*)\))?\s+without\s+time\s+zone$/);
+    if (timeWithoutTimeZoneMatch) {
+        return timeWithoutTimeZoneMatch[1]
+            ? `time(${timeWithoutTimeZoneMatch[1].replace(/\s+/g, '')})`
+            : 'time';
+    }
+    const timestampAliasMatch = normalized.match(/^(timestamptz|timetz)(?:\(([^)]*)\))?$/);
+    if (timestampAliasMatch) {
+        const [, alias, precision] = timestampAliasMatch;
+        if (alias === 'timestamptz') {
+            return precision ? `timestamp(${precision.replace(/\s+/g, '')}) with time zone` : 'timestamp with time zone';
+        }
+        return precision ? `time(${precision.replace(/\s+/g, '')}) with time zone` : 'time with time zone';
+    }
     const parameterizedMatch = normalized.match(/^([a-z0-9_]+)\(([^)]*)\)$/);
     if (parameterizedMatch) {
         const [, rawBaseType, params] = parameterizedMatch;
@@ -85,6 +117,10 @@ function extractSqlTypeToken(definition) {
     if (/^enum\s*\(/i.test(trimmed)) {
         const match = trimmed.match(/^(enum\s*\([^)]*\))/i);
         return match ? match[1] : undefined;
+    }
+    const compoundMatch = trimmed.match(/^(timestamp(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|time(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone)/i);
+    if (compoundMatch) {
+        return compoundMatch[1];
     }
     const match = trimmed.match(/^([A-Za-z0-9_]+(?:\([^)]*\))?)/);
     return match ? match[1] : undefined;

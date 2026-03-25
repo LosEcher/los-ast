@@ -476,6 +476,32 @@ describe('artifact parsers', () => {
     expect(parsed.schemaArtifacts).toHaveLength(0);
   });
 
+  it('should treat postgres temporal aliases as compatible with explicit time zone forms', () => {
+    const parsed = parseArtifactInputs({
+      schemaComparisons: [
+        {
+          source: 'schema-compare-sql-temporal-alias-equivalence',
+          file: '/tmp/schema.sql',
+          format: 'sql',
+          baseline: [
+            'CREATE TABLE audit_log (',
+            '  created_at TIMESTAMPTZ NOT NULL,',
+            '  wake_at TIMETZ',
+            ');',
+          ].join('\n'),
+          current: [
+            'CREATE TABLE audit_log (',
+            '  created_at TIMESTAMP WITH TIME ZONE NOT NULL,',
+            '  wake_at TIME WITH TIME ZONE',
+            ');',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.schemaArtifacts).toHaveLength(0);
+  });
+
   it('should bind schema findings to the correct entity without duplicating multi-entity documents', () => {
     const parsed = parseArtifactInputs({
       schemaDocuments: [

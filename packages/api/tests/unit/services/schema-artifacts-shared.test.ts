@@ -68,6 +68,24 @@ describe('schema artifacts shared helpers', () => {
     });
   });
 
+  it('normalizes conservative postgres temporal aliases and explicit time zone forms', () => {
+    const [entity] = parseSqlEntities([
+      'CREATE TABLE audit_log (',
+      '  created_at TIMESTAMPTZ NOT NULL,',
+      '  reviewed_at TIMESTAMP WITH TIME ZONE,',
+      '  starts_at TIMESTAMP(3) WITHOUT TIME ZONE,',
+      '  wake_at TIMETZ,',
+      '  quiet_at TIME WITH TIME ZONE',
+      ');',
+    ].join('\n'));
+
+    expect(entity.fields.get('created_at')?.type).toBe('timestamp with time zone');
+    expect(entity.fields.get('reviewed_at')?.type).toBe('timestamp with time zone');
+    expect(entity.fields.get('starts_at')?.type).toBe('timestamp(3)');
+    expect(entity.fields.get('wake_at')?.type).toBe('time with time zone');
+    expect(entity.fields.get('quiet_at')?.type).toBe('time with time zone');
+  });
+
   it('normalizes Prisma generated defaults and updatedAt fields', () => {
     const [entity] = parsePrismaEntities([
       'model User {',

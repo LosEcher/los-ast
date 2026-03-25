@@ -2548,6 +2548,40 @@ describe('ScanService', () => {
       expect(result.findings).toHaveLength(0);
     });
 
+    it('should treat postgres temporal aliases as compatible with explicit time zone forms', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-sql-temporal-alias-equivalence',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE audit_log (',
+              '  created_at TIMESTAMPTZ NOT NULL,',
+              '  wake_at TIMETZ',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE audit_log (',
+              '  created_at TIMESTAMP WITH TIME ZONE NOT NULL,',
+              '  wake_at TIME WITH TIME ZONE',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
     it('should treat equivalent prisma uuid and dbgenerated defaults as compatible in schemaComparisons', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

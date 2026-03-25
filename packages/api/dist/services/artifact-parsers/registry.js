@@ -83,6 +83,7 @@ export const artifactParserProfiles = [
                 'common sql type synonym equivalence',
                 'sequence-backed increment default equivalence',
                 'postgres serial/bigserial alias equivalence',
+                'postgres timestamptz/timetz alias equivalence',
             ],
             limitations: [
                 'heuristic parsing only',
