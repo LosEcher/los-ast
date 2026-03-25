@@ -47,6 +47,27 @@ describe('schema artifacts shared helpers', () => {
     expect(entity.fields.get('balance')?.type).toBe('numeric(10,2)');
   });
 
+  it('normalizes sequence-backed serial aliases conservatively', () => {
+    const [entity] = parseSqlEntities([
+      'CREATE TABLE users (',
+      '  id SERIAL PRIMARY KEY,',
+      '  audit_id BIGSERIAL',
+      ');',
+    ].join('\n'));
+
+    expect(entity.fields.get('id')).toMatchObject({
+      type: 'integer',
+      defaultValue: '@generated_increment',
+      hasDefault: true,
+      primaryKey: true,
+    });
+    expect(entity.fields.get('audit_id')).toMatchObject({
+      type: 'bigint',
+      defaultValue: '@generated_increment',
+      hasDefault: true,
+    });
+  });
+
   it('normalizes Prisma generated defaults and updatedAt fields', () => {
     const [entity] = parsePrismaEntities([
       'model User {',

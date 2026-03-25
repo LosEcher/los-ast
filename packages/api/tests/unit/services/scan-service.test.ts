@@ -2513,6 +2513,41 @@ describe('ScanService', () => {
       expect(result.findings).toHaveLength(0);
     });
 
+    it('should treat serial-backed sql aliases as compatible with explicit nextval defaults', async () => {
+      vi.mocked(core.scan).mockResolvedValue({
+        filesScanned: 1,
+        findings: [],
+      } as any);
+
+      const result = await scanService.execute({
+        project: 'test-project',
+        rootDir: '/test/path',
+        schemaComparisons: [
+          {
+            source: 'schema-compare-sql-serial-equivalence',
+            file: '/tmp/schema.sql',
+            format: 'sql',
+            baseline: [
+              'CREATE TABLE users (',
+              '  id SERIAL PRIMARY KEY,',
+              '  audit_id BIGSERIAL',
+              ');',
+            ].join('\n'),
+            current: [
+              'CREATE TABLE users (',
+              "  id INTEGER NOT NULL DEFAULT nextval('users_id_seq'::regclass),",
+              "  audit_id BIGINT DEFAULT nextval('users_audit_id_seq'::regclass),",
+              '  PRIMARY KEY (id)',
+              ');',
+            ].join('\n'),
+          },
+        ],
+        signal: new AbortController().signal,
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
     it('should treat equivalent prisma uuid and dbgenerated defaults as compatible in schemaComparisons', async () => {
       vi.mocked(core.scan).mockResolvedValue({
         filesScanned: 1,

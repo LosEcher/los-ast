@@ -38,7 +38,17 @@ function normalizeSqlType(value) {
     if (normalized === 'decimal') {
         return 'numeric';
     }
+    if (normalized === 'serial') {
+        return 'integer';
+    }
+    if (normalized === 'bigserial') {
+        return 'bigint';
+    }
     return normalized;
+}
+function isSequenceBackedSqlType(typeToken) {
+    const normalized = typeToken ? normalizeType(typeToken) : '';
+    return normalized === 'serial' || normalized === 'bigserial';
 }
 function normalizeDefaultValue(value) {
     if (!value) {
@@ -156,8 +166,8 @@ export function parseSqlEntities(content) {
             fields.set(fieldName, {
                 type: normalizeSqlType(typeToken),
                 nullable: !/\bnot\s+null\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine),
-                hasDefault: /\bdefault\b/i.test(lowerLine),
-                defaultValue: extractSqlDefaultValue(definition),
+                hasDefault: /\bdefault\b/i.test(lowerLine) || isSequenceBackedSqlType(typeToken),
+                defaultValue: extractSqlDefaultValue(definition) || (isSequenceBackedSqlType(typeToken) ? '@generated_increment' : undefined),
                 primaryKey: /\bprimary\s+key\b/i.test(lowerLine),
                 unique: /\bunique\b/i.test(lowerLine) && !/\bprimary\s+key\b/i.test(lowerLine),
                 enumValues: parseSqlEnumValues(typeToken),
