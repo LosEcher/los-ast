@@ -15,11 +15,15 @@ paths:
                 status:
                   type: string
                   nullable: true
+                  minLength: 3
                   enum:
                     - active
                     - disabled
                     - archived
                   default: active
+                email:
+                  type: string
+                  minLength: 3
       responses:
         '200':
           description: ok
@@ -31,6 +35,7 @@ paths:
                   state:
                     type: string
                     nullable: true
+                    pattern: "^(queued|done)$"
                     enum:
                       - queued
                       - done

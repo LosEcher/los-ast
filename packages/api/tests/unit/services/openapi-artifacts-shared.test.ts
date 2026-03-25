@@ -88,4 +88,62 @@ describe('openapi artifacts shared helpers', () => {
     expect(Array.from(shape.properties.keys())).toEqual(['id']);
     expect(Array.from(shape.required)).toEqual(['id']);
   });
+
+  it('captures comparable validation keywords on leaf fields', () => {
+    const parsed = parseDocument({
+      source: 'openapi-inline',
+      file: '/tmp/openapi.yaml',
+      format: 'yaml',
+      content: 'openapi: 3.0.3\npaths: {}\n',
+    }, 0);
+
+    const shape = getComparableObjectShape(parsed, {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          format: 'email',
+          minLength: 5,
+          maxLength: 128,
+          pattern: '^[^@]+@[^@]+$',
+        },
+        tags: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 8,
+          uniqueItems: true,
+          items: {
+            type: 'string',
+          },
+        },
+      },
+    });
+
+    expect(shape.properties.get('email')?.validation).toEqual({
+      format: 'email',
+      maxItems: undefined,
+      maxLength: 128,
+      maxProperties: undefined,
+      maximum: undefined,
+      minItems: undefined,
+      minLength: 5,
+      minProperties: undefined,
+      minimum: undefined,
+      pattern: '^[^@]+@[^@]+$',
+      uniqueItems: false,
+    });
+    expect(shape.properties.get('tags')?.validation).toEqual({
+      format: undefined,
+      maxItems: 8,
+      maxLength: undefined,
+      maxProperties: undefined,
+      maximum: undefined,
+      minItems: 1,
+      minLength: undefined,
+      minProperties: undefined,
+      minimum: undefined,
+      pattern: undefined,
+      uniqueItems: true,
+    });
+  });
 });

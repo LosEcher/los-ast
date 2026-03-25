@@ -126,6 +126,7 @@
 - 已有回归覆盖嵌套路径里的本地 `$ref`、简单 `allOf` 与 `oneOf` 数组项组合场景。
 - 已补 `additionalProperties` map-like object 路径识别，如 `request.metadata.*`、`response[200].profiles.*.id`。
 - 已补最小值语义 comparison：`nullable` 收紧、`enum` 值删除、`default` 删除/变更。
+- 已补第一轮字段约束语义 comparison：request 侧已识别常见校验收紧，response 侧已识别常见保证变弱，当前覆盖 `min/maxLength`、`minimum/maximum`、`min/maxItems`、`min/maxProperties`、`uniqueItems`、`pattern`、`format`。
 - 已补对应 OpenAPI value-semantics golden fixture，固定输出顺序与规则面。
 - 已补最小 `discriminator` comparison：`propertyName` 变化与 mapping 值删除。
 - 已补 `discriminator` golden fixture 与综合 OpenAPI comparison fixture。
@@ -133,7 +134,7 @@
 - 已同步 core/evidence 输出类型中的 `findingSource / governanceDomain / impactHint / diff / applied` 字段声明。
 - 已补 parser capability matrix 与 finding attribution 说明文档。
 - 响应 comparison 当前已按 success status/default 对齐，避免 `200` 与 `201` 被误当同一 response shape 比较。
-- 下一步扩展到更细粒度的 schema / field 语义规则与 `$ref` 展开。
+- 下一步继续扩展到更细粒度的 schema / field 语义规则、更多 `$ref` 场景与更完整的 union/discriminator 语义。
 
 2. 原生 schema 输入源
 - 已完成 `schemaDocuments -> schema findings` 最小闭环。

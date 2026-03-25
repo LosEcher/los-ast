@@ -17,6 +17,87 @@ function buildContractFinding(source, file, line, ruleId, severity, message, exc
 function getResponseExcerptPrefix(status) {
     return `response[${status}]`;
 }
+function formatValidationValue(value) {
+    return value === undefined ? 'unset' : String(value);
+}
+function collectRequestValidationTightenings(baselineField, currentField) {
+    const changes = [];
+    const baseline = baselineField.validation;
+    const current = currentField.validation;
+    if (typeof current.minLength === 'number' && (typeof baseline.minLength !== 'number' || current.minLength > baseline.minLength)) {
+        changes.push(`minLength ${formatValidationValue(baseline.minLength)} -> ${current.minLength}`);
+    }
+    if (typeof current.maxLength === 'number' && (typeof baseline.maxLength !== 'number' || current.maxLength < baseline.maxLength)) {
+        changes.push(`maxLength ${formatValidationValue(baseline.maxLength)} -> ${current.maxLength}`);
+    }
+    if (typeof current.minimum === 'number' && (typeof baseline.minimum !== 'number' || current.minimum > baseline.minimum)) {
+        changes.push(`minimum ${formatValidationValue(baseline.minimum)} -> ${current.minimum}`);
+    }
+    if (typeof current.maximum === 'number' && (typeof baseline.maximum !== 'number' || current.maximum < baseline.maximum)) {
+        changes.push(`maximum ${formatValidationValue(baseline.maximum)} -> ${current.maximum}`);
+    }
+    if (typeof current.minItems === 'number' && (typeof baseline.minItems !== 'number' || current.minItems > baseline.minItems)) {
+        changes.push(`minItems ${formatValidationValue(baseline.minItems)} -> ${current.minItems}`);
+    }
+    if (typeof current.maxItems === 'number' && (typeof baseline.maxItems !== 'number' || current.maxItems < baseline.maxItems)) {
+        changes.push(`maxItems ${formatValidationValue(baseline.maxItems)} -> ${current.maxItems}`);
+    }
+    if (typeof current.minProperties === 'number' && (typeof baseline.minProperties !== 'number' || current.minProperties > baseline.minProperties)) {
+        changes.push(`minProperties ${formatValidationValue(baseline.minProperties)} -> ${current.minProperties}`);
+    }
+    if (typeof current.maxProperties === 'number' && (typeof baseline.maxProperties !== 'number' || current.maxProperties < baseline.maxProperties)) {
+        changes.push(`maxProperties ${formatValidationValue(baseline.maxProperties)} -> ${current.maxProperties}`);
+    }
+    if (!baseline.uniqueItems && current.uniqueItems) {
+        changes.push(`uniqueItems ${baseline.uniqueItems} -> ${current.uniqueItems}`);
+    }
+    if (typeof current.pattern === 'string' && current.pattern !== baseline.pattern) {
+        changes.push(`pattern ${formatValidationValue(baseline.pattern)} -> ${current.pattern}`);
+    }
+    if (typeof current.format === 'string' && current.format !== baseline.format) {
+        changes.push(`format ${formatValidationValue(baseline.format)} -> ${current.format}`);
+    }
+    return changes;
+}
+function collectResponseValidationWeakening(baselineField, currentField) {
+    const changes = [];
+    const baseline = baselineField.validation;
+    const current = currentField.validation;
+    if (typeof baseline.minLength === 'number' && (typeof current.minLength !== 'number' || current.minLength < baseline.minLength)) {
+        changes.push(`minLength ${baseline.minLength} -> ${formatValidationValue(current.minLength)}`);
+    }
+    if (typeof baseline.maxLength === 'number' && (typeof current.maxLength !== 'number' || current.maxLength > baseline.maxLength)) {
+        changes.push(`maxLength ${baseline.maxLength} -> ${formatValidationValue(current.maxLength)}`);
+    }
+    if (typeof baseline.minimum === 'number' && (typeof current.minimum !== 'number' || current.minimum < baseline.minimum)) {
+        changes.push(`minimum ${baseline.minimum} -> ${formatValidationValue(current.minimum)}`);
+    }
+    if (typeof baseline.maximum === 'number' && (typeof current.maximum !== 'number' || current.maximum > baseline.maximum)) {
+        changes.push(`maximum ${baseline.maximum} -> ${formatValidationValue(current.maximum)}`);
+    }
+    if (typeof baseline.minItems === 'number' && (typeof current.minItems !== 'number' || current.minItems < baseline.minItems)) {
+        changes.push(`minItems ${baseline.minItems} -> ${formatValidationValue(current.minItems)}`);
+    }
+    if (typeof baseline.maxItems === 'number' && (typeof current.maxItems !== 'number' || current.maxItems > baseline.maxItems)) {
+        changes.push(`maxItems ${baseline.maxItems} -> ${formatValidationValue(current.maxItems)}`);
+    }
+    if (typeof baseline.minProperties === 'number' && (typeof current.minProperties !== 'number' || current.minProperties < baseline.minProperties)) {
+        changes.push(`minProperties ${baseline.minProperties} -> ${formatValidationValue(current.minProperties)}`);
+    }
+    if (typeof baseline.maxProperties === 'number' && (typeof current.maxProperties !== 'number' || current.maxProperties > baseline.maxProperties)) {
+        changes.push(`maxProperties ${baseline.maxProperties} -> ${formatValidationValue(current.maxProperties)}`);
+    }
+    if (baseline.uniqueItems && !current.uniqueItems) {
+        changes.push(`uniqueItems ${baseline.uniqueItems} -> ${current.uniqueItems}`);
+    }
+    if (typeof baseline.pattern === 'string' && current.pattern !== baseline.pattern) {
+        changes.push(`pattern ${baseline.pattern} -> ${formatValidationValue(current.pattern)}`);
+    }
+    if (typeof baseline.format === 'string' && current.format !== baseline.format) {
+        changes.push(`format ${baseline.format} -> ${formatValidationValue(current.format)}`);
+    }
+    return changes;
+}
 export function buildContractArtifactsFromOpenApi(documents) {
     if (!Array.isArray(documents) || documents.length === 0) {
         return [];
@@ -123,6 +204,10 @@ export function buildContractArtifactsFromOpenApiComparisons(comparisons) {
                 if (baselineField.nullable && !currentField.nullable) {
                     artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-request-nullable-tighten', 'error', `OpenAPI operation ${operationLabel} changed request field ${fieldName} from nullable to non-nullable`, `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: nullable -> non-nullable`, ['interface', 'backend'], 'high'));
                 }
+                const requestValidationTightenings = collectRequestValidationTightenings(baselineField, currentField);
+                if (requestValidationTightenings.length > 0) {
+                    artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-request-validation-tighten', 'error', `OpenAPI operation ${operationLabel} tightened request validation for field ${fieldName}`, `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: ${requestValidationTightenings.join(', ')}`, ['interface', 'backend'], 'high'));
+                }
                 const droppedRequestEnumValues = baselineField.enumValues.filter((value) => !currentField.enumValues.includes(value));
                 if (droppedRequestEnumValues.length > 0) {
                     artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-request-enum-value-drop', 'error', `OpenAPI operation ${operationLabel} removed request enum values from field ${fieldName}`, `${operationLabel} request${baselineRequestShape.pathSuffix}.${fieldName}: dropped ${droppedRequestEnumValues.join(', ')}`, ['interface', 'backend'], 'high'));
@@ -183,6 +268,10 @@ export function buildContractArtifactsFromOpenApiComparisons(comparisons) {
                     }
                     if (baselineField.nullable && !currentField.nullable) {
                         artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-response-nullable-tighten', 'error', `OpenAPI operation ${operationLabel} changed response field ${fieldName} from nullable to non-nullable on success response ${status}`, `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: nullable -> non-nullable`, ['interface', 'backend'], 'high'));
+                    }
+                    const responseValidationWeakening = collectResponseValidationWeakening(baselineField, currentField);
+                    if (responseValidationWeakening.length > 0) {
+                        artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-response-validation-weaken', 'error', `OpenAPI operation ${operationLabel} weakened response validation guarantees for field ${fieldName} on success response ${status}`, `${operationLabel} ${responseExcerptPrefix}${baselineResponseShape.pathSuffix}.${fieldName}: ${responseValidationWeakening.join(', ')}`, ['interface', 'backend'], 'high'));
                     }
                     const droppedResponseEnumValues = baselineField.enumValues.filter((value) => !currentField.enumValues.includes(value));
                     if (droppedResponseEnumValues.length > 0) {

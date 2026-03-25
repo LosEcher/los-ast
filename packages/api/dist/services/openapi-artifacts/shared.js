@@ -301,6 +301,26 @@ function normalizeDefaultValue(value) {
     }
     return JSON.stringify(value);
 }
+function normalizeValidationNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? value
+        : undefined;
+}
+function getComparableValidation(schema) {
+    return {
+        format: typeof schema.format === 'string' ? schema.format : undefined,
+        maxItems: normalizeValidationNumber(schema.maxItems),
+        maxLength: normalizeValidationNumber(schema.maxLength),
+        maxProperties: normalizeValidationNumber(schema.maxProperties),
+        maximum: normalizeValidationNumber(schema.maximum),
+        minItems: normalizeValidationNumber(schema.minItems),
+        minLength: normalizeValidationNumber(schema.minLength),
+        minProperties: normalizeValidationNumber(schema.minProperties),
+        minimum: normalizeValidationNumber(schema.minimum),
+        pattern: typeof schema.pattern === 'string' ? schema.pattern : undefined,
+        uniqueItems: schema.uniqueItems === true,
+    };
+}
 function getComparableDiscriminator(schema) {
     if (!isRecord(schema.discriminator)) {
         return undefined;
@@ -327,6 +347,9 @@ function getComparableField(document, schema) {
             hasDefault: false,
             nullable: false,
             type: 'object',
+            validation: {
+                uniqueItems: false,
+            },
         };
     }
     return {
@@ -335,6 +358,7 @@ function getComparableField(document, schema) {
         hasDefault: Object.hasOwn(schemaObject, 'default'),
         nullable: inferNullable(document, schemaObject),
         type: inferSchemaType(document, schemaObject),
+        validation: getComparableValidation(schemaObject),
     };
 }
 function getJsonContentSchema(container) {
@@ -381,6 +405,12 @@ function collectComparableFields(document, schema, pathPrefix, ancestorRequired,
     }
     if (resolvedSchema.type === 'array') {
         const arrayPath = `${pathPrefix}[]`;
+        if (pathPrefix) {
+            properties.set(pathPrefix, getComparableField(document, resolvedSchema));
+            if (ancestorRequired) {
+                required.add(pathPrefix);
+            }
+        }
         const itemSchema = resolveObjectSchema(document, getSchemaObject(resolvedSchema.items));
         if (!itemSchema) {
             properties.set(arrayPath, {
@@ -388,6 +418,9 @@ function collectComparableFields(document, schema, pathPrefix, ancestorRequired,
                 hasDefault: false,
                 nullable: false,
                 type: 'object',
+                validation: {
+                    uniqueItems: false,
+                },
             });
             if (ancestorRequired) {
                 required.add(arrayPath);

@@ -1617,6 +1617,82 @@ describe('artifact parsers', () => {
     expect(parsed.contractArtifacts[0].excerpt).toContain('response[200]');
   });
 
+  it('should detect request validation tightening and response validation weakening on comparable fields', () => {
+    const parsed = parseArtifactInputs({
+      openApiComparisons: [
+        {
+          source: 'openapi-compare-validation-semantics',
+          file: '/tmp/openapi-validation-semantics.yaml',
+          format: 'yaml',
+          baseline: [
+            'openapi: 3.0.3',
+            'paths:',
+            '  /users:',
+            '    post:',
+            '      requestBody:',
+            '        required: true',
+            '        content:',
+            '          application/json:',
+            '            schema:',
+            '              type: object',
+            '              properties:',
+            '                email:',
+            '                  type: string',
+            '                  minLength: 3',
+            '      responses:',
+            "        '200':",
+            '          description: ok',
+            '          content:',
+            '            application/json:',
+            '              schema:',
+            '                type: object',
+            '                properties:',
+            '                  status:',
+            '                    type: string',
+            '                    pattern: "^(queued|done)$"',
+          ].join('\n'),
+          current: [
+            'openapi: 3.0.3',
+            'paths:',
+            '  /users:',
+            '    post:',
+            '      requestBody:',
+            '        required: true',
+            '        content:',
+            '          application/json:',
+            '            schema:',
+            '              type: object',
+            '              properties:',
+            '                email:',
+            '                  type: string',
+            '                  minLength: 8',
+            '                  format: email',
+            '      responses:',
+            "        '200':",
+            '          description: ok',
+            '          content:',
+            '            application/json:',
+            '              schema:',
+            '                type: object',
+            '                properties:',
+            '                  status:',
+            '                    type: string',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    expect(parsed.contractArtifacts.map((item) => item.ruleId)).toEqual([
+      'contract/openapi-breaking-request-validation-tighten',
+      'contract/openapi-breaking-response-validation-weaken',
+    ]);
+    expect(parsed.contractArtifacts[0].excerpt).toContain('request.email');
+    expect(parsed.contractArtifacts[0].excerpt).toContain('minLength 3 -> 8');
+    expect(parsed.contractArtifacts[0].excerpt).toContain('format unset -> email');
+    expect(parsed.contractArtifacts[1].excerpt).toContain('response[200].status');
+    expect(parsed.contractArtifacts[1].excerpt).toContain('pattern ^(queued|done)$ -> unset');
+  });
+
   it('should dedupe native findings against passthrough artifacts and keep the later artifact payload', () => {
     const parsed = parseArtifactInputs({
       openApiDocuments: [

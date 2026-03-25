@@ -14,10 +14,15 @@ paths:
               properties:
                 status:
                   type: string
+                  minLength: 8
                   enum:
                     - active
                     - disabled
                   default: disabled
+                email:
+                  type: string
+                  minLength: 8
+                  format: email
       responses:
         '200':
           description: ok

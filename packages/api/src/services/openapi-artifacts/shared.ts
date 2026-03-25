@@ -13,12 +13,27 @@ export type OpenApiObject = {
   };
 };
 
-type ComparableField = {
+export type ComparableValidation = {
+  format?: string;
+  maxItems?: number;
+  maxLength?: number;
+  maxProperties?: number;
+  maximum?: number;
+  minItems?: number;
+  minLength?: number;
+  minProperties?: number;
+  minimum?: number;
+  pattern?: string;
+  uniqueItems: boolean;
+};
+
+export type ComparableField = {
   defaultValue?: string;
   enumValues: string[];
   hasDefault: boolean;
   nullable: boolean;
   type: string;
+  validation: ComparableValidation;
 };
 
 type ComparableDiscriminator = {
@@ -427,6 +442,28 @@ function normalizeDefaultValue(value: unknown): string | undefined {
   return JSON.stringify(value);
 }
 
+function normalizeValidationNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function getComparableValidation(schema: Record<string, unknown>): ComparableValidation {
+  return {
+    format: typeof schema.format === 'string' ? schema.format : undefined,
+    maxItems: normalizeValidationNumber(schema.maxItems),
+    maxLength: normalizeValidationNumber(schema.maxLength),
+    maxProperties: normalizeValidationNumber(schema.maxProperties),
+    maximum: normalizeValidationNumber(schema.maximum),
+    minItems: normalizeValidationNumber(schema.minItems),
+    minLength: normalizeValidationNumber(schema.minLength),
+    minProperties: normalizeValidationNumber(schema.minProperties),
+    minimum: normalizeValidationNumber(schema.minimum),
+    pattern: typeof schema.pattern === 'string' ? schema.pattern : undefined,
+    uniqueItems: schema.uniqueItems === true,
+  };
+}
+
 function getComparableDiscriminator(
   schema: Record<string, unknown>
 ): ComparableDiscriminator | undefined {
@@ -462,6 +499,9 @@ function getComparableField(
       hasDefault: false,
       nullable: false,
       type: 'object',
+      validation: {
+        uniqueItems: false,
+      },
     };
   }
 
@@ -471,6 +511,7 @@ function getComparableField(
     hasDefault: Object.hasOwn(schemaObject, 'default'),
     nullable: inferNullable(document, schemaObject),
     type: inferSchemaType(document, schemaObject),
+    validation: getComparableValidation(schemaObject),
   };
 }
 
@@ -539,6 +580,13 @@ function collectComparableFields(
 
   if (resolvedSchema.type === 'array') {
     const arrayPath = `${pathPrefix}[]`;
+    if (pathPrefix) {
+      properties.set(pathPrefix, getComparableField(document, resolvedSchema));
+      if (ancestorRequired) {
+        required.add(pathPrefix);
+      }
+    }
+
     const itemSchema = resolveObjectSchema(document, getSchemaObject(resolvedSchema.items));
     if (!itemSchema) {
       properties.set(arrayPath, {
@@ -546,6 +594,9 @@ function collectComparableFields(
         hasDefault: false,
         nullable: false,
         type: 'object',
+        validation: {
+          uniqueItems: false,
+        },
       });
       if (ancestorRequired) {
         required.add(arrayPath);
