@@ -1,39 +1,7 @@
 import { PERSISTENCE_CONFIG } from '../../config/index.js';
 import { applySqliteMigrations, createSqliteDatabase } from '../sqlite-database.js';
 import { createRepository } from './repository.js';
-const incidentMigrations = [
-    {
-        version: 1,
-        up(database) {
-            database.exec(`
-        CREATE TABLE IF NOT EXISTS incidents (
-          incident_id TEXT PRIMARY KEY,
-          tenant_id TEXT NOT NULL,
-          project_id TEXT NOT NULL,
-          status TEXT NOT NULL,
-          severity TEXT NOT NULL,
-          source_type TEXT NOT NULL,
-          fingerprint TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          payload_json TEXT NOT NULL
-        ) STRICT
-      `);
-            database.exec(`
-        CREATE INDEX IF NOT EXISTS incidents_scope_created_idx
-        ON incidents (tenant_id, project_id, created_at DESC)
-      `);
-            database.exec(`
-        CREATE INDEX IF NOT EXISTS incidents_scope_status_idx
-        ON incidents (tenant_id, project_id, status)
-      `);
-            database.exec(`
-        CREATE INDEX IF NOT EXISTS incidents_scope_severity_idx
-        ON incidents (tenant_id, project_id, severity)
-      `);
-        },
-    },
-];
+import { buildIncidentScopedStats, buildIncidentStatusCounts, buildIncidentWhereClause, incidentMigrations, parseStoredIncident, queryIncidentItems, } from './incident-repository/shared.js';
 class InMemoryIncidentRepository {
     repository;
     constructor(repository) {
@@ -64,60 +32,10 @@ class InMemoryIncidentRepository {
         return this.repository.size();
     }
     query(params) {
-        let items = this.repository.values();
-        if (params.tenant_id) {
-            items = items.filter((incident) => incident.scope.tenant_id === params.tenant_id);
-        }
-        if (params.project_id) {
-            items = items.filter((incident) => incident.scope.project_id === params.project_id);
-        }
-        if (params.status) {
-            items = items.filter((incident) => incident.status === params.status);
-        }
-        if (params.severity) {
-            items = items.filter((incident) => incident.severity === params.severity);
-        }
-        if (params.source_type) {
-            items = items.filter((incident) => incident.source.type === params.source_type);
-        }
-        if (params.from) {
-            const from = params.from;
-            items = items.filter((incident) => incident.created_at >= from);
-        }
-        if (params.to) {
-            const to = params.to;
-            items = items.filter((incident) => incident.created_at <= to);
-        }
-        items.sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
-        const total = items.length;
-        const offset = params.offset || 0;
-        const limit = params.limit || 20;
-        items = items.slice(offset, offset + limit);
-        return {
-            items,
-            total,
-            has_more: offset + limit < total,
-            next_offset: offset + limit < total ? offset + limit : undefined,
-        };
+        return queryIncidentItems(this.repository.values(), params);
     }
     getScopedStats(scope = {}) {
-        const items = this.repository.values().filter((incident) => {
-            if (scope.tenant_id && incident.scope.tenant_id !== scope.tenant_id) {
-                return false;
-            }
-            if (scope.project_id && incident.scope.project_id !== scope.project_id) {
-                return false;
-            }
-            return true;
-        });
-        const byStatus = {};
-        for (const incident of items) {
-            byStatus[incident.status] = (byStatus[incident.status] || 0) + 1;
-        }
-        return {
-            count: items.length,
-            byStatus,
-        };
+        return buildIncidentScopedStats(this.repository.values(), scope);
     }
 }
 class SqliteIncidentRepository {
@@ -129,14 +47,13 @@ class SqliteIncidentRepository {
         const row = this.database
             .prepare('SELECT payload_json FROM incidents WHERE incident_id = ?')
             .get(id);
-        return this.parseIncident(row?.payload_json, id);
+        return parseStoredIncident(row?.payload_json, id);
     }
     has(id) {
         const row = this.database
             .prepare('SELECT COUNT(*) as count FROM incidents WHERE incident_id = ?')
             .get(id);
-        const count = typeof row.count === 'bigint' ? Number(row.count) : row.count;
-        return count > 0;
+        return (typeof row.count === 'bigint' ? Number(row.count) : row.count) > 0;
     }
     set(id, value) {
         this.database.prepare(`
@@ -174,7 +91,7 @@ class SqliteIncidentRepository {
             .prepare('SELECT incident_id, payload_json FROM incidents ORDER BY created_at DESC')
             .all();
         return rows
-            .map((row) => this.parseIncident(row.payload_json, row.incident_id))
+            .map((row) => parseStoredIncident(row.payload_json, row.incident_id))
             .filter((incident) => incident !== undefined);
     }
     entries() {
@@ -182,7 +99,7 @@ class SqliteIncidentRepository {
             .prepare('SELECT incident_id, payload_json FROM incidents ORDER BY created_at DESC')
             .all();
         return rows.flatMap((row) => {
-            const incident = this.parseIncident(row.payload_json, row.incident_id);
+            const incident = parseStoredIncident(row.payload_json, row.incident_id);
             return incident ? [[row.incident_id, incident]] : [];
         });
     }
@@ -194,37 +111,7 @@ class SqliteIncidentRepository {
         return typeof row.count === 'bigint' ? Number(row.count) : row.count;
     }
     query(params) {
-        const conditions = [];
-        const values = [];
-        if (params.tenant_id) {
-            conditions.push('tenant_id = ?');
-            values.push(params.tenant_id);
-        }
-        if (params.project_id) {
-            conditions.push('project_id = ?');
-            values.push(params.project_id);
-        }
-        if (params.status) {
-            conditions.push('status = ?');
-            values.push(params.status);
-        }
-        if (params.severity) {
-            conditions.push('severity = ?');
-            values.push(params.severity);
-        }
-        if (params.source_type) {
-            conditions.push('source_type = ?');
-            values.push(params.source_type);
-        }
-        if (params.from) {
-            conditions.push('created_at >= ?');
-            values.push(params.from);
-        }
-        if (params.to) {
-            conditions.push('created_at <= ?');
-            values.push(params.to);
-        }
-        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const { whereClause, values } = buildIncidentWhereClause(params);
         const offset = params.offset || 0;
         const limit = params.limit || 20;
         const totalRow = this.database
@@ -241,7 +128,7 @@ class SqliteIncidentRepository {
       `)
             .all(...values, limit, offset);
         const items = rows
-            .map((row) => this.parseIncident(row.payload_json, row.incident_id))
+            .map((row) => parseStoredIncident(row.payload_json, row.incident_id))
             .filter((incident) => incident !== undefined);
         return {
             items,
@@ -270,29 +157,7 @@ class SqliteIncidentRepository {
         GROUP BY status
       `)
             .all(...values);
-        const byStatus = {};
-        let count = 0;
-        for (const row of rows) {
-            const statusCount = typeof row.count === 'bigint' ? Number(row.count) : row.count;
-            byStatus[row.status] = statusCount;
-            count += statusCount;
-        }
-        return {
-            count,
-            byStatus,
-        };
-    }
-    parseIncident(rawValue, incidentId) {
-        if (!rawValue) {
-            return undefined;
-        }
-        try {
-            return JSON.parse(rawValue);
-        }
-        catch (error) {
-            console.warn(`[Persistence] Ignoring invalid incident payload for "${incidentId}": ${error instanceof Error ? error.message : String(error)}`);
-            return undefined;
-        }
+        return buildIncidentStatusCounts(rows);
     }
 }
 function createIncidentRepository() {
