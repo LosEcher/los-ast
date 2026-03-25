@@ -150,11 +150,13 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 
 ```
 packages/
-  core/        执行引擎（扫描、改写、报告、缓存）
-  cli/         命令行入口（scan/fix/explain/doctor）
+  core/        稳定扫描内核（discover/scan/fix/explain/report）
+  cli/         稳定 CLI 与 artifact export / route evidence 提取
+  api/         稳定 health/scan/discover API 与 preview route 承载层
   adapters/    项目适配器（cantool/lsclaw/fullstackframe）
   rules/       内置规则加载与测试支持
-  ai/          AI 友好输出与模板（schema/prompt）
+  ai/          AI 友好输出、schema 与 prompt 资产
+  shared/      共享类型与跨包基础模块
 rules/         可热加载的 YAML 规则库（语言/项目分组）
 fixtures/      golden fixtures（before/after）
 reports/       默认输出目录（JSONL/Markdown）

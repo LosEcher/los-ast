@@ -86,7 +86,10 @@
   - 已完成第一步：`openapi-artifacts.ts` 的 OpenAPI 文档解析、schema 归一与 comparable shape 计算已抽到 `packages/api/src/services/openapi-artifacts/shared.ts`，主文件收口为 finding 生成编排。
   - 已完成第二步：`schema-artifacts.ts` 的格式推断、SQL/Prisma 实体解析与默认值等价归一已抽到 `packages/api/src/services/schema-artifacts/shared.ts`，主文件收口为 document/comparison finding 编排。
   - 已完成第三步：`route-guard-analysis.mjs` 的布尔表达式展开、helper/alias 解析与函数作用域扫描已抽到 `packages/cli/src/route-guard-analysis/shared.mjs`，主文件收口为 route guard / registration / activation 产物编排。
-- [ ] 下一阶段：如继续做结构收口，优先针对 shared 层补更细回归覆盖，或评估剩余仍偏大的稳定面热点；不要转去继续扩预览路由功能。
+- [ ] 下一阶段：结构收口已基本完成，优先转向三条主线：
+  - 文档治理：补齐 `AGENTS.md` / `README` / `architecture` 的当前包拓扑与执行入口，消除新读者导航偏移。
+  - 稳定语义增强：继续推进 OpenAPI / schema compatibility 规则细化，而不是继续机械拆分稳定面文件。
+  - 契约治理：保持 `/scan` generated sections、`packages/api/dist` 与 `lsclaw` artifact contract 三条 freshness gate 长期可执行。
 
 1. route_binds 能力边界收口
 - 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
