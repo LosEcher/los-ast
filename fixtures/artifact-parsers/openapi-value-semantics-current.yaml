@@ -34,6 +34,11 @@ paths:
                   default: disabled
                 email:
                   $ref: '#/components/schemas/SharedFields/properties/email'
+                quota:
+                  type: number
+                  minimum: 1
+                  exclusiveMinimum: true
+                  multipleOf: 5
       responses:
         '200':
           description: ok
@@ -42,5 +47,8 @@ paths:
               schema:
                 type: object
                 properties:
+                  count:
+                    type: number
+                    maximum: 100
                   state:
                     $ref: '#/components/schemas/SharedFields/properties/state'

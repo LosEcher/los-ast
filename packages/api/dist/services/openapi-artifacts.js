@@ -33,8 +33,17 @@ function collectRequestValidationTightenings(baselineField, currentField) {
     if (typeof current.minimum === 'number' && (typeof baseline.minimum !== 'number' || current.minimum > baseline.minimum)) {
         changes.push(`minimum ${formatValidationValue(baseline.minimum)} -> ${current.minimum}`);
     }
+    if (!baseline.exclusiveMinimum && current.exclusiveMinimum) {
+        changes.push(`exclusiveMinimum ${baseline.exclusiveMinimum} -> ${current.exclusiveMinimum}`);
+    }
     if (typeof current.maximum === 'number' && (typeof baseline.maximum !== 'number' || current.maximum < baseline.maximum)) {
         changes.push(`maximum ${formatValidationValue(baseline.maximum)} -> ${current.maximum}`);
+    }
+    if (!baseline.exclusiveMaximum && current.exclusiveMaximum) {
+        changes.push(`exclusiveMaximum ${baseline.exclusiveMaximum} -> ${current.exclusiveMaximum}`);
+    }
+    if (typeof current.multipleOf === 'number' && (typeof baseline.multipleOf !== 'number' || current.multipleOf > baseline.multipleOf)) {
+        changes.push(`multipleOf ${formatValidationValue(baseline.multipleOf)} -> ${current.multipleOf}`);
     }
     if (typeof current.minItems === 'number' && (typeof baseline.minItems !== 'number' || current.minItems > baseline.minItems)) {
         changes.push(`minItems ${formatValidationValue(baseline.minItems)} -> ${current.minItems}`);
@@ -72,8 +81,17 @@ function collectResponseValidationWeakening(baselineField, currentField) {
     if (typeof baseline.minimum === 'number' && (typeof current.minimum !== 'number' || current.minimum < baseline.minimum)) {
         changes.push(`minimum ${baseline.minimum} -> ${formatValidationValue(current.minimum)}`);
     }
+    if (baseline.exclusiveMinimum && !current.exclusiveMinimum) {
+        changes.push(`exclusiveMinimum ${baseline.exclusiveMinimum} -> ${current.exclusiveMinimum}`);
+    }
     if (typeof baseline.maximum === 'number' && (typeof current.maximum !== 'number' || current.maximum > baseline.maximum)) {
         changes.push(`maximum ${baseline.maximum} -> ${formatValidationValue(current.maximum)}`);
+    }
+    if (baseline.exclusiveMaximum && !current.exclusiveMaximum) {
+        changes.push(`exclusiveMaximum ${baseline.exclusiveMaximum} -> ${current.exclusiveMaximum}`);
+    }
+    if (typeof baseline.multipleOf === 'number' && (typeof current.multipleOf !== 'number' || current.multipleOf < baseline.multipleOf)) {
+        changes.push(`multipleOf ${baseline.multipleOf} -> ${formatValidationValue(current.multipleOf)}`);
     }
     if (typeof baseline.minItems === 'number' && (typeof current.minItems !== 'number' || current.minItems < baseline.minItems)) {
         changes.push(`minItems ${baseline.minItems} -> ${formatValidationValue(current.minItems)}`);

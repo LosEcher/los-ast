@@ -2073,6 +2073,10 @@ describe('artifact parsers', () => {
             '                email:',
             '                  type: string',
             '                  minLength: 3',
+            '                quota:',
+            '                  type: number',
+            '                  minimum: 1',
+            '                  multipleOf: 1',
             '      responses:',
             "        '200':",
             '          description: ok',
@@ -2081,6 +2085,11 @@ describe('artifact parsers', () => {
             '              schema:',
             '                type: object',
             '                properties:',
+            '                  count:',
+            '                    type: number',
+            '                    maximum: 100',
+            '                    exclusiveMaximum: true',
+            '                    multipleOf: 5',
             '                  status:',
             '                    type: string',
             '                    pattern: "^(queued|done)$"',
@@ -2101,6 +2110,11 @@ describe('artifact parsers', () => {
             '                  type: string',
             '                  minLength: 8',
             '                  format: email',
+            '                quota:',
+            '                  type: number',
+            '                  minimum: 1',
+            '                  exclusiveMinimum: true',
+            '                  multipleOf: 5',
             '      responses:',
             "        '200':",
             '          description: ok',
@@ -2109,6 +2123,9 @@ describe('artifact parsers', () => {
             '              schema:',
             '                type: object',
             '                properties:',
+            '                  count:',
+            '                    type: number',
+            '                    maximum: 100',
             '                  status:',
             '                    type: string',
           ].join('\n'),
@@ -2118,13 +2135,21 @@ describe('artifact parsers', () => {
 
     expect(parsed.contractArtifacts.map((item) => item.ruleId)).toEqual([
       'contract/openapi-breaking-request-validation-tighten',
+      'contract/openapi-breaking-request-validation-tighten',
+      'contract/openapi-breaking-response-validation-weaken',
       'contract/openapi-breaking-response-validation-weaken',
     ]);
     expect(parsed.contractArtifacts[0].excerpt).toContain('request.email');
     expect(parsed.contractArtifacts[0].excerpt).toContain('minLength 3 -> 8');
     expect(parsed.contractArtifacts[0].excerpt).toContain('format unset -> email');
-    expect(parsed.contractArtifacts[1].excerpt).toContain('response[200].status');
-    expect(parsed.contractArtifacts[1].excerpt).toContain('pattern ^(queued|done)$ -> unset');
+    expect(parsed.contractArtifacts[1].excerpt).toContain('request.quota');
+    expect(parsed.contractArtifacts[1].excerpt).toContain('exclusiveMinimum false -> true');
+    expect(parsed.contractArtifacts[1].excerpt).toContain('multipleOf 1 -> 5');
+    expect(parsed.contractArtifacts[2].excerpt).toContain('response[200].count');
+    expect(parsed.contractArtifacts[2].excerpt).toContain('exclusiveMaximum true -> false');
+    expect(parsed.contractArtifacts[2].excerpt).toContain('multipleOf 5 -> unset');
+    expect(parsed.contractArtifacts[3].excerpt).toContain('response[200].status');
+    expect(parsed.contractArtifacts[3].excerpt).toContain('pattern ^(queued|done)$ -> unset');
   });
 
   it('should resolve local json-pointer refs inside comparison schemas', () => {

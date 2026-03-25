@@ -349,6 +349,8 @@ function normalizeValidationNumber(value) {
 }
 function getComparableValidation(schema) {
     return {
+        exclusiveMaximum: schema.exclusiveMaximum === true,
+        exclusiveMinimum: schema.exclusiveMinimum === true,
         format: typeof schema.format === 'string' ? schema.format : undefined,
         maxItems: normalizeValidationNumber(schema.maxItems),
         maxLength: normalizeValidationNumber(schema.maxLength),
@@ -358,6 +360,7 @@ function getComparableValidation(schema) {
         minLength: normalizeValidationNumber(schema.minLength),
         minProperties: normalizeValidationNumber(schema.minProperties),
         minimum: normalizeValidationNumber(schema.minimum),
+        multipleOf: normalizeValidationNumber(schema.multipleOf),
         pattern: typeof schema.pattern === 'string' ? schema.pattern : undefined,
         uniqueItems: schema.uniqueItems === true,
     };
@@ -389,6 +392,8 @@ function getComparableField(document, schema) {
             nullable: false,
             type: 'object',
             validation: {
+                exclusiveMaximum: false,
+                exclusiveMinimum: false,
                 uniqueItems: false,
             },
         };
@@ -460,6 +465,8 @@ function collectComparableFields(document, schema, pathPrefix, ancestorRequired,
                 nullable: false,
                 type: 'object',
                 validation: {
+                    exclusiveMaximum: false,
+                    exclusiveMinimum: false,
                     uniqueItems: false,
                 },
             });

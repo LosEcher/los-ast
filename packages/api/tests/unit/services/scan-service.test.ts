@@ -1808,6 +1808,10 @@ describe('ScanService', () => {
               '                email:',
               '                  type: string',
               '                  minLength: 3',
+              '                quota:',
+              '                  type: number',
+              '                  minimum: 1',
+              '                  multipleOf: 1',
               '      responses:',
               "        '200':",
               '          description: ok',
@@ -1816,6 +1820,11 @@ describe('ScanService', () => {
               '              schema:',
               '                type: object',
               '                properties:',
+              '                  count:',
+              '                    type: number',
+              '                    maximum: 100',
+              '                    exclusiveMaximum: true',
+              '                    multipleOf: 5',
               '                  status:',
               '                    type: string',
               '                    pattern: "^(queued|done)$"',
@@ -1836,6 +1845,11 @@ describe('ScanService', () => {
               '                  type: string',
               '                  minLength: 8',
               '                  format: email',
+              '                quota:',
+              '                  type: number',
+              '                  minimum: 1',
+              '                  exclusiveMinimum: true',
+              '                  multipleOf: 5',
               '      responses:',
               "        '200':",
               '          description: ok',
@@ -1844,6 +1858,9 @@ describe('ScanService', () => {
               '              schema:',
               '                type: object',
               '                properties:',
+              '                  count:',
+              '                    type: number',
+              '                    maximum: 100',
               '                  status:',
               '                    type: string',
             ].join('\n'),
@@ -1854,10 +1871,14 @@ describe('ScanService', () => {
 
       expect(result.findings.map((finding) => finding.ruleId)).toEqual([
         'contract/openapi-breaking-request-validation-tighten',
+        'contract/openapi-breaking-request-validation-tighten',
+        'contract/openapi-breaking-response-validation-weaken',
         'contract/openapi-breaking-response-validation-weaken',
       ]);
       expect(result.findings[0].excerpt).toContain('request.email');
-      expect(result.findings[1].excerpt).toContain('response[200].status');
+      expect(result.findings[1].excerpt).toContain('request.quota');
+      expect(result.findings[2].excerpt).toContain('response[200].count');
+      expect(result.findings[3].excerpt).toContain('response[200].status');
     });
 
     it('should resolve local json-pointer refs inside openapi comparisons', async () => {

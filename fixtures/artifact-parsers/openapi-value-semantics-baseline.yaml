@@ -39,6 +39,10 @@ paths:
                   default: active
                 email:
                   $ref: '#/components/schemas/SharedFields/properties/email'
+                quota:
+                  type: number
+                  minimum: 1
+                  multipleOf: 1
       responses:
         '200':
           description: ok
@@ -47,5 +51,10 @@ paths:
               schema:
                 type: object
                 properties:
+                  count:
+                    type: number
+                    maximum: 100
+                    exclusiveMaximum: true
+                    multipleOf: 5
                   state:
                     $ref: '#/components/schemas/SharedFields/properties/state'

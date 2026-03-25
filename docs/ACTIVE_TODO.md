@@ -126,7 +126,7 @@
 - 已有回归覆盖嵌套路径里的本地 `$ref`、简单 `allOf` 与 `oneOf` 数组项组合场景。
 - 已补 `additionalProperties` map-like object 路径识别，如 `request.metadata.*`、`response[200].profiles.*.id`。
 - 已补最小值语义 comparison：`nullable` 收紧、`enum` 值删除、`default` 删除/变更。
-- 已补第一轮字段约束语义 comparison：request 侧已识别常见校验收紧，response 侧已识别常见保证变弱，当前覆盖 `min/maxLength`、`minimum/maximum`、`min/maxItems`、`min/maxProperties`、`uniqueItems`、`pattern`、`format`。
+- 已补第一轮字段约束语义 comparison：request 侧已识别常见校验收紧，response 侧已识别常见保证变弱，当前覆盖 `min/maxLength`、`minimum/maximum`、`min/maxItems`、`min/maxProperties`、`uniqueItems`、`pattern`、`format`、`multipleOf`、exclusive min/max。
 - 已补对应 OpenAPI value-semantics golden fixture，固定输出顺序与规则面。
 - 已补最小 `discriminator` comparison：`propertyName` 变化与 mapping 值删除。
 - 已补 `allOf` wrapper 下的 union/discriminator 继承识别，现有 discriminator comparison 可覆盖 “base envelope + union payload” 组合场景。

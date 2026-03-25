@@ -8,13 +8,13 @@
 
 | Profile | Source | Version | Stability | Inputs | Current Coverage |
 | --- | --- | --- | --- | --- | --- |
-| `openapi-native` | `contract` | `0.2.0` | `preview` | `yaml`, `json` | 原生 OpenAPI 文档检查；baseline/current comparison；本地 `$ref`；简单 `allOf`；`oneOf/anyOf` 公共字段归一；嵌套 object / `array.items` / `additionalProperties` 路径；`nullable` / `enum` / `default` 值语义；最小 `discriminator` comparison |
+| `openapi-native` | `contract` | `0.2.0` | `preview` | `yaml`, `json` | 原生 OpenAPI 文档检查；baseline/current comparison；本地 `$ref`；简单 `allOf`；`oneOf/anyOf` 公共字段归一；嵌套 object / `array.items` / `additionalProperties` 路径；`nullable` / `enum` / `default` 值语义；保守 validation 语义（`min/max*`、`pattern`、`format`、`multipleOf`、exclusive min/max）；最小 `discriminator` comparison |
 | `schema-native` | `schema` | `0.2.0` | `preview` | `sql`, `prisma` | 原生 SQL/Prisma 结构检查；baseline/current comparison；字段删除/类型变化/主键变化/唯一键 drift；`nullable -> required` / `required -> nullable` 分级；新增必填字段分级；enum/default drift 分级；保守 SQL/Postgres type/default 等价归一 |
 
 ## Known Boundaries
 
 - `openapi-native` 只比较 `application/json` schema，不处理其他 content type。
-- 远程 `$ref` 仍不展开；当前只支持本地 `#/components/schemas/*`。
+- 远程 `$ref` 仍不展开；当前只支持本地 `#/*` JSON Pointer。
 - `allOf` 仍是保守 merge，不做完整冲突解析。
 - `oneOf/anyOf` 当前按“可比较公共字段”处理，不尝试完整 union 兼容性证明。
 - `discriminator` 当前只比较 `propertyName` 和 `mapping` key 漂移，不验证映射目标 schema 的语义兼容。
@@ -41,6 +41,7 @@
 
 - comparison 从顶层字段扩到嵌套 object / `array.items` / `additionalProperties` 路径。
 - comparison 已支持最小值语义：`nullable` 收紧、`enum` 值删除、`default` 删除/变更。
+- comparison 已支持保守 validation 语义：`min/max*`、`pattern`、`format`、`multipleOf`、exclusive min/max。
 - comparison 已支持“新增必填字段但带 default”降级提示。
 - comparison 已支持最小 `discriminator` 漂移：`propertyName` 变化、mapping 值删除。
 - 已补 `discriminator` 与 composed OpenAPI golden fixtures，固定输出顺序。

@@ -120,6 +120,8 @@ describe('openapi artifacts shared helpers', () => {
     });
 
     expect(shape.properties.get('email')?.validation).toEqual({
+      exclusiveMaximum: false,
+      exclusiveMinimum: false,
       format: 'email',
       maxItems: undefined,
       maxLength: 128,
@@ -129,10 +131,13 @@ describe('openapi artifacts shared helpers', () => {
       minLength: 5,
       minProperties: undefined,
       minimum: undefined,
+      multipleOf: undefined,
       pattern: '^[^@]+@[^@]+$',
       uniqueItems: false,
     });
     expect(shape.properties.get('tags')?.validation).toEqual({
+      exclusiveMaximum: false,
+      exclusiveMinimum: false,
       format: undefined,
       maxItems: 8,
       maxLength: undefined,
@@ -142,6 +147,7 @@ describe('openapi artifacts shared helpers', () => {
       minLength: undefined,
       minProperties: undefined,
       minimum: undefined,
+      multipleOf: undefined,
       pattern: undefined,
       uniqueItems: true,
     });
@@ -242,5 +248,42 @@ describe('openapi artifacts shared helpers', () => {
     });
     expect(Array.from(shape.properties.keys()).sort()).toEqual(['id', 'kind', 'traceId']);
     expect(Array.from(shape.required).sort()).toEqual(['id', 'kind']);
+  });
+
+  it('captures comparable numeric validation semantics for openapi fields', () => {
+    const parsed = parseDocument({
+      source: 'openapi-inline',
+      file: '/tmp/openapi.yaml',
+      format: 'yaml',
+      content: [
+        'openapi: 3.0.3',
+        'paths: {}',
+      ].join('\n'),
+    }, 0);
+
+    const shape = getComparableObjectShape(parsed, {
+      type: 'object',
+      properties: {
+        quota: {
+          type: 'number',
+          minimum: 1,
+          exclusiveMinimum: true,
+          maximum: 100,
+          exclusiveMaximum: true,
+          multipleOf: 5,
+        },
+      },
+    });
+
+    expect(shape.properties.get('quota')).toMatchObject({
+      type: 'number',
+      validation: {
+        minimum: 1,
+        exclusiveMinimum: true,
+        maximum: 100,
+        exclusiveMaximum: true,
+        multipleOf: 5,
+      },
+    });
   });
 });

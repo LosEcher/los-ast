@@ -14,6 +14,8 @@ export type OpenApiObject = {
 };
 
 export type ComparableValidation = {
+  exclusiveMaximum: boolean;
+  exclusiveMinimum: boolean;
   format?: string;
   maxItems?: number;
   maxLength?: number;
@@ -23,6 +25,7 @@ export type ComparableValidation = {
   minLength?: number;
   minProperties?: number;
   minimum?: number;
+  multipleOf?: number;
   pattern?: string;
   uniqueItems: boolean;
 };
@@ -501,6 +504,8 @@ function normalizeValidationNumber(value: unknown): number | undefined {
 
 function getComparableValidation(schema: Record<string, unknown>): ComparableValidation {
   return {
+    exclusiveMaximum: schema.exclusiveMaximum === true,
+    exclusiveMinimum: schema.exclusiveMinimum === true,
     format: typeof schema.format === 'string' ? schema.format : undefined,
     maxItems: normalizeValidationNumber(schema.maxItems),
     maxLength: normalizeValidationNumber(schema.maxLength),
@@ -510,6 +515,7 @@ function getComparableValidation(schema: Record<string, unknown>): ComparableVal
     minLength: normalizeValidationNumber(schema.minLength),
     minProperties: normalizeValidationNumber(schema.minProperties),
     minimum: normalizeValidationNumber(schema.minimum),
+    multipleOf: normalizeValidationNumber(schema.multipleOf),
     pattern: typeof schema.pattern === 'string' ? schema.pattern : undefined,
     uniqueItems: schema.uniqueItems === true,
   };
@@ -551,6 +557,8 @@ function getComparableField(
       nullable: false,
       type: 'object',
       validation: {
+        exclusiveMaximum: false,
+        exclusiveMinimum: false,
         uniqueItems: false,
       },
     };
@@ -646,6 +654,8 @@ function collectComparableFields(
         nullable: false,
         type: 'object',
         validation: {
+          exclusiveMaximum: false,
+          exclusiveMinimum: false,
           uniqueItems: false,
         },
       });

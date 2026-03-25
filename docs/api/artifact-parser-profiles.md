@@ -24,6 +24,7 @@
   - baseline/current 对比下的 success response 状态码删除、响应字段删除/类型变化、response required -> optional
   - 嵌套 object / `array.items` / `additionalProperties` 路径 comparison
   - `nullable` / `enum` / `default` 值语义 comparison
+  - 保守 validation 语义 comparison：`min/max*`、`pattern`、`format`、`multipleOf`、exclusive min/max
   - 最小 `discriminator` comparison
 - 当前限制：
   - 仅做启发式定位
