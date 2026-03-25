@@ -2,23 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PERSISTENCE_CONFIG } from '../config/index.js';
 import { applySqliteMigrations, createSqliteDatabase } from './sqlite-database.js';
-const STORE_SCHEMA_VERSION = 1;
-const keyValueStoreMigrations = [
-    {
-        version: 1,
-        up(database) {
-            database.exec(`
-        CREATE TABLE IF NOT EXISTS key_value_store (
-          namespace TEXT NOT NULL,
-          item_key TEXT NOT NULL,
-          value_json TEXT NOT NULL,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (namespace, item_key)
-        ) STRICT
-      `);
-        },
-    },
-];
+import { buildQuarantineStorePath, buildSerializedStorePayload, buildTempStorePath, keyValueStoreMigrations, parseSerializedStore, parseStoredJsonValue, resolveJsonStoreFilePath, resolveKeyValueStoreOptions, toSqliteCount, } from './key-value-store/shared.js';
 class InMemoryKeyValueStore {
     store = new Map();
     get(key) {
@@ -51,8 +35,7 @@ class JsonFileKeyValueStore {
     store = new Map();
     constructor(name, dir) {
         const targetDir = dir || path.join(process.cwd(), '.los-ast-state', 'api');
-        const safeName = name.replace(/[^a-z0-9._-]+/giu, '_');
-        this.filePath = path.join(targetDir, `${safeName}.json`);
+        this.filePath = resolveJsonStoreFilePath(name, targetDir);
         this.load();
     }
     get(key) {
@@ -94,16 +77,7 @@ class JsonFileKeyValueStore {
             return;
         }
         try {
-            const parsed = JSON.parse(raw);
-            if (!parsed ||
-                typeof parsed !== 'object' ||
-                parsed.version !== STORE_SCHEMA_VERSION ||
-                !parsed.items ||
-                typeof parsed.items !== 'object' ||
-                Array.isArray(parsed.items)) {
-                throw new Error(`Unsupported store payload shape or version in ${this.filePath}`);
-            }
-            for (const [key, value] of Object.entries(parsed.items)) {
+            for (const [key, value] of Object.entries(parseSerializedStore(raw, this.filePath))) {
                 this.store.set(key, value);
             }
         }
@@ -113,16 +87,13 @@ class JsonFileKeyValueStore {
     }
     flush() {
         fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-        const payload = {
-            version: STORE_SCHEMA_VERSION,
-            items: Object.fromEntries(this.store.entries()),
-        };
-        const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
+        const payload = buildSerializedStorePayload(Array.from(this.store.entries()));
+        const tempPath = buildTempStorePath(this.filePath);
         fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2), 'utf8');
         fs.renameSync(tempPath, this.filePath);
     }
     quarantineCorruptedFile(error) {
-        const quarantinePath = `${this.filePath}.corrupt-${Date.now()}`;
+        const quarantinePath = buildQuarantineStorePath(this.filePath);
         fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
         fs.renameSync(this.filePath, quarantinePath);
         console.warn(`[Persistence] Quarantined corrupted store ${this.filePath} -> ${quarantinePath}: ${error instanceof Error ? error.message : String(error)}`);
@@ -153,8 +124,7 @@ class SqliteKeyValueStore {
         const row = this.database
             .prepare('SELECT COUNT(*) as count FROM key_value_store WHERE namespace = ? AND item_key = ?')
             .get(this.name, key);
-        const count = typeof row.count === 'bigint' ? Number(row.count) : row.count;
-        return count > 0;
+        return toSqliteCount(row.count) > 0;
     }
     set(key, value) {
         const serialized = JSON.stringify(value);
@@ -197,25 +167,19 @@ class SqliteKeyValueStore {
         const row = this.database
             .prepare('SELECT COUNT(*) as count FROM key_value_store WHERE namespace = ?')
             .get(this.name);
-        return typeof row.count === 'bigint' ? Number(row.count) : row.count;
+        return toSqliteCount(row.count);
     }
     parseRowValue(key, rawValue) {
-        if (rawValue === undefined) {
-            return undefined;
-        }
-        try {
-            return JSON.parse(rawValue);
-        }
-        catch (error) {
-            console.warn(`[Persistence] Ignoring invalid JSON payload in sqlite store "${this.name}" for key "${key}": ${error instanceof Error ? error.message : String(error)}`);
-            return undefined;
-        }
+        return parseStoredJsonValue({
+            rawValue,
+            onInvalid: (error) => {
+                console.warn(`[Persistence] Ignoring invalid JSON payload in sqlite store "${this.name}" for key "${key}": ${error instanceof Error ? error.message : String(error)}`);
+            },
+        });
     }
 }
 export function createKeyValueStore(name, options = {}) {
-    const backend = options.backend ?? PERSISTENCE_CONFIG.experimentalStoreBackend;
-    const dir = options.dir ?? PERSISTENCE_CONFIG.experimentalStoreDir ?? undefined;
-    const sqlitePath = options.sqlitePath ?? PERSISTENCE_CONFIG.experimentalSqlitePath ?? undefined;
+    const { backend, dir, sqlitePath } = resolveKeyValueStoreOptions(options, PERSISTENCE_CONFIG);
     if (backend === 'file') {
         return new JsonFileKeyValueStore(name, dir);
     }
