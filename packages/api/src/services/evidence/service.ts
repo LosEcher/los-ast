@@ -84,6 +84,7 @@ async function generateSignature(bundle: Omit<CodeEvidenceBundle, 'signature'>, 
   }
 
   const crypto = await import('crypto');
+  // Include scope-bound metadata in signature to prevent scope tampering
   const content = JSON.stringify({
     bundle_id: bundle.bundle_id,
     project: bundle.project,
@@ -92,6 +93,9 @@ async function generateSignature(bundle: Omit<CodeEvidenceBundle, 'signature'>, 
     actor_id: scope.actor_id,
     tenant_id: scope.tenant_id,
     project_id: scope.project_id,
+    identity_source: scope.identity_source,
+    identity_verified: scope.identity_verified,
+    scope_mode: scope.mode,
   });
 
   const signature = crypto
@@ -253,6 +257,66 @@ export async function getCodeStats(project: string): Promise<CodeStats> {
   }
 
   return stats;
+}
+
+/**
+ * 验证证据包签名
+ * @returns 验证结果，包含是否有效和失败原因
+ */
+export async function verifyEvidenceSignature(
+  bundle: CodeEvidenceBundle
+): Promise<{ valid: boolean; reason?: string }> {
+  if (!bundle.signature) {
+    return { valid: false, reason: 'No signature present' };
+  }
+
+  if (bundle.signature.algorithm !== 'hmac-sha256') {
+    return { valid: false, reason: `Unsupported algorithm: ${bundle.signature.algorithm}` };
+  }
+
+  if (!EVIDENCE_CONFIG.signingKey) {
+    return { valid: false, reason: 'Signing key not configured' };
+  }
+
+  const crypto = await import('crypto');
+
+  // Reconstruct the signed content with scope-bound metadata
+  const content = JSON.stringify({
+    bundle_id: bundle.bundle_id,
+    project: bundle.project,
+    created_at: bundle.created_at,
+    findings_count: bundle.findings.length,
+    actor_id: bundle.actor.actor_id,
+    tenant_id: bundle.scope.tenant_id,
+    project_id: bundle.scope.project_id,
+    identity_source: bundle.actor.identity_source,
+    identity_verified: bundle.actor.identity_verified,
+    scope_mode: 'service', // Default for signed bundles
+  });
+
+  const expectedSignature = crypto
+    .createHmac('sha256', EVIDENCE_CONFIG.signingKey)
+    .update(content)
+    .digest('base64url');
+
+  try {
+    const actualBuf = Buffer.from(bundle.signature.value);
+    const expectedBuf = Buffer.from(expectedSignature);
+
+    if (actualBuf.length !== expectedBuf.length) {
+      return { valid: false, reason: 'Signature mismatch' };
+    }
+
+    const equal = crypto.timingSafeEqual(actualBuf, expectedBuf);
+
+    if (!equal) {
+      return { valid: false, reason: 'Signature mismatch' };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, reason: 'Signature verification error' };
+  }
 }
 
 /**

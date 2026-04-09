@@ -5,6 +5,7 @@ import {
   getCodeStats,
   getEvidenceBundle,
   clearEvidenceStore,
+  verifyEvidenceSignature,
 } from '../../../src/services/evidence/service';
 import * as core from '@los-ast/core';
 import * as adapters from '@los-ast/adapters';
@@ -207,6 +208,93 @@ describe('Evidence Service', () => {
       const bundle = await generateEvidence(request, verifiedScope);
 
       expect(bundle.actor.actor_id).toBe('verified-actor');
+    });
+  });
+
+  describe('verifyEvidenceSignature', () => {
+    it('should pass verification for untouched bundles', async () => {
+      const request: GenerateEvidenceRequest = {
+        project: 'test-project',
+        root_dir: '/test/path',
+        findings: [],
+      };
+
+      const bundle = await generateEvidence(request, mockScope);
+      const verification = await verifyEvidenceSignature(bundle);
+
+      expect(verification.valid).toBe(true);
+    });
+
+    it('should fail verification after mutating signed fields', async () => {
+      const request: GenerateEvidenceRequest = {
+        project: 'test-project',
+        root_dir: '/test/path',
+        findings: [],
+      };
+
+      const bundle = await generateEvidence(request, mockScope);
+
+      // Mutate a signed field
+      bundle.project = 'tampered-project';
+
+      const verification = await verifyEvidenceSignature(bundle);
+
+      expect(verification.valid).toBe(false);
+      expect(verification.reason).toBe('Signature mismatch');
+    });
+
+    it('should fail verification after mutating actor', async () => {
+      const request: GenerateEvidenceRequest = {
+        project: 'test-project',
+        root_dir: '/test/path',
+        findings: [],
+      };
+
+      const bundle = await generateEvidence(request, mockScope);
+
+      // Mutate actor (part of signed content)
+      bundle.actor.actor_id = 'tampered-actor';
+
+      const verification = await verifyEvidenceSignature(bundle);
+
+      expect(verification.valid).toBe(false);
+      expect(verification.reason).toBe('Signature mismatch');
+    });
+
+    it('should fail verification after mutating scope', async () => {
+      const request: GenerateEvidenceRequest = {
+        project: 'test-project',
+        root_dir: '/test/path',
+        findings: [],
+      };
+
+      const bundle = await generateEvidence(request, mockScope);
+
+      // Mutate scope (part of signed content)
+      bundle.scope.tenant_id = 'tampered-tenant';
+
+      const verification = await verifyEvidenceSignature(bundle);
+
+      expect(verification.valid).toBe(false);
+      expect(verification.reason).toBe('Signature mismatch');
+    });
+
+    it('should fail verification for bundle without signature', async () => {
+      const request: GenerateEvidenceRequest = {
+        project: 'test-project',
+        root_dir: '/test/path',
+        findings: [],
+      };
+
+      const bundle = await generateEvidence(request, mockScope);
+
+      // Remove signature
+      delete (bundle as { signature?: unknown }).signature;
+
+      const verification = await verifyEvidenceSignature(bundle);
+
+      expect(verification.valid).toBe(false);
+      expect(verification.reason).toBe('No signature present');
     });
   });
 

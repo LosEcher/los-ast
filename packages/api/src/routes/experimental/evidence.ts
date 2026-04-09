@@ -14,6 +14,7 @@ import {
   generateRewrite,
   explainCode,
   getCodeStats,
+  verifyEvidenceSignature,
 } from '../../services/evidence/service.js';
 import { notFound, created, ok } from '../../utils/http-helpers.js';
 import type {
@@ -193,4 +194,29 @@ export default async function evidenceRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest) =>
     ok(await getCodeStats((request.params as { project: string }).project))
   );
+
+  // POST /experimental/evidence/:id/verify - 验证证据包签名
+  fastify.post('/:id/verify', {
+    schema: {
+      params: evidenceIdParamsSchema,
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const scope = request.scope as VerifiedScope;
+    const bundle = await getEvidenceBundle(id, scope);
+    if (!bundle) return notFound(reply, 'Evidence bundle');
+
+    const verification = await verifyEvidenceSignature(bundle);
+    return ok({
+      bundle_id: id,
+      valid: verification.valid,
+      reason: verification.reason,
+      signature: bundle.signature ? {
+        algorithm: bundle.signature.algorithm,
+        signed_at: bundle.signature.signed_at,
+        signed_by: bundle.signature.signed_by,
+        key_id: bundle.signature.key_id,
+      } : null,
+    });
+  });
 }

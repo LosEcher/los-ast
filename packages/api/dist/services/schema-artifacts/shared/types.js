@@ -1,0 +1,4 @@
+/**
+ * Schema Artifacts - Types
+ */
+export {};

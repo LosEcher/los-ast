@@ -5,7 +5,7 @@
  * 注意: 此路由作为执行结果元数据能力，仅服务于单次执行
  * 不形成独立平台状态机
  */
-import { generateEvidence, getEvidenceBundle, validatePatchSafety, generateRewrite, explainCode, getCodeStats, } from '../../services/evidence/service.js';
+import { generateEvidence, getEvidenceBundle, validatePatchSafety, generateRewrite, explainCode, getCodeStats, verifyEvidenceSignature, } from '../../services/evidence/service.js';
 import { notFound, created, ok } from '../../utils/http-helpers.js';
 const requestScopeSchema = {
     type: 'object',
@@ -157,4 +157,28 @@ export default async function evidenceRoutes(fastify) {
             params: statsProjectParamsSchema,
         },
     }, async (request) => ok(await getCodeStats(request.params.project)));
+    // POST /experimental/evidence/:id/verify - 验证证据包签名
+    fastify.post('/:id/verify', {
+        schema: {
+            params: evidenceIdParamsSchema,
+        },
+    }, async (request, reply) => {
+        const { id } = request.params;
+        const scope = request.scope;
+        const bundle = await getEvidenceBundle(id, scope);
+        if (!bundle)
+            return notFound(reply, 'Evidence bundle');
+        const verification = await verifyEvidenceSignature(bundle);
+        return ok({
+            bundle_id: id,
+            valid: verification.valid,
+            reason: verification.reason,
+            signature: bundle.signature ? {
+                algorithm: bundle.signature.algorithm,
+                signed_at: bundle.signature.signed_at,
+                signed_by: bundle.signature.signed_by,
+                key_id: bundle.signature.key_id,
+            } : null,
+        });
+    });
 }
