@@ -66,6 +66,22 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 2. [README 的稳定面与预览面](#稳定面与预览面): 判断哪些能力适合接入，哪些仍是预览域。
 3. [docs/architecture.md](docs/architecture.md): 了解 core / cli / adapters / rules 的职责边界。
 
+## 能力矩阵
+
+| 能力 | 成熟度 | 状态 | 说明 |
+|------|--------|------|------|
+| **代码扫描** | ⭐⭐⭐⭐⭐ | 稳定 | `POST /scan` 支持 AST/rule 扫描，产出 JSONL findings |
+| **符号发现** | ⭐⭐⭐⭐⭐ | 稳定 | `POST /discover/symbols` 跨语言符号提取 |
+| **代码改写** | ⭐⭐⭐⭐⭐ | 稳定 | CLI `fix` 默认 dry-run，显式 `--apply` 才落盘 |
+| **接口治理** | ⭐⭐⭐☆☆ | 进行中 | OpenAPI/Contract 比较，支持 breaking/warning/info 分级 |
+| **字段治理** | ⭐⭐⭐☆☆ | 进行中 | SQL/Prisma schema 比较，覆盖 nullability/default/unique |
+| **路由证据** | ⭐⭐⭐☆☆ | 进行中 | Fastify 四层证据 (`declares/mounts/binds/runtime`)，非 full route truth |
+| **事故管理** | ⭐⭐☆☆☆ | 预览 | 计划迁出至 VPS Agent Web (Milestone B+) |
+| **自动恢复** | ⭐⭐☆☆☆ | 预览 | 计划迁出至 VPS Agent Web (Milestone B+) |
+| **经验提案** | ⭐⭐☆☆☆ | 预览 | 计划迁出至 los-memory (Milestone B) |
+
+**图例**: ⭐⭐⭐⭐⭐ 生产可用 | ⭐⭐⭐☆☆ 开发中 | ⭐⭐☆☆☆ 实验性/将迁移
+
 ## 文档入口
 
 按接入与开发场景分组：
