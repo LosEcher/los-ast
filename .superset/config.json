@@ -1,0 +1,8 @@
+{
+  "setup": [
+    "npm ci",
+    "[ ! -f .env ] && cp .env.example .env"
+  ],
+  "teardown": [],
+  "run": []
+}
