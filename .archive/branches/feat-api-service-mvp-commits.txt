@@ -1,0 +1,41 @@
+76f9c37 feat(integration): add lsclaw smoke gate and evidence metadata contract
+4996518 docs(lsclaw): add integration execution plan and smoke guidance
+9601fb6 docs(api): align route tiers env and error categories
+41849ef docs(plan): add two-week optimization roadmap
+d6cf4c4 docs(readme): refresh API integration navigation
+667f600 feat(api): add vps-agent-web bridge contracts and reliability tests
+122bebe feat(tooling): stabilize cli core workflows and CI matrix
+b54c0e6 feat: add enhanced config validation and route-level caching
+04a8784 feat: unify error handling and add internal route access control
+20c4681 fix: address high priority issues from multi-role review
+9e4f5e5 feat: implement route tiering governance (Core/Experimental/Internal)
+e53e3ac feat: add API service MVP deployment artifacts
+278a071 refactor: extract http helpers and improve code maintainability
+19eaa00 fix: health check and integration tests
+90e691a fix: make Golden Case tests pass
+a001737 fix: resolve unit test failures
+1f38cf3 test: add unit and integration tests
+97d4483 fix: address naming convention violations from review
+78526ca feat(evidence): Phase 1.7 - los-ast evidence generation
+762694e feat(hotreload): Phase 1.6 - hot reload system
+bfd79bc feat(approval): Phase 1.5 - approval center workflow
+32155a2 feat(recovery): Phase 1.4 - L1/L2 auto-recovery system
+ba0845a feat(attribution): Phase 1.3 - fault attribution system
+7fc33dc feat(memory): Phase 1.2 - los-memory experience沉淀 storage
+f57be39 feat(incident): Phase 1.1 - Incident data model and collection system
+73fea3f test(api): add integration tests for API service
+2cf1d4d fix(api): add Core type declarations and fix build errors
+53aac5d feat(tests): add Golden Case fixtures for validation
+7ec880a feat(core): stabilize Core Façade v1.0.0
+227c412 feat(deploy): add Docker Compose environment
+beb6f20 feat(api): implement /discover/symbols endpoint
+df16373 feat(api): implement /scan endpoint with limits (hard constraint #4)
+5390526 feat(api): implement cancellation semantics plugin (hard constraint #5)
+7bf2258 feat(api): implement /healthz endpoints and Core readiness check
+8fd9815 feat(api): implement scope validation plugin (hard constraint #3)
+a9a1fee feat(api): implement unified error model plugins (task #11)
+9ca24c7 docs: add self-healing system design document
+776ddf0 feat(api): initialize API and shared packages structure
+1de0978 feat: adapt cantool adapter for refactoring changes
+6fd1bf8 feat: add rule constraints and parse caching
+8d37c1b first commit

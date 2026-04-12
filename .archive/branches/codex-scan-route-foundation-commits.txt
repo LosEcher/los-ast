@@ -1,0 +1,86 @@
+6874756 Refactor incident store helpers
+1ebe5e3 Refactor scan route helpers
+b2ac830 Refactor incident repository helpers
+fdd41f6 Refactor key-value store helpers
+7b9e674 Refactor stable surfaces and tighten scan freshness gates
+0afcb26 chore: close remaining p0 contract gaps
+cde156e chore: tighten docs and clean api build outputs
+b033982 refactor(cli): extract route guard analysis module
+762e88b refactor(cli): extract shared workspace resolution
+0371ada chore(api): sync scan stability contract sections
+521a258 chore(api): sync scan governance contract sections
+043e041 chore(api): sync scan operational contract sections
+4b67abb chore(api): sync scan api contract examples
+1fb4bba chore(api): sync scan api contract sections from reference
+ad5d08e chore(api): sync scan openapi components from contract
+9cc6d04 chore(api): add generated scan contract reference
+38f531a test(api): guard scan docs against contract drift
+318983c refactor(api): centralize scan request contract definitions
+13bd180 test(api): align contracts with validated memory semantics
+3866525 test(api): isolate sqlite state per vitest worker
+8851253 test(api): stabilize simulated recovery execution
+b97b483 refactor(api): move approval and recovery orchestration into workflows
+7088c64 feat(api): add sqlite transaction flow for recovery approvals
+6415477 feat(api): add sqlite recovery repositories
+d63e9f4 feat(api): harden experimental persistence and contracts
+9accebb feat: freeze lsclaw adapter contract surface
+776a005 feat: split scan schema and extend governance wrappers
+21c9a4a feat: tighten route bind guards and expand governance parser coverage
+b0e4bdd Refine frontend governance HTTP rules
+de93d39 Add hub-lite route evidence acceptance marker
+565e80e feat: add openapi compatibility comparison inputs
+4bba7ce feat: grade schema enum and default compatibility
+3742f45 feat: add schema compatibility comparison inputs
+77dd51a docs: refresh integration guides after parser validation
+2189836 feat: expand schema parser default-value checks
+4f20d35 test: add artifact parser golden baselines
+e0d823c feat: add native contract and schema parser governance
+1d187fe chore: narrow control-plane logs ignore scope
+897fe9e chore: ignore log and report artifacts
+75ef5d4 chore: reconcile workspace state for readiness and integration hardening
+e0bdab4 feat(api): enforce core readiness fallback on experimental evidence endpoints
+30d0f76 Add hub-lite artifact export command
+f793598 chore(api): refresh dist artifacts
+cdf2185 feat(api): add scoped preview stats and attribution provider
+a2fa939 merge: integrate lsclaw smoke and evidence contract updates
+76f9c37 feat(integration): add lsclaw smoke gate and evidence metadata contract
+4996518 docs(lsclaw): add integration execution plan and smoke guidance
+9601fb6 docs(api): align route tiers env and error categories
+41849ef docs(plan): add two-week optimization roadmap
+d6cf4c4 docs(readme): refresh API integration navigation
+667f600 feat(api): add vps-agent-web bridge contracts and reliability tests
+122bebe feat(tooling): stabilize cli core workflows and CI matrix
+b54c0e6 feat: add enhanced config validation and route-level caching
+04a8784 feat: unify error handling and add internal route access control
+20c4681 fix: address high priority issues from multi-role review
+9e4f5e5 feat: implement route tiering governance (Core/Experimental/Internal)
+e53e3ac feat: add API service MVP deployment artifacts
+278a071 refactor: extract http helpers and improve code maintainability
+19eaa00 fix: health check and integration tests
+90e691a fix: make Golden Case tests pass
+a001737 fix: resolve unit test failures
+1f38cf3 test: add unit and integration tests
+97d4483 fix: address naming convention violations from review
+78526ca feat(evidence): Phase 1.7 - los-ast evidence generation
+762694e feat(hotreload): Phase 1.6 - hot reload system
+bfd79bc feat(approval): Phase 1.5 - approval center workflow
+32155a2 feat(recovery): Phase 1.4 - L1/L2 auto-recovery system
+ba0845a feat(attribution): Phase 1.3 - fault attribution system
+7fc33dc feat(memory): Phase 1.2 - los-memory experience沉淀 storage
+f57be39 feat(incident): Phase 1.1 - Incident data model and collection system
+73fea3f test(api): add integration tests for API service
+2cf1d4d fix(api): add Core type declarations and fix build errors
+53aac5d feat(tests): add Golden Case fixtures for validation
+7ec880a feat(core): stabilize Core Façade v1.0.0
+227c412 feat(deploy): add Docker Compose environment
+beb6f20 feat(api): implement /discover/symbols endpoint
+df16373 feat(api): implement /scan endpoint with limits (hard constraint #4)
+5390526 feat(api): implement cancellation semantics plugin (hard constraint #5)
+7bf2258 feat(api): implement /healthz endpoints and Core readiness check
+8fd9815 feat(api): implement scope validation plugin (hard constraint #3)
+a9a1fee feat(api): implement unified error model plugins (task #11)
+9ca24c7 docs: add self-healing system design document
+776ddf0 feat(api): initialize API and shared packages structure
+1de0978 feat: adapt cantool adapter for refactoring changes
+6fd1bf8 feat: add rule constraints and parse caching
+8d37c1b first commit
