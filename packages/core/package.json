@@ -6,7 +6,11 @@
     ".": {
       "import": "./src/index.mjs",
       "types": "./types/index.d.ts"
-    }
+    },
+    "./src/extraction/ast-adapter.mjs": "./src/extraction/ast-adapter.mjs",
+    "./src/extraction/index.mjs": "./src/extraction/index.mjs",
+    "./src/extraction/extractors/*": "./src/extraction/extractors/*",
+    "./src/extraction/import-resolver/index.mjs": "./src/extraction/import-resolver/index.mjs"
   },
   "dependencies": {
     "@ast-grep/lang-rust": "^0.0.3",

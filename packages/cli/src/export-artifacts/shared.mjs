@@ -14,6 +14,7 @@ export function parseExportArtifactsArgs(argv) {
     rules: [],
     outputDir: '',
     deterministic: false,
+    experimentalExtractors: false,
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -51,6 +52,9 @@ export function parseExportArtifactsArgs(argv) {
     }
     if (token === '--deterministic') {
       args.deterministic = true
+    }
+    if (token === '--experimental-extractors') {
+      args.experimentalExtractors = true
     }
   }
 
@@ -160,8 +164,11 @@ export function buildStructureMapArtifact({
   routeBinds,
   routeRuntimeWithDeltas,
   routeRuntimeDeltas,
+  callEdges,
+  importsV2,
+  structuralSummary,
 }) {
-  return {
+  const artifact = {
     schema: 'lsclaw.los-ast.structure-map.v1',
     version: '1.0.0',
     project,
@@ -183,6 +190,23 @@ export function buildStructureMapArtifact({
     route_runtime: routeRuntimeWithDeltas,
     route_runtime_deltas: routeRuntimeDeltas,
   }
+
+  // Phase 4: Call graph edges (Tree-sitter extraction)
+  if (callEdges && callEdges.length > 0) {
+    artifact.call_edges = callEdges
+  }
+
+  // Phase 4: Enhanced imports with resolved paths
+  if (importsV2 && importsV2.length > 0) {
+    artifact.imports_v2 = importsV2
+  }
+
+  // Phase 4: Structural summary
+  if (structuralSummary) {
+    artifact.structural_summary = structuralSummary
+  }
+
+  return artifact
 }
 
 export function buildExportArtifactsSummary({
@@ -199,6 +223,9 @@ export function buildExportArtifactsSummary({
   routeBinds,
   routeRuntimeWithDeltas,
   routeRuntimeDeltas,
+  callEdges,
+  importsV2,
+  structuralSummary,
 }) {
   return {
     ok: true,
@@ -221,6 +248,8 @@ export function buildExportArtifactsSummary({
       routeBinds: routeBinds.length,
       routeRuntime: routeRuntimeWithDeltas.length,
       routeRuntimeDeltas: routeRuntimeDeltas.length,
+      callEdges: callEdges ? callEdges.length : 0,
+      importsV2: importsV2 ? importsV2.length : 0,
     },
     limitations: routeBinds.length > 0
       ? [

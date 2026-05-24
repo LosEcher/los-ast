@@ -37,6 +37,7 @@ test('export artifacts shared helpers parse argv deterministically', () => {
     rules: ['rules/**/*.yml'],
     outputDir: './logs/out',
     deterministic: true,
+    experimentalExtractors: false,
   })
 })
 

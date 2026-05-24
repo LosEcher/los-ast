@@ -21,6 +21,7 @@ import {
   parseExportArtifactsArgs,
 } from './export-artifacts/shared.mjs'
 import { resolveRules, resolveWorkspace } from './workspace-options.mjs'
+import { runExtractionPipeline } from './extraction-pipeline.mjs'
 
 async function probeLosAstApiRuntimeRoutes(rootDir, deterministic) {
   const distServer = path.join(rootDir, 'packages', 'api', 'dist', 'server.js')
@@ -158,6 +159,22 @@ async function exportArtifacts(options) {
   const routeRuntime = await probeLosAstApiRuntimeRoutes(ws.rootDir, deterministic)
   const routeRuntimeDeltas = buildRouteRuntimeDeltas(routeBinds, routeRuntime, deterministic)
   const routeRuntimeWithDeltas = attachRouteRuntimeDeltas(routeRuntime, routeRuntimeDeltas)
+
+  // Phase 5: Experimental Tree-sitter extraction pipeline
+  let callEdges = []
+  let importsV2 = []
+  let structuralSummary = null
+  if (options.experimentalExtractors) {
+    const extractionResult = await runExtractionPipeline({
+      files,
+      rootDir: ws.rootDir,
+      deterministic,
+    })
+    callEdges = extractionResult.callEdges
+    importsV2 = extractionResult.importsV2
+    structuralSummary = extractionResult.structuralSummary
+  }
+
   const structureMap = buildStructureMapArtifact({
     project: ws.project,
     rootDir: ws.rootDir,
@@ -171,6 +188,9 @@ async function exportArtifacts(options) {
     routeBinds,
     routeRuntimeWithDeltas,
     routeRuntimeDeltas,
+    callEdges,
+    importsV2,
+    structuralSummary,
   })
 
   await fs.mkdir(outputDir, { recursive: true })
@@ -192,6 +212,9 @@ async function exportArtifacts(options) {
     routeBinds,
     routeRuntimeWithDeltas,
     routeRuntimeDeltas,
+    callEdges,
+    importsV2,
+    structuralSummary,
   })
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`)
 }
