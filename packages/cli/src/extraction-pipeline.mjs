@@ -58,9 +58,19 @@ function buildStructuralSummary(perFile, allCallEdges) {
     totalClasses += analysis.classes.length
   }
 
-  // Distribute call edges by language based on file extension of the caller's file
   for (const edge of allCallEdges) {
-    // Edges don't carry file info, so attribute to the dominant language
+    const ext = (edge.file || '').split('.').pop() || ''
+    const langMap = {
+      ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript',
+      rs: 'rust', go: 'go', py: 'python',
+    }
+    const lang = langMap[ext] || ext
+    if (lang) {
+      if (!byLanguage[lang]) {
+        byLanguage[lang] = { functions: 0, classes: 0, callEdges: 0 }
+      }
+      byLanguage[lang].callEdges += 1
+    }
   }
 
   return {
