@@ -164,7 +164,7 @@ async function exportArtifacts(options) {
   let callEdges = []
   let importsV2 = []
   let structuralSummary = null
-  if (options.experimentalExtractors) {
+  if (options.experimentalExtractors || ws.experimentalExtractors) {
     const extractionResult = await runExtractionPipeline({
       files,
       rootDir: ws.rootDir,

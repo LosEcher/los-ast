@@ -17,6 +17,8 @@ const DEFAULT_PROJECTS = {
     ],
     ignore: ['**/node_modules/**', '**/target/**', '**/dist/**', '**/.git/**'],
     ruleGlobs: ['rules/projects/cantool/**/*.{yml,yaml}', 'rules/languages/rust/**/*.{yml,yaml}', 'rules/languages/typescript/**/*.{yml,yaml}', 'rules/languages/tsx/**/*.{yml,yaml}'],
+    languages: ['rust', 'typescript', 'javascript'],
+    experimentalExtractors: false,
   },
   lsclaw: {
     project: 'lsclaw',
@@ -27,6 +29,8 @@ const DEFAULT_PROJECTS = {
       ...(lsclawGovernancePattern ? [`rules/${lsclawGovernancePattern}`] : []),
       'rules/languages/**/*.{yml,yaml}',
     ],
+    languages: ['javascript', 'typescript'],
+    experimentalExtractors: false,
   },
   fullstackframe: {
     project: 'fullstackframe',
@@ -39,6 +43,8 @@ const DEFAULT_PROJECTS = {
     ],
     ignore: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
     ruleGlobs: ['rules/projects/fullstackframe/**/*.{yml,yaml}', 'rules/languages/**/*.{yml,yaml}'],
+    languages: ['typescript', 'javascript'],
+    experimentalExtractors: false,
   },
 }
 
@@ -185,6 +191,8 @@ function createCustomAdapter(projectName, config) {
     include: config.include || ['**/*'],
     ignore: config.ignore || ['**/node_modules/**', '**/.git/**'],
     ruleGlobs: config.ruleGlobs || [],
+    languages: config.languages || [],
+    experimentalExtractors: config.experimentalExtractors || false,
   }
 }
 

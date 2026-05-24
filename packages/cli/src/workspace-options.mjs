@@ -20,6 +20,8 @@ export async function resolveWorkspace(options, settings = {}) {
       include: normalizeArray(options.include).length ? normalizeArray(options.include) : adapter.include,
       ignore: normalizeArray(options.ignore).length ? normalizeArray(options.ignore) : adapter.ignore,
       ruleGlobs: adapter.ruleGlobs,
+      languages: adapter.languages || [],
+      experimentalExtractors: adapter.experimentalExtractors || false,
     }
   }
 
