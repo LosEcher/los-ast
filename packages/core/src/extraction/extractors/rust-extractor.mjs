@@ -137,7 +137,7 @@ export class RustExtractor {
           const nameNode = node.childForFieldName('name')
           if (nameNode) {
             const fields = []
-            const fieldList = node.childForFieldName('fields')
+            const fieldList = node.childForFieldName('body')
             if (fieldList) {
               for (let j = 0; j < fieldList.childCount; j++) {
                 const field = fieldList.child(j)
@@ -360,8 +360,17 @@ export class RustExtractor {
    * @returns {boolean}
    */
   #hasTestAttribute(node) {
-    const prev = node.parent ? node.parent.children : []
-    for (const sibling of prev) {
+    // Attributes precede the item they annotate as siblings.
+    // Only check siblings whose start position is before this node's.
+    const parent = node.parent
+    if (!parent) return false
+    const nodeRow = node.startPosition.row
+    const nodeCol = node.startPosition.column
+    for (const sibling of parent.children) {
+      if (!sibling) continue
+      const sRow = sibling.startPosition.row
+      const sCol = sibling.startPosition.column
+      if (sRow > nodeRow || (sRow === nodeRow && sCol >= nodeCol)) break
       if (sibling.type === 'attribute_item' && sibling.text.includes('test')) {
         return true
       }
