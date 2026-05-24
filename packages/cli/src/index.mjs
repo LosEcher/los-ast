@@ -8,11 +8,13 @@ import {
   fix,
   scan,
   toJsonLines,
-  toMarkdownFix,
   toMarkdownScan,
+  toMarkdownFix,
+  discoverFiles,
 } from '@los-ast/core'
 import { listProjects } from '@los-ast/adapters'
 import { resolveRules, resolveWorkspace } from './workspace-options.mjs'
+import { runExtractionPipeline } from './extraction-pipeline.mjs'
 
 async function writeOutput({ format, payload, project, quietMachine = false, deterministic = false, isError = false }) {
   if (format === 'jsonl') {
@@ -86,6 +88,7 @@ program
   .option('--format <format>', 'output format: jsonl|md', 'jsonl')
   .option('--quiet-machine', 'machine-friendly output (stdout for data, stderr for errors)', false)
   .option('--deterministic', 'deterministic output (stable sorting, timestamps)', false)
+  .option('--experimental-extractors', 'run Tree-sitter call-graph and import-resolution extraction', false)
   .action(async (options) => {
     const ws = await resolveWorkspace(options, { preferProjectAdapter: true })
     const rules = await resolveRules(options, { preferProjectAdapter: true })
@@ -98,14 +101,38 @@ program
       ignore,
       rules
     }
-    // 只有显式指定 --deterministic 时才覆盖默认值
     if (options.deterministic) {
       scanOptions.deterministic = true
     }
     const res = await scan(scanOptions)
+
+    // Run extraction pipeline when explicitly enabled
+    const runExtraction = options.experimentalExtractors || ws.experimentalExtractors
+    let extractionStats = null
+    if (runExtraction) {
+      const files = await discoverFiles({ rootDir, include, ignore })
+      const extractionResult = await runExtractionPipeline({
+        files,
+        rootDir,
+        deterministic: Boolean(options.deterministic),
+      })
+      extractionStats = {
+        callEdges: extractionResult.callEdges.length,
+        importsV2: extractionResult.importsV2.length,
+        ...(extractionResult.structuralSummary ? {
+          totalFunctions: extractionResult.structuralSummary.total_functions,
+          totalClasses: extractionResult.structuralSummary.total_classes,
+        } : {}),
+        ...(extractionResult._stats || {}),
+      }
+    }
+
     if (options.format === 'md') {
-      await writeOutput({ format: 'md', project, payload: toMarkdownScan({ project, ...res }), quietMachine: options.quietMachine, deterministic: options.deterministic })
+      await writeOutput({ format: 'md', project, payload: toMarkdownScan({ project, ...res, extractionStats }), quietMachine: options.quietMachine, deterministic: options.deterministic })
       return
+    }
+    if (extractionStats) {
+      process.stderr.write(`${JSON.stringify({ extraction: extractionStats })}\n`)
     }
     await writeOutput({ format: 'jsonl', project, payload: res.findings, quietMachine: options.quietMachine, deterministic: options.deterministic })
   })
