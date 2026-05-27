@@ -16,21 +16,27 @@ function throwIfAborted(signal) {
   throw error
 }
 
-export async function scan({
+/**
+ * Sequential scan over an already-discovered file list.
+ * This is the canonical single-process scan body, also used by
+ * ChunkedScanner.scanChunk for individual chunk processing.
+ *
+ * @param {string[]} files - absolute file paths
+ * @param {object} options
+ * @param {string} [options.project]
+ * @param {import('../scanner/scan-planner.mjs').Rule[]} [options.rules]
+ * @param {object} [options.parseCache]
+ * @param {AbortSignal} [options.signal]
+ * @param {boolean} [options.deterministic]
+ * @returns {{ findings: object[], parseFailures: object[] }}
+ */
+export async function _scanSequential(files, {
   project = 'custom',
-  rootDir,
-  include,
-  ignore,
-  rules,
+  rules = [],
   parseCache = defaultParseCache,
-  includeStats = false,
   signal,
   deterministic = false,
-}) {
-  registerLanguages()
-  throwIfAborted(signal)
-
-  const files = await discoverFiles({ rootDir, include, ignore })
+} = {}) {
   const findings = []
   const parseFailures = []
 
@@ -55,7 +61,12 @@ export async function scan({
 
     for (const rule of rules) {
       if (rule.language !== String(language)) continue
-      const nodes = root.findAll({ rule: rule.rule })
+      let nodes
+      try {
+        nodes = root.findAll({ rule: rule.rule })
+      } catch {
+        continue
+      }
       for (const node of nodes) {
         if (!passesConstraints(node, rule.constraints)) continue
         findings.push(buildScanFinding({
@@ -70,17 +81,141 @@ export async function scan({
     }
   }
 
-  if (deterministic) {
-    findings.sort(deterministicSort)
+  return { findings, parseFailures }
+}
+
+/**
+ * Main scan entry point. By default ('auto' mode) auto-promotes:
+ *   <100 files → sequential (zero overhead)
+ *   100-1000 files → bounded parallel chunks
+ *   >1000 files → phased chunked Map-Reduce
+ *
+ * @param {object} options
+ * @param {string} [options.project]
+ * @param {string} options.rootDir
+ * @param {string[]} [options.include]
+ * @param {string[]} [options.ignore]
+ * @param {import('../scanner/scan-planner.mjs').Rule[]} [options.rules]
+ * @param {object} [options.parseCache]
+ * @param {boolean} [options.includeStats]
+ * @param {AbortSignal} [options.signal]
+ * @param {boolean} [options.deterministic]
+ * @param {'auto' | 'single' | 'parallel' | 'chunked'} [options.mode]
+ */
+export async function scan({
+  project = 'custom',
+  rootDir,
+  include,
+  ignore,
+  rules = [],
+  parseCache = defaultParseCache,
+  includeStats = false,
+  signal,
+  deterministic = false,
+  mode = 'auto',
+}) {
+  registerLanguages()
+  throwIfAborted(signal)
+
+  const files = await discoverFiles({ rootDir, include, ignore })
+
+  // ── Small project or explicit single mode: sequential path ──
+  const shouldUseSequential =
+    mode === 'single' ||
+    (mode === 'auto' && files.length < 100)
+
+  if (shouldUseSequential) {
+    const { findings, parseFailures } = await _scanSequential(files, {
+      project,
+      rules,
+      parseCache,
+      signal,
+      deterministic,
+    })
+
+    if (deterministic) {
+      findings.sort(deterministicSort)
+    }
+
+    const res = { filesScanned: files.length, findings }
+    if (includeStats) {
+      res.parseCache = parseCache.snapshotStats
+        ? parseCache.snapshotStats()
+        : undefined
+      const parseFailureSummary = summarizeParseFailures(parseFailures)
+      if (parseFailureSummary) {
+        res.parseFailures = parseFailureSummary
+      }
+    }
+    return res
   }
 
-  const res = { filesScanned: files.length, findings }
+  // ── Medium/Large project: chunked execution ──
+  const { planScan } = await import('../scanner/scan-planner.mjs')
+  const { scanChunk } = await import('../scanner/chunked-scanner.mjs')
+  const { executeParallel } = await import('../scanner/parallel-executor.mjs')
+  const { reduceChunks } = await import('../scanner/reducer.mjs')
+
+  const plan = planScan({
+    files,
+    rootDir,
+    maxParallelChunks: mode === 'parallel' ? 4 : undefined,
+  })
+
+  throwIfAborted(signal)
+
+  // Execute chunks with bounded parallelism
+  const chunkResults = await executeParallel({
+    chunks: plan.chunks.map((chunkFiles, i) => ({
+      id: `chunk-${String(i).padStart(3, '0')}`,
+      files: chunkFiles,
+    })),
+    maxConcurrency: plan.maxConcurrency,
+    signal,
+    workerFn: async (chunk, _index, chunkSignal) => {
+      const chunkResult = await scanChunk({
+        chunkId: chunk.id,
+        chunkFiles: chunk.files,
+        project,
+        rules,
+        deterministic: false, // Sort in reduce phase
+        signal: chunkSignal,
+      })
+      return chunkResult
+    },
+  })
+
+  throwIfAborted(signal)
+
+  // Reduce: merge, dedup, sort
+  const merged = await reduceChunks({
+    chunkResults,
+    deterministic,
+    includeStats,
+  })
+
+  // Build final result in the same shape as before
+  const res = {
+    filesScanned: merged.filesScanned,
+    findings: merged.findings,
+  }
+
   if (includeStats) {
-    res.parseCache = parseCache.snapshotStats()
-    const parseFailureSummary = summarizeParseFailures(parseFailures)
-    if (parseFailureSummary) {
-      res.parseFailures = parseFailureSummary
+    res.parseCache = parseCache.snapshotStats
+      ? parseCache.snapshotStats()
+      : undefined
+    if (merged.parseFailures) {
+      res.parseFailures = merged.parseFailures
+    }
+    res._scanMode = {
+      mode: plan.mode,
+      chunks: plan.chunks.length,
+      concurrency: plan.maxConcurrency,
+    }
+    if (merged._reduceStats) {
+      res._reduceStats = merged._reduceStats
     }
   }
+
   return res
 }

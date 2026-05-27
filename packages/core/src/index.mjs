@@ -50,5 +50,13 @@ export {
   DEFAULT_PARSE_CACHE_MAX_ENTRIES,
 } from './parse-cache.mjs'
 
+// Scanner modules (scan planner + chunked map-reduce)
+export { ScanMode, planScan, determineMode, chunkByCost, getParserWeight, estimateFileCosts } from './scanner/scan-planner.mjs'
+export { scanChunk } from './scanner/chunked-scanner.mjs'
+export { reduceChunks, buildDedupKey } from './scanner/reducer.mjs'
+export { executeParallel } from './scanner/parallel-executor.mjs'
+export { reconcile } from './scanner/reconciliation.mjs'
+export { IntermediateStore, FilesystemIntermediateStore, createIntermediateStore } from './scanner/intermediate-store.mjs'
+
 // 默认初始化（向后兼容）
 initializeCore().catch(console.error);
