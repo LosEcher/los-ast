@@ -26,13 +26,19 @@ export function toJsonLines(records, deterministic = false) {
   return records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '')
 }
 
-export function toMarkdownScan({ project, filesScanned, findings, parseFailures, scanTelemetry }) {
+export function toMarkdownScan({ project, filesScanned, findings, parseFailures, scanTelemetry, _scanMode, _reduceStats }) {
   const lines = []
   lines.push(`# los-ast scan report`)
   lines.push('')
   lines.push(`- project: ${project}`)
   lines.push(`- filesScanned: ${filesScanned}`)
   lines.push(`- findings: ${findings.length}`)
+  if (_scanMode) {
+    lines.push(`- scanMode: ${_scanMode.mode} (${_scanMode.chunks} chunks x ${_scanMode.concurrency} workers)`)
+  }
+  if (_reduceStats) {
+    lines.push(`- reduceStats: ${_reduceStats.totalFindingsAfterDedup} findings after dedup (${_reduceStats.totalFindingsBeforeDedup} before, ${_reduceStats.dedupedFindings} removed)`)
+  }
   if (parseFailures) {
     lines.push(`- parseFailures: ${parseFailures.count}`)
     if (parseFailures.byLanguage && Object.keys(parseFailures.byLanguage).length > 0) {

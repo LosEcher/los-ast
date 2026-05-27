@@ -88,6 +88,7 @@ program
   .option('--format <format>', 'output format: jsonl|md', 'jsonl')
   .option('--quiet-machine', 'machine-friendly output (stdout for data, stderr for errors)', false)
   .option('--deterministic', 'deterministic output (stable sorting, timestamps)', false)
+  .option('--scan-mode <mode>', 'execution mode: auto|single|parallel|chunked', 'auto')
   .option('--experimental-extractors', 'run Tree-sitter call-graph and import-resolution extraction', false)
   .action(async (options) => {
     const ws = await resolveWorkspace(options, { preferProjectAdapter: true })
@@ -106,6 +107,7 @@ program
       ignore,
       rules,
       signal: controller.signal,
+      mode: options.scanMode || 'auto',
     }
     if (options.deterministic) {
       scanOptions.deterministic = true
@@ -144,8 +146,12 @@ program
       await writeOutput({ format: 'md', project, payload: toMarkdownScan({ project, ...res, extractionStats }), quietMachine: options.quietMachine, deterministic: options.deterministic })
       return
     }
-    if (extractionStats) {
-      process.stderr.write(`${JSON.stringify({ extraction: extractionStats })}\n`)
+    if (extractionStats || res._scanMode) {
+      const meta = {}
+      if (extractionStats) meta.extraction = extractionStats
+      if (res._scanMode) meta.scanMode = res._scanMode
+      if (res._reduceStats) meta.reduceStats = res._reduceStats
+      process.stderr.write(`${JSON.stringify(meta)}\n`)
     }
     await writeOutput({ format: 'jsonl', project, payload: res.findings, quietMachine: options.quietMachine, deterministic: options.deterministic })
   })

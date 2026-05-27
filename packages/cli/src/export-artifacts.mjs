@@ -142,6 +142,7 @@ async function exportArtifacts(options) {
       rules,
       deterministic,
       signal: controller.signal,
+      mode: 'auto',
     })
   } finally {
     process.removeListener('SIGINT', onAbort)

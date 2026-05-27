@@ -198,6 +198,11 @@ export async function scan({
   const res = {
     filesScanned: merged.filesScanned,
     findings: merged.findings,
+    _scanMode: {
+      mode: plan.mode,
+      chunks: plan.chunks.length,
+      concurrency: plan.maxConcurrency,
+    },
   }
 
   if (includeStats) {
@@ -206,11 +211,6 @@ export async function scan({
       : undefined
     if (merged.parseFailures) {
       res.parseFailures = merged.parseFailures
-    }
-    res._scanMode = {
-      mode: plan.mode,
-      chunks: plan.chunks.length,
-      concurrency: plan.maxConcurrency,
     }
     if (merged._reduceStats) {
       res._reduceStats = merged._reduceStats
