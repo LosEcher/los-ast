@@ -92,15 +92,15 @@ export function normalizeSqlType(value: string): string {
     return 'numeric';
   }
 
-  if (normalized === 'serial') {
+  if (normalized === 'serial' || normalized === 'smallserial' || normalized === 'serial2') {
     return 'integer';
   }
 
-  if (normalized === 'bigserial') {
+  if (normalized === 'bigserial' || normalized === 'serial8') {
     return 'bigint';
   }
 
-  if (normalized === 'float8') {
+  if (normalized === 'float8' || normalized === 'float4') {
     return 'double precision';
   }
 
@@ -117,12 +117,17 @@ export function normalizeSqlType(value: string): string {
     return 'char';
   }
 
+  // PostgreSQL text and varchar (without length) are semantically equivalent
+  if (normalized === 'text') {
+    return 'varchar';
+  }
+
   return normalized;
 }
 
 export function isSequenceBackedSqlType(typeToken: string | undefined): boolean {
   const normalized = typeToken ? normalizeType(typeToken) : '';
-  return normalized === 'serial' || normalized === 'bigserial';
+  return normalized === 'serial' || normalized === 'bigserial' || normalized === 'smallserial' || normalized === 'serial2' || normalized === 'serial8';
 }
 
 export function normalizeDefaultValue(value: string | undefined): string | undefined {

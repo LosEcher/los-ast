@@ -154,4 +154,35 @@ describe('schema artifacts shared helpers', () => {
     expect(prismaEntity.fields.get('id')?.defaultValue).toBe('@generated_increment');
     expect(prismaEntity.fields.get('rank')?.defaultValue).toBe('@generated_increment');
   });
+
+  it('normalizes smallserial, serial2, serial8, float4, and text aliases', () => {
+    const [entity] = parseSqlEntities([
+      'CREATE TABLE items (',
+      '  id SMALLSERIAL PRIMARY KEY,',
+      '  ref SERIAL2,',
+      '  ext_id SERIAL8,',
+      '  score FLOAT4,',
+      '  notes TEXT',
+      ');',
+    ].join('\n'));
+
+    expect(entity.fields.get('id')).toMatchObject({
+      type: 'integer',
+      defaultValue: '@generated_increment',
+      hasDefault: true,
+      primaryKey: true,
+    });
+    expect(entity.fields.get('ref')).toMatchObject({
+      type: 'integer',
+      defaultValue: '@generated_increment',
+      hasDefault: true,
+    });
+    expect(entity.fields.get('ext_id')).toMatchObject({
+      type: 'bigint',
+      defaultValue: '@generated_increment',
+      hasDefault: true,
+    });
+    expect(entity.fields.get('score')?.type).toBe('double precision');
+    expect(entity.fields.get('notes')?.type).toBe('varchar');
+  });
 });
