@@ -1,7 +1,7 @@
 {
   "description": "Golden baseline for the lsclaw-governance rule pack.",
   "project": "lsclaw-governance-pack",
-  "filesScanned": 5,
+  "filesScanned": 6,
   "expectedFindings": {
     "patterns": [
       {
@@ -12,7 +12,7 @@
       {
         "ruleId": "lsclaw-governance.frontend-http-client-axios",
         "messagePattern": "统一通过封装网络层",
-        "minimumOccurrences": 1
+        "minimumOccurrences": 4
       },
       {
         "ruleId": "lsclaw-governance.backend-route-handler",
@@ -35,6 +35,7 @@
       "src/database.ts",
       "src/frontend-axios.ts",
       "src/frontend-fetch.ts",
+      "src/frontend-ky-got.ts",
       "src/interface.ts"
     ]
   },

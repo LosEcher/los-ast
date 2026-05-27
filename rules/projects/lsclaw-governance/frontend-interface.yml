@@ -36,7 +36,7 @@
       mode: any
       flags: "i"
     - name: CLIENT
-      regex: "^(?:axios|client|http|(?:api|http|request|rest)[A-Z_$][\\w$]*|[A-Za-z_$][\\w$]*(?:Api|Client|Http|Request|Rest))$"
+      regex: "^(?:axios|client|http|ky|got|superagent|(?:api|http|request|rest)[A-Z_$][\\w$]*|[A-Za-z_$][\\w$]*(?:Api|Client|Http|Request|Rest))$"
       mode: any
   governance:
     domain: frontend
@@ -122,7 +122,7 @@
       mode: any
       flags: "i"
     - name: CLIENT
-      regex: "^(?:axios|client|http|(?:api|http|request|rest)[A-Z_$][\\w$]*|[A-Za-z_$][\\w$]*(?:Api|Client|Http|Request|Rest))$"
+      regex: "^(?:axios|client|http|ky|got|superagent|(?:api|http|request|rest)[A-Z_$][\\w$]*|[A-Za-z_$][\\w$]*(?:Api|Client|Http|Request|Rest))$"
       mode: any
   governance:
     domain: frontend

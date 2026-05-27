@@ -568,22 +568,22 @@ test('lsclaw-governance rule pack has stable fixture baseline', async () => {
   })
 
   assert.equal(scanRes.filesScanned, expectedOutput.filesScanned)
-  assert.equal(scanRes.findings.length, 5)
+  assert.equal(scanRes.findings.length, 8)
 
   const ruleCounts = Object.groupBy(scanRes.findings, (finding) => finding.ruleId)
   assert.equal(ruleCounts['lsclaw-governance.frontend-http-client']?.length, 1)
-  assert.equal(ruleCounts['lsclaw-governance.frontend-http-client-axios']?.length, 1)
+  assert.equal(ruleCounts['lsclaw-governance.frontend-http-client-axios']?.length, 4)
   assert.equal(ruleCounts['lsclaw-governance.backend-route-handler']?.length, 1)
   assert.equal(ruleCounts['lsclaw-governance.database-concat-query']?.length, 1)
   assert.equal(ruleCounts['lsclaw-governance.api-response-field-exposure']?.length, 1)
 
   const severityCounts = Object.groupBy(scanRes.findings, (finding) => finding.severity)
   assert.equal(severityCounts.error?.length, 1)
-  assert.equal(severityCounts.warning?.length, 3)
+  assert.equal(severityCounts.warning?.length, 6)
   assert.equal(severityCounts.info?.length, 1)
 
   const impactCounts = Object.groupBy(scanRes.findings, (finding) => finding.impactHint)
   assert.equal(impactCounts.high?.length, 1)
-  assert.equal(impactCounts.medium?.length, 3)
+  assert.equal(impactCounts.medium?.length, 6)
   assert.equal(impactCounts.low?.length, 1)
 })

@@ -4,14 +4,14 @@
 
 当前基线：
 
-- 规则总命中：`5`
+- 规则总命中：`8`
 - 严重级别分布：
   - `error=1`
-  - `warning=3`
+  - `warning=6`
   - `info=1`
 - impactHint 分布：
   - `high=1`
-  - `medium=3`
+  - `medium=6`
   - `low=1`
 
 命中规则：

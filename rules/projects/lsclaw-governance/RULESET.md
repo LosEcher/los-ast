@@ -74,6 +74,7 @@ lsclaw-governance
   - `apiClient.post(url, args)` / `client.get(url)`
   - `requestClient.patch(url, args)` / `restClient.delete(url)`
   - 受限泛化对象名，如 `billingApi.get(url)` / `requestGateway.post(url, args)`
+  - `ky.get(url)` / `got.post(url, json)` / `superagent.delete(url)`
   - `const http = axios; http.get(url)`
   - wrapper 实现体，如 `async function request(...) { return fetch(...) }`
   - wrapper 实现体，如 `function billingClient(...) { return apiClient.post(...) }`
