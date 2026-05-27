@@ -244,6 +244,10 @@ describe('openapi artifacts shared helpers', () => {
 
     expect(shape.discriminators.get('')).toEqual({
       propertyName: 'kind',
+      mapping: {
+        admin: '#/components/schemas/AdminUser',
+        guest: '#/components/schemas/GuestUser',
+      },
       mappingKeys: ['admin', 'guest'],
     });
     expect(Array.from(shape.properties.keys()).sort()).toEqual(['id', 'kind', 'traceId']);

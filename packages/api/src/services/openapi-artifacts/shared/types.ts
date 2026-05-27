@@ -39,6 +39,7 @@ export type ComparableField = {
 };
 
 export type ComparableDiscriminator = {
+  mapping: Record<string, string>;
   mappingKeys: string[];
   propertyName: string;
 };

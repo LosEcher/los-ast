@@ -94,11 +94,17 @@ function getComparableDiscriminator(schema: Record<string, unknown>): Comparable
     return undefined;
   }
 
-  const mappingKeys = isRecord(schema.discriminator.mapping)
-    ? Object.keys(schema.discriminator.mapping).sort()
-    : [];
+  const mapping = isRecord(schema.discriminator.mapping)
+    ? Object.fromEntries(
+        Object.entries(schema.discriminator.mapping)
+          .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+          .sort(([a], [b]) => a.localeCompare(b))
+      )
+    : {};
+  const mappingKeys = Object.keys(mapping);
 
   return {
+    mapping,
     mappingKeys,
     propertyName,
   };
