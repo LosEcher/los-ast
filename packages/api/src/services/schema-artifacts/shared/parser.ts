@@ -35,7 +35,7 @@ function extractSqlTypeToken(definition: string): string | undefined {
   }
 
   const compoundMatch = trimmed.match(
-    /^(timestamp(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|time(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|double\s+precision)/i,
+    /^(timestamp(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|time(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|double\s+precision|character\s+varying(?:\([^)]*\))?|char\s+varying(?:\([^)]*\))?|character(?:\([^)]*\))?)/i,
   );
   if (compoundMatch) {
     return compoundMatch[1];

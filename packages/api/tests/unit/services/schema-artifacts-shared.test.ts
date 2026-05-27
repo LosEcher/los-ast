@@ -120,6 +120,22 @@ describe('schema artifacts shared helpers', () => {
     });
   });
 
+  it('normalizes character-type aliases (character varying, char, character)', () => {
+    const [entity] = parseSqlEntities([
+      'CREATE TABLE users (',
+      '  name CHARACTER VARYING(255),',
+      '  code CHAR VARYING(10),',
+      '  gender CHARACTER(1),',
+      '  bio VARCHAR(500),',
+      ');',
+    ].join('\n'));
+
+    expect(entity.fields.get('name')?.type).toBe('varchar(255)');
+    expect(entity.fields.get('code')?.type).toBe('varchar(10)');
+    expect(entity.fields.get('gender')?.type).toBe('char(1)');
+    expect(entity.fields.get('bio')?.type).toBe('varchar(500)');
+  });
+
   it('normalizes sequence-backed increment defaults across sql and prisma forms', () => {
     const [sqlEntity] = parseSqlEntities([
       'CREATE TABLE users (',
