@@ -156,6 +156,17 @@ export interface ScanResult {
       schemaArtifacts: number;
     };
   };
+  _scanMode?: {
+    mode: string;
+    chunks: number;
+    concurrency: number;
+  };
+  _reduceStats?: {
+    totalChunks: number;
+    totalFindingsBeforeDedup: number;
+    totalFindingsAfterDedup: number;
+    dedupedFindings: number;
+  };
 }
 
 // === 符号发现相关类型 ===

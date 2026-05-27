@@ -27,7 +27,7 @@ export type {
 } from './types.js';
 
 // Constants
-export { CONFIG_WITH_DEFAULTS, DEFAULT_SCAN_LIMITS } from './constants.js';
+export { CONFIG_WITH_DEFAULTS, DEFAULT_SCAN_LIMITS, CHUNK_CONFIG } from './constants.js';
 
 // Validation
 export {
