@@ -33,21 +33,112 @@ export {
 }
 from './source-structure-extractor/shared.mjs'
 
-export async function extractSourceStructure({ files, rootDir, deterministic }) {
+/**
+ * Process a single file into facts — extracted from the loop for reuse
+ * in both sequential and chunked paths.
+ *
+ * @param {string} file
+ * @param {string} rootDir
+ * @returns {Promise<object>}
+ */
+export async function extractFileFactsForFile(file, rootDir) {
+  return extractFileFacts(file, rootDir)
+}
+
+const DEFAULT_SOURCE_CHUNK_SIZE = 200
+
+/**
+ * Process a chunk of files in parallel and return partial results.
+ *
+ * @param {string[]} chunkFiles
+ * @param {string} rootDir
+ * @returns {Promise<{structureFiles: object[], structureSymbols: object[], structureImports: object[], structureDeclares: object[], moduleInfos: Map<string, object>}>}
+ */
+async function _processSourceChunk(chunkFiles, rootDir) {
   const structureFiles = []
   const structureSymbols = []
   const structureImports = []
   const structureDeclares = []
   const moduleInfos = new Map()
 
-  for (const file of files) {
-    const facts = await extractFileFacts(file, rootDir)
+  const results = await Promise.all(
+    chunkFiles.map((file) => extractFileFacts(file, rootDir).catch(() => null)),
+  )
+
+  for (const facts of results) {
+    if (!facts) continue
     structureFiles.push(facts.file)
     structureSymbols.push(...facts.symbols)
     structureImports.push(...facts.imports)
     structureDeclares.push(...facts.declares)
     if (facts.module) {
       moduleInfos.set(facts.module.file.path, facts.module)
+    }
+  }
+
+  return { structureFiles, structureSymbols, structureImports, structureDeclares, moduleInfos }
+}
+
+/**
+ * Extract source structure from files.
+ *
+ * For large projects (>200 files), file processing is parallelized in chunks.
+ * Route analysis is always sequential — it needs the full merged moduleInfos Map.
+ *
+ * @param {object} options
+ * @param {string[]} options.files
+ * @param {string} options.rootDir
+ * @param {boolean} [options.deterministic]
+ * @param {number} [options.chunkSize]
+ */
+export async function extractSourceStructure({
+  files,
+  rootDir,
+  deterministic,
+  chunkSize = DEFAULT_SOURCE_CHUNK_SIZE,
+}) {
+  const useChunked = files.length > chunkSize
+  let structureFiles, structureSymbols, structureImports, structureDeclares, moduleInfos
+
+  if (useChunked) {
+    // Split into chunks, process each chunk with bounded parallelism
+    const chunks = []
+    for (let i = 0; i < files.length; i += chunkSize) {
+      chunks.push(files.slice(i, i + chunkSize))
+    }
+
+    const chunkResults = await Promise.all(
+      chunks.map((chunk) => _processSourceChunk(chunk, rootDir)),
+    )
+
+    // Merge
+    structureFiles = chunkResults.flatMap((r) => r.structureFiles)
+    structureSymbols = chunkResults.flatMap((r) => r.structureSymbols)
+    structureImports = chunkResults.flatMap((r) => r.structureImports)
+    structureDeclares = chunkResults.flatMap((r) => r.structureDeclares)
+    moduleInfos = new Map()
+    for (const r of chunkResults) {
+      for (const [key, value] of r.moduleInfos) {
+        moduleInfos.set(key, value)
+      }
+    }
+  } else {
+    // Sequential path: zero overhead for small projects
+    structureFiles = []
+    structureSymbols = []
+    structureImports = []
+    structureDeclares = []
+    moduleInfos = new Map()
+
+    for (const file of files) {
+      const facts = await extractFileFacts(file, rootDir)
+      structureFiles.push(facts.file)
+      structureSymbols.push(...facts.symbols)
+      structureImports.push(...facts.imports)
+      structureDeclares.push(...facts.declares)
+      if (facts.module) {
+        moduleInfos.set(facts.module.file.path, facts.module)
+      }
     }
   }
 

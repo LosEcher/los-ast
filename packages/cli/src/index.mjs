@@ -94,17 +94,30 @@ program
     const rules = await resolveRules(options, { preferProjectAdapter: true })
     const { rootDir, include, ignore, project } = ws
 
+    const controller = new AbortController()
+    const onAbort = () => { controller.abort() }
+    process.once('SIGINT', onAbort)
+    process.once('SIGTERM', onAbort)
+
     const scanOptions = {
       project,
       rootDir,
       include,
       ignore,
-      rules
+      rules,
+      signal: controller.signal,
     }
     if (options.deterministic) {
       scanOptions.deterministic = true
     }
-    const res = await scan(scanOptions)
+
+    let res
+    try {
+      res = await scan(scanOptions)
+    } finally {
+      process.removeListener('SIGINT', onAbort)
+      process.removeListener('SIGTERM', onAbort)
+    }
 
     // Run extraction pipeline when explicitly enabled
     const runExtraction = options.experimentalExtractors || ws.experimentalExtractors

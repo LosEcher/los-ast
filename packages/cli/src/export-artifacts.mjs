@@ -127,14 +127,26 @@ async function exportArtifacts(options) {
   const outputDir = path.resolve(options.outputDir || path.join(ws.rootDir, 'logs', 'hub-lite-artifacts'))
   const deterministic = Boolean(options.deterministic)
 
-  const scanResult = await scan({
-    project: ws.project,
-    rootDir: ws.rootDir,
-    include: ws.include,
-    ignore: ws.ignore,
-    rules,
-    deterministic,
-  })
+  const controller = new AbortController()
+  const onAbort = () => { controller.abort() }
+  process.once('SIGINT', onAbort)
+  process.once('SIGTERM', onAbort)
+
+  let scanResult
+  try {
+    scanResult = await scan({
+      project: ws.project,
+      rootDir: ws.rootDir,
+      include: ws.include,
+      ignore: ws.ignore,
+      rules,
+      deterministic,
+      signal: controller.signal,
+    })
+  } finally {
+    process.removeListener('SIGINT', onAbort)
+    process.removeListener('SIGTERM', onAbort)
+  }
 
   const files = await discoverFiles({
     rootDir: ws.rootDir,
