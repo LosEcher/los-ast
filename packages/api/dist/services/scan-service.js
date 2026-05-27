@@ -1,6 +1,6 @@
 import { scan, discoverFiles, isReady, loadRuleFiles } from '@los-ast/core';
-import { PARSER_CONFIG, SCAN_LIMITS } from '../config/index.js';
-import { CoreNotReadyError, ScanTooLargeError, ValidationError } from '../types/errors.js';
+import { PARSER_CONFIG } from '../config/index.js';
+import { CoreNotReadyError, ValidationError } from '../types/errors.js';
 import { parseArtifactInputs } from './artifact-parsers/index.js';
 import { buildFindingsFromArtifacts, buildScanTelemetry, countNativeInputs, hasNativeArtifactInputs, hasScannableRootDir, mergeScanResultFindings, requiresCodeScan, } from './scan-service/shared.js';
 export class ScanService {
@@ -83,11 +83,7 @@ export class ScanService {
             // 预估文件数量
             const estimatedCount = await this.estimateFileCount(rootDir, include, ignore);
             estimatedFiles = estimatedCount;
-            // 检查文件数限制（硬约束 #4）
-            if (estimatedCount > SCAN_LIMITS.maxFilesPerSyncScan) {
-                throw new ScanTooLargeError(SCAN_LIMITS.maxFilesPerSyncScan, estimatedCount);
-            }
-            // 执行扫描
+            // 执行扫描 (auto-promotes to chunked mode for large projects)
             result = await scan({
                 project,
                 rootDir,
