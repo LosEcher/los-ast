@@ -13,7 +13,8 @@ This repo provides AST scanning, evidence export, and controlled code rewriting.
 
 ## Stability Rules
 
-- Treat `packages/core`, `packages/cli`, `GET /healthz/live`, `GET /healthz/ready`, `POST /scan`, and `POST /discover/symbols` as the primary stable surface.
+- Treat `packages/core` (including `scanner/` chunked map-reduce and `extraction/` Tree-sitter extractors), `packages/cli`, `GET /healthz/live`, `GET /healthz/ready`, `POST /scan`, and `POST /discover/symbols` as the primary stable surface.
+- `--experimental-extractors` (call graph + import resolution) is stable code but feature-gated behind a flag; treat it as beta — the extraction output schema may evolve.
 - Treat `experimental/*`, `vps-agent-web/*`, incident, approval, recovery, attribution, and memory-proposal areas as preview unless the task explicitly targets them.
 - Prefer dry-run, JSONL output, and artifact verification before enabling a real write path.
 
@@ -37,7 +38,7 @@ npm run test:lsclaw:adapter
 
 ## Preview Migration Plan
 
-Preview 域组件的迁移状态（基于 `experimental/index.ts` 中的 `MIGRATION_PLAN`）：
+Preview 域组件的迁移状态：
 
 | 组件 | 目标位置 | 时间线 | 状态 |
 |------|----------|--------|------|
@@ -49,10 +50,8 @@ Preview 域组件的迁移状态（基于 `experimental/index.ts` 中的 `MIGRAT
 | `recovery` | VPS Agent Web | Milestone B+ | planned |
 | `approval` | VPS Agent Web | Milestone B+ | planned |
 
-**开发原则**:
-- 修改 preview 路由时，保持与稳定面的隔离（server.ts 中的动态注册模式）
-- 不扩大 preview 路由的契约承诺（API 可能变更，不保证向后兼容）
-- 优先保留兼容层，而非强制迁移
+**Milestone B** (los-memory extraction): memory-proposals 迁移到独立的 los-memory 服务，los-ast 保留证据生成和 hotreload。
+**Milestone B+** (VPS Agent Web extraction): incident/attribution/recovery/approval 迁移到 VPS Agent Web，los-ast 仅保留 scan/discover/evidence/hotreload 内核。
 
 ## Change Rules
 

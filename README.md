@@ -70,9 +70,11 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
 
 | 能力 | 成熟度 | 状态 | 说明 |
 |------|--------|------|------|
-| **代码扫描** | ⭐⭐⭐⭐⭐ | 稳定 | `POST /scan` 支持 AST/rule 扫描，产出 JSONL findings |
+| **代码扫描** | ⭐⭐⭐⭐⭐ | 稳定 | `POST /scan` 支持 AST/rule 扫描，产出 JSONL findings，大项目自动分片 |
 | **符号发现** | ⭐⭐⭐⭐⭐ | 稳定 | `POST /discover/symbols` 跨语言符号提取 |
 | **代码改写** | ⭐⭐⭐⭐⭐ | 稳定 | CLI `fix` 默认 dry-run，显式 `--apply` 才落盘 |
+| **分片扫描** | ⭐⭐⭐⭐☆ | 稳定 | 大项目 (>1000 文件) 自动 map-reduce 分片，跨片去重 |
+| **调用图提取** | ⭐⭐⭐☆☆ | Beta | `--experimental-extractors` 提取 call graph + import resolution (TS/JS/Py/Go/Rs) |
 | **接口治理** | ⭐⭐⭐☆☆ | 进行中 | OpenAPI/Contract 比较，支持 breaking/warning/info 分级 |
 | **字段治理** | ⭐⭐⭐☆☆ | 进行中 | SQL/Prisma schema 比较，覆盖 nullability/default/unique |
 | **路由证据** | ⭐⭐⭐☆☆ | 进行中 | Fastify 四层证据 (`declares/mounts/binds/runtime`)，非 full route truth |
@@ -90,6 +92,7 @@ npm run los-ast -- fix --project cantool --apply --max-changes 20
   - [API_USAGE.md](API_USAGE.md)
   - [docs/API_CONTRACT.md](docs/API_CONTRACT.md)
   - [docs/api/artifact-parser-profiles.md](docs/api/artifact-parser-profiles.md)
+  - [docs/ai/EXTERNAL_AGENT_INTEGRATION.md](docs/ai/EXTERNAL_AGENT_INTEGRATION.md) — 外部 AI Agent 集成指南
   - [docs/ai/OUTPUT_SCHEMA.md](docs/ai/OUTPUT_SCHEMA.md)
 - 规则与治理：
   - [docs/rules/RULE_AUTHORING.md](docs/rules/RULE_AUTHORING.md)

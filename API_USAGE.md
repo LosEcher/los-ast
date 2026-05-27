@@ -132,10 +132,15 @@ X-Request-ID: <可选，自动生成为UUID>
 | `includeStats` | boolean | 否 | 是否包含解析缓存统计 |
 | `deterministic` | boolean | 否 | 是否开启可复现排序/指纹（默认 true） |
 
-**发现字段补充（v1.1 预留）：**
-- `findingSource`：`ast`（当前默认）
-- `governanceDomain`：`['frontend', 'backend', 'database']` 等标签（可选）
-- `impactHint`：`low` | `medium` | `high`（可选）
+**v1.1 已实现字段：**
+- `findingSource`：`ast` | `contract` | `schema` — 发现来源通道
+- `governanceDomain`：`['frontend', 'backend', 'database']` 等标签（可选，需规则配置 governance 元信息）
+- `impactHint`：`low` | `medium` | `high`（可选，需规则配置 governance 元信息）
+
+**大项目扫描扩展字段（自动分片时返回）：**
+- `_scanMode`：`{ mode, chunks, concurrency }` — 扫描执行模式
+- `_reduceStats`：`{ totalChunks, totalFindingsBeforeDedup, totalFindingsAfterDedup, dedupedFindings }` — 跨片去重统计
+- `scanTelemetry`：`{ durationMs, mode, explicitRulePatterns, loadedRules, estimatedFiles, nativeInputs }` — 扫描性能指标（需 `includeStats: true`）
 
 **响应** (200 OK):
 ```json

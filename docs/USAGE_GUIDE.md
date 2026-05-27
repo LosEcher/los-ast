@@ -13,9 +13,11 @@
 | 场景 | 命令示例 | 状态 |
 |------|----------|------|
 | 扫描代码问题 | `npm run los-ast -- scan --root /path --include "src/**/*.ts"` | ✅ 稳定 |
-| 发现代码符号 | `npm run los-ast -- scan --root /path --discover symbols` | ✅ 稳定 |
+| 发现代码符号 | `POST /discover/symbols` (API) 或 `symbols.json` (artifact) | ✅ 稳定 |
 | 生成改写 diff | `npm run los-ast -- fix --root /path --dry-run` | ✅ 稳定 |
 | 执行真实改写 | `npm run los-ast -- fix --root /path --apply` | ✅ 稳定 |
+| 调用图提取 | `npm run los-ast -- scan --root /path --experimental-extractors` | 🚧 Beta |
+| 导出 artifacts | `npm run hub-lite:artifacts -- --root /path --output-dir ./out` | ✅ 稳定 |
 | 接口契约比较 | `POST /scan` 传入 `openApiComparisons` | 🚧 进行中 |
 | 字段治理 | `POST /scan` 传入 `schemaComparisons` | 🚧 进行中 |
 | 路由证据提取 | `npm run hub-lite:artifacts` | 🚧 进行中 |
