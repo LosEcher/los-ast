@@ -1,5 +1,9 @@
 # los-ast AGENTS
 
+> **Workspace**: Part of `los-workspace` (`~/projects/los-workspace`).
+> Cross-project rules: `~/projects/los-workspace/AGENTS.md`
+> Authority boundary spec: `~/projects/los-workspace/docs/architecture/five-project-boundary-spec.md`
+
 ## Scope
 
 This repo provides AST scanning, evidence export, and controlled code rewriting. Stable surfaces are the CLI, the documented artifact contracts, and the health/scan/discover APIs.
