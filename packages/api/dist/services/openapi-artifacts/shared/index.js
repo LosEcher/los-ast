@@ -21,6 +21,8 @@ export { getOperations, getRequestSchema, getSuccessResponseSchemas, } from './o
 export { resolveLocalSchemaRef, resolveObjectSchema, } from './schema-resolver.js';
 // Schema Comparator (comparison and field collection)
 export { getComparableObjectShape, buildDiscriminatorExcerpt, } from './schema-comparator.js';
+// Discriminator Comparator (request/response discriminator finding generation)
+export { buildRequestDiscriminatorFindings, buildResponseDiscriminatorFindings, } from './discriminator-comparator.js';
 // Legacy schemas export (for backward compatibility)
 export * from './schema-resolver.js';
 export * from './schema-comparator.js';

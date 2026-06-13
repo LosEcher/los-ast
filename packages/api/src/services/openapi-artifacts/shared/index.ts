@@ -58,6 +58,12 @@ export {
   buildDiscriminatorExcerpt,
 } from './schema-comparator.js';
 
+// Discriminator Comparator (request/response discriminator finding generation)
+export {
+  buildRequestDiscriminatorFindings,
+  buildResponseDiscriminatorFindings,
+} from './discriminator-comparator.js';
+
 // Legacy schemas export (for backward compatibility)
 export * from './schema-resolver.js';
 export * from './schema-comparator.js';

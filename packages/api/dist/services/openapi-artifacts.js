@@ -1,4 +1,4 @@
-import { buildDiscriminatorExcerpt, ensureOpenApiShape, getComparableObjectShape, getOperations, getRequestSchema, getSuccessResponseSchemas, hasEffectiveSecurity, HTTP_METHODS, isRecord, MUTATING_METHODS, parseDocument, resolveOperationLine, } from './openapi-artifacts/shared.js';
+import { buildRequestDiscriminatorFindings, buildResponseDiscriminatorFindings, ensureOpenApiShape, getComparableObjectShape, getOperations, getRequestSchema, getSuccessResponseSchemas, hasEffectiveSecurity, HTTP_METHODS, isRecord, MUTATING_METHODS, parseDocument, resolveOperationLine, } from './openapi-artifacts/shared.js';
 function buildContractFinding(source, file, line, ruleId, severity, message, excerpt, governanceDomain, impactHint) {
     return {
         source,
@@ -197,18 +197,7 @@ export function buildContractArtifactsFromOpenApiComparisons(comparisons) {
             const currentRequestShape = getComparableObjectShape(current, getRequestSchema(currentOperation));
             for (const [schemaPath, baselineDiscriminator] of baselineRequestShape.discriminators.entries()) {
                 const currentDiscriminator = currentRequestShape.discriminators.get(schemaPath);
-                const requestExcerptPrefix = `${operationLabel} request`;
-                if (!currentDiscriminator || baselineDiscriminator.propertyName !== currentDiscriminator.propertyName) {
-                    artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-request-discriminator-change', 'error', `OpenAPI operation ${operationLabel} changed request discriminator property at ${schemaPath || 'root'}`, buildDiscriminatorExcerpt(requestExcerptPrefix, baselineRequestShape.pathSuffix, schemaPath, baselineDiscriminator.propertyName), ['interface', 'backend'], 'high'));
-                }
-                if (!currentDiscriminator) {
-                    continue;
-                }
-                const droppedRequestMappings = baselineDiscriminator.mappingKeys
-                    .filter((value) => !currentDiscriminator.mappingKeys.includes(value));
-                if (droppedRequestMappings.length > 0) {
-                    artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-request-discriminator-value-drop', 'error', `OpenAPI operation ${operationLabel} removed request discriminator values at ${schemaPath || 'root'}`, `${buildDiscriminatorExcerpt(requestExcerptPrefix, baselineRequestShape.pathSuffix, schemaPath, baselineDiscriminator.propertyName)}: dropped ${droppedRequestMappings.join(', ')}`, ['interface', 'backend'], 'high'));
-                }
+                artifacts.push(...buildRequestDiscriminatorFindings(sourceLabel, fileLabel, findingLine, operationLabel, schemaPath, baselineDiscriminator, currentDiscriminator, baselineRequestShape, buildContractFinding));
             }
             for (const [fieldName, baselineField] of baselineRequestShape.properties.entries()) {
                 const currentField = currentRequestShape.properties.get(fieldName);
@@ -262,18 +251,7 @@ export function buildContractArtifactsFromOpenApiComparisons(comparisons) {
                 const responseExcerptPrefix = getResponseExcerptPrefix(status);
                 for (const [schemaPath, baselineDiscriminator] of baselineResponseShape.discriminators.entries()) {
                     const currentDiscriminator = currentResponseShape.discriminators.get(schemaPath);
-                    const responseBasePrefix = `${operationLabel} ${responseExcerptPrefix}`;
-                    if (!currentDiscriminator || baselineDiscriminator.propertyName !== currentDiscriminator.propertyName) {
-                        artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-response-discriminator-change', 'error', `OpenAPI operation ${operationLabel} changed response discriminator property at ${schemaPath || 'root'} on success response ${status}`, buildDiscriminatorExcerpt(responseBasePrefix, baselineResponseShape.pathSuffix, schemaPath, baselineDiscriminator.propertyName), ['interface', 'backend'], 'high'));
-                    }
-                    if (!currentDiscriminator) {
-                        continue;
-                    }
-                    const droppedResponseMappings = baselineDiscriminator.mappingKeys
-                        .filter((value) => !currentDiscriminator.mappingKeys.includes(value));
-                    if (droppedResponseMappings.length > 0) {
-                        artifacts.push(buildContractFinding(sourceLabel, fileLabel, findingLine, 'contract/openapi-breaking-response-discriminator-value-drop', 'error', `OpenAPI operation ${operationLabel} removed response discriminator values at ${schemaPath || 'root'} on success response ${status}`, `${buildDiscriminatorExcerpt(responseBasePrefix, baselineResponseShape.pathSuffix, schemaPath, baselineDiscriminator.propertyName)}: dropped ${droppedResponseMappings.join(', ')}`, ['interface', 'backend'], 'high'));
-                    }
+                    artifacts.push(...buildResponseDiscriminatorFindings(sourceLabel, fileLabel, findingLine, operationLabel, status, schemaPath, baselineDiscriminator, currentDiscriminator, baselineResponseShape, buildContractFinding));
                 }
                 for (const [fieldName, baselineField] of baselineResponseShape.properties.entries()) {
                     const currentField = currentResponseShape.properties.get(fieldName);

@@ -24,7 +24,7 @@ function extractSqlTypeToken(definition) {
         const match = trimmed.match(/^(enum\s*\([^)]*\))/i);
         return match ? match[1] : undefined;
     }
-    const compoundMatch = trimmed.match(/^(timestamp(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|time(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|double\s+precision)/i);
+    const compoundMatch = trimmed.match(/^(timestamp(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|time(?:\([^)]*\))?\s+(?:with|without)\s+time\s+zone|double\s+precision|character\s+varying(?:\([^)]*\))?|char\s+varying(?:\([^)]*\))?|character(?:\([^)]*\))?)/i);
     if (compoundMatch) {
         return compoundMatch[1];
     }

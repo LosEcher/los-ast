@@ -23,3 +23,16 @@ export {
   parseSqlEntities,
   parsePrismaEntities,
 } from './parser.js';
+
+// Comparator
+export {
+  buildBreakingFinding,
+  buildComparisonFinding,
+  diffEnumValues,
+  normalizeUniqueKey,
+  getSingleFieldUniqueKeys,
+  isGeneratedDefaultValue,
+  isLowRiskDefaultRemoval,
+  isConservativeSqlTypeWidening,
+  compareEntities,
+} from './comparator.js';

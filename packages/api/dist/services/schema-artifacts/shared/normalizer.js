@@ -54,6 +54,15 @@ export function normalizeSqlType(value) {
         }
         return `${baseType}(${params.replace(/\s+/g, '')})`;
     }
+    // Handle multi-word parameterized types: character varying(N), char varying(N), character(N)
+    const charVaryingMatch = normalized.match(/^(character\s+varying|char\s+varying)\(([^)]*)\)$/);
+    if (charVaryingMatch) {
+        return `varchar(${charVaryingMatch[2].replace(/\s+/g, '')})`;
+    }
+    const characterMatch = normalized.match(/^character\(([^)]*)\)$/);
+    if (characterMatch) {
+        return `char(${characterMatch[1].replace(/\s+/g, '')})`;
+    }
     if (normalized === 'int' || normalized === 'int4') {
         return 'integer';
     }
@@ -66,20 +75,34 @@ export function normalizeSqlType(value) {
     if (normalized === 'decimal') {
         return 'numeric';
     }
-    if (normalized === 'serial') {
+    if (normalized === 'serial' || normalized === 'smallserial' || normalized === 'serial2') {
         return 'integer';
     }
-    if (normalized === 'bigserial') {
+    if (normalized === 'bigserial' || normalized === 'serial8') {
         return 'bigint';
     }
-    if (normalized === 'float8') {
+    if (normalized === 'float8' || normalized === 'float4') {
         return 'double precision';
+    }
+    if (normalized === 'smallint' || normalized === 'int2') {
+        return 'smallint';
+    }
+    // Character-type aliases (PostgreSQL: character varying / char varying → varchar, character → char)
+    if (normalized === 'character varying' || normalized === 'char varying') {
+        return 'varchar';
+    }
+    if (normalized === 'character') {
+        return 'char';
+    }
+    // PostgreSQL text and varchar (without length) are semantically equivalent
+    if (normalized === 'text') {
+        return 'varchar';
     }
     return normalized;
 }
 export function isSequenceBackedSqlType(typeToken) {
     const normalized = typeToken ? normalizeType(typeToken) : '';
-    return normalized === 'serial' || normalized === 'bigserial';
+    return normalized === 'serial' || normalized === 'bigserial' || normalized === 'smallserial' || normalized === 'serial2' || normalized === 'serial8';
 }
 export function normalizeDefaultValue(value) {
     if (!value) {
