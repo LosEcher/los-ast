@@ -126,6 +126,33 @@ artifact 契约说明：
 - `7` 个测试文件
 - `70` 个测试全部通过
 
+## Version Pinning
+
+`lsclaw` (L2 Governance) 消费 `los-ast` (L3 AST Kernel) 的 artifact 产物。
+建议以下 pin 策略确保可复现性：
+
+- **`@los-ast/core` 版本范围**: `"~1.x"` 或固定 commit hash（CI 环境中）
+- **artifact contract 版本**: 与 `docs/adapters/lsclaw-artifact-contract.md` 中的 `contractVersion` 字段对齐
+- **structure-map.json `schema` 字段**: 每次消费前校验顶层 `version` 字段，不匹配时拒绝消费并告警
+
+## Change Notification
+
+以下变更会影响 `lsclaw` 下游消费者，变更前会更新 `lsclaw-artifact-contract.md`：
+
+| 变更类型 | 影响面 | 通知方式 |
+|---------|--------|---------|
+| artifact 文件名变更 | 消费脚本需要更新路径 | `lsclaw-artifact-contract.md` 更新 + commit message 标注 `BREAKING` |
+| `structure-map.json` 顶层字段新增/删除/重命名 | 解析代码需要适配 | 同上 |
+| `/scan` 请求/响应字段新增必填项 | API client 需要适配 | `API_CONTRACT.md` 更新 + `scan-contract-reference.json` 再生 |
+| finding `ruleId` 命名空间新增 | 规则消费逻辑需扩展 | 非 breaking — 仅向前兼容的新增，不通知 |
+| finding `severity` 或 `governanceDomain` 语义变更 | 下游告警/路由逻辑可能受影响 | `lsclaw-artifact-contract.md` 更新 |
+
+## Capability Boundary Reference
+
+`lsclaw` 应只依赖 `docs/capability-boundary-map.json` 中标为 `status: "stable"` 的 surface。
+当前 stable surfaces 包括：`POST /scan`、`POST /discover/symbols`、`GET /healthz/live`、`GET /healthz/ready`、CLI scan/fix、hub-lite artifacts。
+标记为 `status: "beta"` 或 `status: "preview"` 的 surface 不承诺向后兼容。
+
 ## `hub-lite:artifacts` 契约
 
 `lsclaw` 如需消费 `hub-lite:artifacts`，当前应只依赖稳定消费面，不应把 `structure-map.json` 当作完整 route truth。

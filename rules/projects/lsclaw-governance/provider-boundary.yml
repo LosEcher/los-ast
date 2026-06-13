@@ -1,0 +1,73 @@
+- id: lsclaw-governance.provider-leak-deepseek
+  language: JavaScript
+  severity: warning
+  message: "DeepSeek 适配器属于 pi Provider Runtime (L1)，不应出现在 lsclaw 治理层 (L2)"
+  rule:
+    any:
+      - pattern: callDeepSeek($$$)
+      - pattern: repairDeepSeekToolCall($$$)
+      - pattern: extractReasoningContent($$$)
+      - pattern: clearDeepSeekCacheState($$$)
+      - pattern: getDeepSeekCacheState($$$)
+  governance:
+    domain: architecture
+    owner: platform
+    impact: high
+    rationale: >
+      Provider 适配器职责已下沉到 pi (L1 Provider Runtime)。
+      lsclaw (L2 Governance) 应通过 pi-agent-entry 调用模型，
+      而非直接调用 DeepSeek API。详见 six-project-boundary-spec.md §2.4-2.5。
+
+- id: lsclaw-governance.provider-leak-anthropic
+  language: JavaScript
+  severity: warning
+  message: "Anthropic 适配器属于 pi Provider Runtime (L1)，不应出现在 lsclaw 治理层 (L2)"
+  rule:
+    any:
+      - pattern: callAnthropic($$$)
+      - pattern: resolveAnthropicMessagesEndpoint($$$)
+  governance:
+    domain: architecture
+    owner: platform
+    impact: high
+
+- id: lsclaw-governance.provider-leak-openai
+  language: JavaScript
+  severity: warning
+  message: "OpenAI-compatible 适配器属于 pi Provider Runtime (L1)，不应出现在 lsclaw 治理层 (L2)"
+  rule:
+    any:
+      - pattern: callOpenAiCompatible($$$)
+      - pattern: resolveOpenAiCompatibleEndpoints($$$)
+      - pattern: extractOpenAiCompatibleContent($$$)
+  governance:
+    domain: architecture
+    owner: platform
+    impact: high
+
+- id: lsclaw-governance.provider-leak-cli
+  language: JavaScript
+  severity: info
+  message: "CLI 适配器属于 pi Provider Runtime (L1)，建议下沉到 pi"
+  rule:
+    any:
+      - pattern: callCliAdapter($$$)
+  governance:
+    domain: architecture
+    owner: platform
+    impact: medium
+
+- id: lsclaw-governance.agent-loop-duplicate
+  language: JavaScript
+  severity: info
+  message: "Agent 循环应与 pi-agent-core 的 Agent 类统一，避免重复实现"
+  rule:
+    any:
+      - pattern: executeAgentModelTurn($$$)
+  governance:
+    domain: architecture
+    owner: platform
+    impact: medium
+    rationale: >
+      model-turn.mjs 仅在 core-loop.mjs 中使用。
+      迁移后应删除，模型调用重试由 pi streamSimple 处理。

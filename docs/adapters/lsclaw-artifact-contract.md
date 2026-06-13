@@ -145,3 +145,38 @@ npm run test:lsclaw:adapter
 ## CI Status
 
 Adding the adapter smoke to CI is recommended, but it is not a current release blocker for `lsclaw` integration.
+
+## Consumer Version Pinning
+
+To ensure reproducible artifact consumption, `lsclaw` should:
+
+1. **Pin `@los-ast/core` version**: Use `"~1.x"` in `package.json` or a tested commit hash
+2. **Validate `contractVersion`**: Before consuming artifacts, check `structure-map.json.version` matches the expected contract version
+3. **Lock CI image**: Pin the `los-ast` Docker image (or Node.js + `@los-ast/core` version) in CI workflow
+
+## Breaking Change Definition
+
+The following changes are considered "breaking" for `lsclaw` consumers and require advance notification via this document:
+
+- **Artifact file name changes**: Any rename of `scan-findings.jsonl`, `symbols.json`, or `structure-map.json`
+- **Top-level field removal/rename** in `structure-map.json`: Removing or renaming fields listed in §Stable Consumer Surface
+- **New required field in `/scan` request body without default**: The consumer's scan request payloads would break
+- **Contract smoke script rename/removal**: The three `test:lsclaw:adapter:*` scripts are part of the contract
+
+The following are NOT breaking and need no notification:
+
+- Adding new optional fields to artifacts or API responses
+- Adding new `ruleId` values (forward-compatible)
+- Changing finding `severity` or `impactHint` within existing rules (semantic tuning)
+- Internal refactors that do not change file names, field names, or script names
+
+## Change Notification Protocol
+
+When a breaking change is prepared:
+
+1. Update this document (`lsclaw-artifact-contract.md`) with the new contract
+2. Tag the commit message with `BREAKING(los-ast): <description>` or add `BREAKING` to the commit body
+3. Bump the `contractVersion` in this document to reflect the new version
+4. Notify `lsclaw` maintainers to update their pin
+
+Non-breaking changes (new optional fields, new ruleIds, added parser profiles) do not require notification or contract version bump.
