@@ -92,8 +92,22 @@
   - 契约治理基线已固定：`/scan` generated sections、`packages/api/dist` 与 `lsclaw` artifact contract 三条 freshness gate 当前可执行且已纳入日常校验。
   - 下一轮恢复点：优先继续 `openapi compatibility` 的 union/discriminator 分级增强；如无明确收益，不再继续机械拆分稳定面文件。
 
+## P0 模块结构收口 (2026-06)
+
+- [x] **openapi-artifacts.ts discriminator 逻辑拆分**：已将 request/response discriminator finding 生成逻辑抽到 `shared/discriminator-comparator.ts`（200 行），主文件从 771 行降至 643 行（纯编排）。
+- [x] **schema-artifacts.ts comparison 函数拆分**：已将 `buildBreakingFinding`、`buildComparisonFinding`、`compareEntities` 等 9 个通用函数抽到 `shared/comparator.ts`（403 行），主文件从 626 行降至 229 行。
+- [x] **Module size check 脚本**：新增 `scripts/check-module-sizes.sh`（>600 行 error、>400 行 warn，带 `ALLOWED_LARGE_FILES` 白名单），已接入 `quality-gate`。
+- [x] **Module topology 报告**：新增 `docs/governance/module-topology.md`，含跨包依赖图、被依赖热图、>400 行文件清单与拆分状态、依赖方向规则。
+- [x] **Capability boundary map**：新增 `docs/capability-boundary-map.json`，机器可读的 surface/package/largeFile 边界定义（stable/beta/preview 三态），ai 工具可直接消费。
+
+## P1 使用方指引 (2026-06)
+
+- [x] **Downstream 使用方指引更新**：`docs/adapters/lsclaw.md` 新增 Version Pinning + Change Notification 节；`docs/adapters/lsclaw-artifact-contract.md` 新增 Consumer Version Pinning + Breaking Change Definition + Change Notification Protocol 节。
+- [ ] 下一轮：评估 `--experimental-extractors` 的 SCIP 格式输出可行性，让 call graph + import resolution 可被 Sourcegraph/Grafy/Blarify 消费。
+- [ ] 下一轮：评估 los-ast MCP server 暴露层（`/scan` 结果通过 MCP 工具供 AI agent 消费）。
+
 1. route_binds 能力边界收口
-- 明确当前 `route_binds` 是“最小 Fastify literal-only runtime bind”，不是全量 route truth。
+- 明确当前 `route_binds` 是”最小 Fastify literal-only runtime bind”，不是全量 route truth。
 - 下游使用说明中区分三类用途：
   - 结构盘点：可直接使用。
   - 热点排序：可直接使用。

@@ -13,6 +13,7 @@
     "check:api-dist:status": "node -e \"const { execFileSync } = require('node:child_process'); const out = execFileSync('git', ['status', '--porcelain', '--', 'packages/api/dist'], { encoding: 'utf8' }).trim(); if (out) { console.error('packages/api/dist is stale. Run npm run build:api and commit the refreshed runtime artifacts.'); console.error(out); process.exit(1); }\"",
     "check:api-dist": "npm run build:api && npm run check:api-dist:status",
     "check:scan-generated": "cd packages/api && npm run check:scan-generated",
+    "check:module-sizes": "bash scripts/check-module-sizes.sh",
     "test": "npm run test:core && npm run test:hub-lite:artifacts && npm run test:api && npm run test:lsclaw:adapter:artifacts",
     "test:core": "node --test test/rules.test.mjs test/runner.test.mjs test/route-guard-analysis.test.mjs test/route-guard-analysis-shared.test.mjs test/source-structure-extractor-shared.test.mjs test/export-artifacts-shared.test.mjs test/runner-shared.test.mjs",
     "test:hub-lite:artifacts": "node --test test/hub-lite-artifacts.test.mjs",
@@ -28,6 +29,6 @@
     "test:golden": "npm run test:api:golden",
     "doctor": "node ./packages/cli/src/index.mjs doctor --quiet",
     "lint": "npm run doctor",
-    "quality-gate": "npm run doctor && npm run build:api && npm run test && cd packages/api && npm run typecheck"
+    "quality-gate": "npm run doctor && npm run build:api && npm run test && (cd packages/api && npm run typecheck) && npm run check:module-sizes"
   }
 }

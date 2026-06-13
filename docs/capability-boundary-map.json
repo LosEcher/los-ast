@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "generatedAt": "2026-06-13",
+  "description": "Machine-readable capability boundary map for los-ast. Consumed by tooling and AI agents to determine which surfaces are stable, which are preview, and where migrating surfaces will land.",
+
+  "surfaces": [
+    {
+      "name": "GET /healthz/live",
+      "status": "stable",
+      "owner": "core",
+      "contractFile": "packages/api/docs/api/API_CONTRACT.md",
+      "description": "Kubernetes liveness probe. Returns 200 when process is alive."
+    },
+    {
+      "name": "GET /healthz/ready",
+      "status": "stable",
+      "owner": "core",
+      "contractFile": "packages/api/docs/api/API_CONTRACT.md",
+      "description": "Kubernetes readiness probe. Returns 200 when service can accept traffic."
+    },
+    {
+      "name": "POST /scan",
+      "status": "stable",
+      "owner": "core",
+      "contractFile": "packages/api/docs/api/API_CONTRACT.md",
+      "description": "Primary scan endpoint. Accepts code root, native contract/schema documents, and passthrough artifacts. Returns unified findings with deterministic ordering."
+    },
+    {
+      "name": "POST /discover/symbols",
+      "status": "stable",
+      "owner": "core",
+      "contractFile": "packages/api/docs/api/API_CONTRACT.md",
+      "description": "Symbol discovery endpoint. Returns symbols found in code files with line/column ranges."
+    },
+    {
+      "name": "CLI scan",
+      "status": "stable",
+      "owner": "core",
+      "entryPoint": "packages/cli/src/index.mjs",
+      "flags": ["--root", "--include", "--format", "--project", "--max-changes", "--scan-mode"]
+    },
+    {
+      "name": "CLI fix",
+      "status": "stable",
+      "owner": "core",
+      "entryPoint": "packages/cli/src/index.mjs",
+      "flags": ["--root", "--include", "--apply", "--max-changes", "--dry-run"]
+    },
+    {
+      "name": "hub-lite:artifacts",
+      "status": "stable",
+      "owner": "cli",
+      "entryPoint": "packages/cli/src/export-artifacts.mjs",
+      "outputs": ["scan-findings.jsonl", "symbols.json", "structure-map.json"]
+    },
+    {
+      "name": "--experimental-extractors",
+      "status": "beta",
+      "owner": "core",
+      "entryPoint": "packages/cli/src/extraction-pipeline.mjs",
+      "description": "Tree-sitter call graph + import resolution extraction. Stable code gated behind a feature flag. Output schema may evolve.",
+      "breakingChangesAllowed": true
+    },
+    {
+      "name": "contractArtifacts (OpenAPI)",
+      "status": "beta",
+      "owner": "api",
+      "contractFile": "packages/api/src/services/openapi-artifacts.ts",
+      "description": "Native OpenAPI document + comparison findings. Stable code, but semantic coverage is still expanding (discriminator, $ref, allOf, validation constraints).",
+      "breakingChangesAllowed": true
+    },
+    {
+      "name": "schemaArtifacts (SQL/Prisma)",
+      "status": "beta",
+      "owner": "api",
+      "contractFile": "packages/api/src/services/schema-artifacts.ts",
+      "description": "Native SQL/Prisma schema document + comparison findings. Stable code, type-equivalence rules and compatibility grading still expanding.",
+      "breakingChangesAllowed": true
+    },
+    {
+      "name": "incident",
+      "status": "preview",
+      "owner": "api",
+      "migratesTo": "VPS Agent Web",
+      "timeline": "Milestone B+",
+      "paths": ["packages/api/src/routes/experimental/*", "packages/api/src/services/incident/*"]
+    },
+    {
+      "name": "approval",
+      "status": "preview",
+      "owner": "api",
+      "migratesTo": "VPS Agent Web",
+      "timeline": "Milestone B+",
+      "paths": ["packages/api/src/services/approval/*"]
+    },
+    {
+      "name": "recovery",
+      "status": "preview",
+      "owner": "api",
+      "migratesTo": "VPS Agent Web",
+      "timeline": "Milestone B+",
+      "paths": ["packages/api/src/services/recovery/*"]
+    },
+    {
+      "name": "attribution",
+      "status": "preview",
+      "owner": "api",
+      "migratesTo": "VPS Agent Web",
+      "timeline": "Milestone B+",
+      "paths": ["packages/api/src/services/attribution/*"]
+    },
+    {
+      "name": "memory-proposals",
+      "status": "preview",
+      "owner": "api",
+      "migratesTo": "los-memory",
+      "timeline": "Milestone B",
+      "paths": ["packages/api/src/services/memory/*"]
+    },
+    {
+      "name": "vps-agent-web routes",
+      "status": "preview",
+      "owner": "api",
+      "migratesTo": "VPS Agent Web",
+      "timeline": "Milestone B+",
+      "paths": ["packages/api/src/routes/vps-agent-web/*"]
+    },
+    {
+      "name": "route-guard-analysis",
+      "status": "stable",
+      "owner": "cli",
+      "entryPoint": "packages/cli/src/route-guard-analysis.mjs",
+      "description": "Control-flow guard analysis for route registration. Produces route_declares, route_mounts, route_binds, route_runtime evidence tiers."
+    }
+  ],
+
+  "packages": [
+    { "name": "@los-ast/shared", "path": "packages/shared", "dependsOn": [], "dependedOnBy": ["@los-ast/api"] },
+    { "name": "@los-ast/core", "path": "packages/core", "dependsOn": [], "dependedOnBy": ["@los-ast/cli", "@los-ast/api"] },
+    { "name": "@los-ast/adapters", "path": "packages/adapters", "dependsOn": ["@los-ast/rules"], "dependedOnBy": ["@los-ast/cli", "@los-ast/api"] },
+    { "name": "@los-ast/ai", "path": "packages/ai", "dependsOn": [], "dependedOnBy": ["@los-ast/api"] },
+    { "name": "@los-ast/cli", "path": "packages/cli", "dependsOn": ["@los-ast/core", "@los-ast/adapters"], "dependedOnBy": [] },
+    { "name": "@los-ast/api", "path": "packages/api", "dependsOn": ["@los-ast/core", "@los-ast/adapters", "@los-ast/ai", "@los-ast/rules", "@los-ast/shared"], "dependedOnBy": [] }
+  ],
+
+  "largeFiles": [
+    { "path": "packages/api/src/services/openapi-artifacts.ts", "lines": 643, "status": "exception", "reason": "Pure orchestration after discriminator logic extracted to shared/discriminator-comparator.ts" },
+    { "path": "packages/api/src/persistence/repositories/recovery-repository.ts", "lines": 464, "status": "warn", "reason": "Preview-migration-bound to VPS Agent Web (Milestone B+)" },
+    { "path": "packages/api/src/services/memory/store.ts", "lines": 449, "status": "warn", "reason": "Preview-migration-bound to los-memory (Milestone B)" },
+    { "path": "packages/api/src/routes/core/scan-doc-contract/shared.ts", "lines": 447, "status": "warn", "reason": "Reference module with generated content" },
+    { "path": "packages/api/src/services/schema-artifacts/shared/comparator.ts", "lines": 403, "status": "exception", "reason": "Pure helper functions extracted from schema-artifacts.ts" }
+  ]
+}

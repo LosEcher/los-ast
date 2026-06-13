@@ -2,7 +2,8 @@
 
 > **Workspace**: Part of `los-workspace` (`~/projects/los-workspace`).
 > Cross-project rules: `~/projects/los-workspace/AGENTS.md`
-> Authority boundary spec: `~/projects/los-workspace/docs/architecture/five-project-boundary-spec.md`
+> Current workspace boundary: `~/projects/los-workspace/WORKSPACE.md`
+> Historical boundary context only: `~/projects/los-workspace/docs/archive/seven-project-boundary-spec.md`
 
 ## Scope
 
@@ -13,7 +14,24 @@ This repo provides AST scanning, evidence export, and controlled code rewriting.
 1. `docs/ACTIVE_TODO.md`
 2. `README.md`
 3. `docs/architecture.md`
-4. Adapter docs under `docs/adapters/`
+4. `docs/capability-boundary-map.json` (machine-readable stable/beta/preview surface map)
+5. `docs/governance/module-topology.md` (cross-package dependency graph and large-file hotspot report)
+6. Adapter docs under `docs/adapters/`
+
+## Priority Tags
+
+When tracking tasks in `docs/ACTIVE_TODO.md`, use the following priority system:
+
+| Tag | Priority | Severity/Impact |
+|-----|----------|-----------------|
+| P0 | This week | Urgent/blocking |
+| P1 | This month | Important, has timeline |
+| P2 | Backlog | Nice to have |
+| H | High impact | Breaking change / core surface |
+| M | Medium impact | Feature enhancement / partial surface |
+| L | Low impact | Cosmetic / internal cleanup |
+
+Example: `[P0][H]` = top priority, high impact.
 
 ## Stability Rules
 
@@ -30,6 +48,7 @@ npm run los-ast -- fix --project cantool --dry-run --max-changes 20
 npm run build:api
 npm run test
 npm run quality-gate
+npm run check:module-sizes
 ```
 
 Targeted validation:
@@ -71,3 +90,5 @@ Preview 域组件的迁移状态：
 - Adapter changes: run the adapter-specific test entrypoint, not just generic tests.
 - If a change affects `packages/api` runtime behavior or route wiring, refresh and verify `packages/api/dist`.
 - If a change touches `/scan` contract truth or sync scripts, run `npm run check:scan-generated`.
+- If a change creates or modifies a production source file over 400 lines, run `npm run check:module-sizes` and either split the file or add a justified exception in `scripts/check-module-sizes.sh`.
+- When adding or changing a stable/preview surface boundary, update `docs/capability-boundary-map.json` in the same change.
